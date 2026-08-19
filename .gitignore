@@ -36,3 +36,7 @@ node_modules/
 *.log
 .env*
 !.env.example
+
+ContextLog.md
+CLAUDE.local.md
+.todo/
