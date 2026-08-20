@@ -320,7 +320,7 @@ export function buildComposerHistoryEntries(
 ): string[] {
   return messages
     .filter((message) => message.role === "user")
-    .reverse()
+    .toReversed()
     .map(composerHistoryEntryText);
 }
 
