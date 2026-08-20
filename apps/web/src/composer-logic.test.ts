@@ -403,10 +403,11 @@ describe("buildComposerHistoryEntries", () => {
 
 describe("cycleComposerHistoryOlder", () => {
   it("stashes the current draft and jumps to the most recent history entry", () => {
-    const step = cycleComposerHistoryOlder(null, "unsent draft", ["newest", "middle", "oldest"]);
+    const entries = ["newest", "middle", "oldest"];
+    const step = cycleComposerHistoryOlder(null, "unsent draft", entries);
 
     expect(step).toEqual({
-      nextState: { stashedDraft: "unsent draft", index: 0 },
+      nextState: { stashedDraft: "unsent draft", index: 0, entries },
       text: "newest",
     });
   });
@@ -417,14 +418,14 @@ describe("cycleComposerHistoryOlder", () => {
     const second = cycleComposerHistoryOlder(first?.nextState ?? null, "unsent draft", entries);
 
     expect(second).toEqual({
-      nextState: { stashedDraft: "unsent draft", index: 1 },
+      nextState: { stashedDraft: "unsent draft", index: 1, entries },
       text: "middle",
     });
   });
 
   it("is a no-op once the oldest entry is reached", () => {
     const entries = ["newest", "middle", "oldest"];
-    const atOldest = { stashedDraft: "unsent draft", index: 2 };
+    const atOldest = { stashedDraft: "unsent draft", index: 2, entries };
 
     expect(cycleComposerHistoryOlder(atOldest, "unsent draft", entries)).toBeNull();
   });
@@ -436,25 +437,65 @@ describe("cycleComposerHistoryOlder", () => {
 
 describe("cycleComposerHistoryNewer", () => {
   it("is a no-op when not currently cycling", () => {
-    expect(cycleComposerHistoryNewer(null, ["newest", "middle"])).toBeNull();
+    expect(cycleComposerHistoryNewer(null)).toBeNull();
   });
 
   it("steps toward the newest entry while mid-history", () => {
     const entries = ["newest", "middle", "oldest"];
-    const state = { stashedDraft: "unsent draft", index: 2 };
+    const state = { stashedDraft: "unsent draft", index: 2, entries };
 
-    expect(cycleComposerHistoryNewer(state, entries)).toEqual({
-      nextState: { stashedDraft: "unsent draft", index: 1 },
+    expect(cycleComposerHistoryNewer(state)).toEqual({
+      nextState: { stashedDraft: "unsent draft", index: 1, entries },
       text: "middle",
     });
   });
 
   it("restores the exact stashed draft and stops cycling once past the newest entry", () => {
-    const state = { stashedDraft: "unsent draft, verbatim  ", index: 0 };
+    const state = {
+      stashedDraft: "unsent draft, verbatim  ",
+      index: 0,
+      entries: ["newest", "middle"],
+    };
 
-    expect(cycleComposerHistoryNewer(state, ["newest", "middle"])).toEqual({
+    expect(cycleComposerHistoryNewer(state)).toEqual({
       nextState: null,
       text: "unsent draft, verbatim  ",
+    });
+  });
+});
+
+describe("composer history entries snapshot", () => {
+  it("keeps using the entries captured when cycling began, ignoring a live array that changes shape mid-session", () => {
+    const originalEntries = ["newest", "middle", "oldest"];
+    const first = resolveComposerHistoryArrowKey({
+      direction: "up",
+      atVisualEdge: true,
+      entries: originalEntries,
+      state: null,
+      currentDraft: "unsent draft",
+    });
+    const second = resolveComposerHistoryArrowKey({
+      direction: "up",
+      atVisualEdge: true,
+      entries: originalEntries,
+      state: first.nextState,
+      currentDraft: "unsent draft",
+    });
+
+    // Another connected client sent a message mid-cycle, reshaping the live history array.
+    const changedEntries = ["brand new message", "newest", "middle", "oldest"];
+    const third = resolveComposerHistoryArrowKey({
+      direction: "down",
+      atVisualEdge: true,
+      entries: changedEntries,
+      state: second.nextState,
+      currentDraft: "middle",
+    });
+
+    expect(third).toEqual({
+      handled: true,
+      nextState: { stashedDraft: "unsent draft", index: 0, entries: originalEntries },
+      nextText: "newest",
     });
   });
 });
@@ -470,8 +511,8 @@ describe("composer history cycling invariant", () => {
       originalDraft,
       entries,
     );
-    const afterFirstDown = cycleComposerHistoryNewer(afterSecondUp?.nextState ?? null, entries);
-    const afterSecondDown = cycleComposerHistoryNewer(afterFirstDown?.nextState ?? null, entries);
+    const afterFirstDown = cycleComposerHistoryNewer(afterSecondUp?.nextState ?? null);
+    const afterSecondDown = cycleComposerHistoryNewer(afterFirstDown?.nextState ?? null);
 
     expect(afterSecondDown).toEqual({ nextState: null, text: originalDraft });
   });
@@ -513,7 +554,7 @@ describe("resolveComposerHistoryArrowKey", () => {
 
     expect(resolution).toEqual({
       handled: true,
-      nextState: { stashedDraft: "unsent draft", index: 0 },
+      nextState: { stashedDraft: "unsent draft", index: 0, entries: ["newest", "older"] },
       nextText: "newest",
     });
   });
@@ -523,7 +564,7 @@ describe("resolveComposerHistoryArrowKey", () => {
       direction: "down",
       atVisualEdge: true,
       entries: ["newest", "older"],
-      state: { stashedDraft: "unsent draft", index: 0 },
+      state: { stashedDraft: "unsent draft", index: 0, entries: ["newest", "older"] },
       currentDraft: "newest",
     });
 

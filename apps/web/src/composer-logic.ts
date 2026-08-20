@@ -286,10 +286,6 @@ export function replaceTextRange(
   return { text: nextText, cursor: safeStart + replacement.length };
 }
 
-// --------------------------------------------------------------------------
-// Composer message history cycling (shell-history-style Up/Down)
-// --------------------------------------------------------------------------
-
 const COMPOSER_HISTORY_IMAGE_PLACEHOLDER = "[image removed]";
 
 export interface ComposerHistorySourceMessage {
@@ -327,6 +323,8 @@ export function buildComposerHistoryEntries(
 export interface ComposerHistoryCycleState {
   readonly stashedDraft: string;
   readonly index: number;
+  /** Snapshotted when the session starts; stays fixed even if the live history changes shape mid-cycle. */
+  readonly entries: ReadonlyArray<string>;
 }
 
 export interface ComposerHistoryCycleStep {
@@ -335,38 +333,41 @@ export interface ComposerHistoryCycleStep {
 }
 
 /**
- * One step further back in history (Up). Stashes the current draft on the
- * first call. Returns null when there is nowhere further back to go, so the
- * caller can tell "no-op" apart from "stayed at the same entry".
+ * One step further back in history (Up). Stashes the current draft and
+ * snapshots `entries` on the first call, so the rest of the session is
+ * immune to the live entries array changing shape. Returns null when there
+ * is nowhere further back to go, so the caller can tell "no-op" apart from
+ * "stayed at the same entry".
  */
 export function cycleComposerHistoryOlder(
   state: ComposerHistoryCycleState | null,
   currentDraft: string,
   entries: ReadonlyArray<string>,
 ): ComposerHistoryCycleStep | null {
-  if (entries.length === 0) {
-    return null;
-  }
   if (state === null) {
-    return { nextState: { stashedDraft: currentDraft, index: 0 }, text: entries[0]! };
+    if (entries.length === 0) {
+      return null;
+    }
+    return { nextState: { stashedDraft: currentDraft, index: 0, entries }, text: entries[0]! };
   }
   const nextIndex = state.index + 1;
-  if (nextIndex >= entries.length) {
+  if (nextIndex >= state.entries.length) {
     return null;
   }
   return {
-    nextState: { stashedDraft: state.stashedDraft, index: nextIndex },
-    text: entries[nextIndex]!,
+    nextState: { stashedDraft: state.stashedDraft, index: nextIndex, entries: state.entries },
+    text: state.entries[nextIndex]!,
   };
 }
 
 /**
  * One step toward the present (Down). Once index 0 is passed, restores the
- * exact stashed draft and stops cycling (state becomes null).
+ * exact stashed draft and stops cycling (state becomes null). Reads the
+ * entries snapshotted in `state`; there is no live entries array to fall out
+ * of sync with.
  */
 export function cycleComposerHistoryNewer(
   state: ComposerHistoryCycleState | null,
-  entries: ReadonlyArray<string>,
 ): ComposerHistoryCycleStep | null {
   if (state === null) {
     return null;
@@ -376,8 +377,8 @@ export function cycleComposerHistoryNewer(
   }
   const nextIndex = state.index - 1;
   return {
-    nextState: { stashedDraft: state.stashedDraft, index: nextIndex },
-    text: entries[nextIndex] ?? state.stashedDraft,
+    nextState: { stashedDraft: state.stashedDraft, index: nextIndex, entries: state.entries },
+    text: state.entries[nextIndex] ?? state.stashedDraft,
   };
 }
 
@@ -392,6 +393,8 @@ export interface ComposerHistoryArrowKeyResolution {
  * the cursor sits at the relevant visual edge (top for up, bottom for down)
  * of the input. Keeping the edge check as a boolean input keeps this testable
  * without a real layout engine - the caller supplies it from DOM geometry.
+ * `entries` is only consulted to start a new session; once `state` is
+ * non-null, the snapshot it carries is authoritative.
  */
 export function resolveComposerHistoryArrowKey(input: {
   direction: "up" | "down";
@@ -406,7 +409,7 @@ export function resolveComposerHistoryArrowKey(input: {
   const step =
     input.direction === "up"
       ? cycleComposerHistoryOlder(input.state, input.currentDraft, input.entries)
-      : cycleComposerHistoryNewer(input.state, input.entries);
+      : cycleComposerHistoryNewer(input.state);
   if (!step) {
     return { handled: false, nextState: input.state };
   }
