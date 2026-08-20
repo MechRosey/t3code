@@ -574,6 +574,31 @@ describe("resolveComposerHistoryArrowKey", () => {
       nextText: "unsent draft",
     });
   });
+
+  it("does not handle ArrowDown when there is no draft to restore", () => {
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "down",
+      atVisualEdge: true,
+      entries: ["newest", "older"],
+      state: null,
+      currentDraft: "typing something",
+    });
+
+    expect(resolution).toEqual({ handled: false, nextState: null });
+  });
+
+  it("does not handle ArrowDown when the cursor is not at the bottom edge", () => {
+    const state = { stashedDraft: "unsent draft", index: 0, entries: ["newest", "older"] };
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "down",
+      atVisualEdge: false,
+      entries: ["newest", "older"],
+      state,
+      currentDraft: "newest",
+    });
+
+    expect(resolution).toEqual({ handled: false, nextState: state });
+  });
 });
 
 describe("parseStandaloneComposerSlashCommand", () => {
