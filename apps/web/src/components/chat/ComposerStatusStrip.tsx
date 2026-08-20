@@ -2,7 +2,11 @@ import type { RateLimitBucket } from "@t3tools/contracts";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { RateLimitStatusSnapshot } from "~/lib/rateLimitStatus";
-import { buildRateLimitPills, type RateLimitPillTone } from "./ComposerStatusStrip.logic";
+import {
+  buildRateLimitPills,
+  hasStatusStripContent,
+  type RateLimitPillTone,
+} from "./ComposerStatusStrip.logic";
 import { WorkingTimer } from "./MessagesTimeline";
 
 const PILL_VARIANT_BY_TONE: Record<RateLimitPillTone, "outline" | "warning" | "error"> = {
@@ -38,7 +42,7 @@ export function ComposerStatusStrip(props: {
   const pills = buildRateLimitPills(props.rateLimitSnapshots);
   const showWorkingTimer = props.isWorking && props.workingSince !== null;
 
-  if (pills.length === 0 && !showWorkingTimer) {
+  if (!hasStatusStripContent(props.rateLimitSnapshots, props.isWorking, props.workingSince)) {
     return null;
   }
 
@@ -53,8 +57,7 @@ export function ComposerStatusStrip(props: {
         </span>
       ) : null}
       {pills.map((pill) => {
-        const snapshot = props.rateLimitSnapshots.get(pill.bucket) ?? null;
-        const resetTooltip = snapshot ? formatResetTooltip(snapshot.resetsAt) : null;
+        const resetTooltip = formatResetTooltip(pill.resetsAt);
         const badge = (
           <Badge size="sm" variant={PILL_VARIANT_BY_TONE[pill.tone]}>
             {pill.label} {pill.percentageLabel}

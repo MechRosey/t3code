@@ -230,6 +230,7 @@ import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { deriveLatestRateLimitSnapshots } from "../../lib/rateLimitStatus";
 import { ComposerStatusStrip } from "./ComposerStatusStrip";
+import { hasStatusStripContent } from "./ComposerStatusStrip.logic";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -947,8 +948,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const statusStripWorkingSince = isStatusStripWorking
     ? (activeThread?.latestTurn?.startedAt ?? null)
     : null;
-  const hasStatusStripContent =
-    rateLimitSnapshots.size > 0 || (isStatusStripWorking && statusStripWorkingSince !== null);
+  const showStatusStrip = hasStatusStripContent(
+    rateLimitSnapshots,
+    isStatusStripWorking,
+    statusStripWorkingSince,
+  );
 
   // ------------------------------------------------------------------
   // Composer-local state
@@ -3218,7 +3222,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   </>
                 )}
-                {isComposerFooterCompact || !hasStatusStripContent ? null : (
+                {isComposerFooterCompact || !showStatusStrip ? null : (
                   <>
                     <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
                     <ComposerStatusStrip

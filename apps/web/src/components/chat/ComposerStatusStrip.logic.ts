@@ -18,6 +18,7 @@ export interface RateLimitPill {
   readonly label: string;
   readonly percentageLabel: string;
   readonly tone: RateLimitPillTone;
+  readonly resetsAt: number | null;
 }
 
 function toneForStatus(status: RateLimitStatusSnapshot["status"]): RateLimitPillTone {
@@ -46,7 +47,17 @@ export function buildRateLimitPills(
       label: formatRateLimitBucketLabel(bucket),
       percentageLabel: `${Math.round(snapshot.utilization)}%`,
       tone: toneForStatus(snapshot.status),
+      resetsAt: snapshot.resetsAt,
     });
   }
   return pills;
+}
+
+/** Whether the status strip has anything to show - rate-limit pills or an active turn timer. */
+export function hasStatusStripContent(
+  rateLimitSnapshots: ReadonlyMap<RateLimitBucket, RateLimitStatusSnapshot>,
+  isWorking: boolean,
+  workingSince: string | null,
+): boolean {
+  return buildRateLimitPills(rateLimitSnapshots).length > 0 || (isWorking && workingSince !== null);
 }
