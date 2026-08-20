@@ -1393,7 +1393,11 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "account/rateLimits/updated") {
-    if (!readPayload(EffectCodexSchema.V2AccountRateLimitsUpdatedNotification, event.payload)) {
+    const rateLimitsNotification = readPayload(
+      EffectCodexSchema.V2AccountRateLimitsUpdatedNotification,
+      event.payload,
+    );
+    if (!rateLimitsNotification) {
       return [];
     }
     return [
@@ -1401,7 +1405,7 @@ function mapToRuntimeEvents(
         type: "account.rate-limits.updated",
         ...runtimeEventBase(event, canonicalThreadId),
         payload: {
-          rateLimits: event.payload ?? {},
+          rateLimits: rateLimitsNotification.rateLimits,
         },
       },
     ];

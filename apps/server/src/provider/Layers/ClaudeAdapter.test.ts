@@ -978,6 +978,58 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect(
+    "maps rate_limit_event to account.rate-limits.updated with the raw rate_limit_info",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+
+        const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.takeUntil((event) => event.type === "account.rate-limits.updated"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+
+        yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: ProviderDriverKind.make("claudeAgent"),
+          runtimeMode: "full-access",
+        });
+
+        harness.query.emit({
+          type: "rate_limit_event",
+          session_id: "sdk-session-1",
+          uuid: "rate-limit-1",
+          rate_limit_info: {
+            status: "allowed_warning",
+            rateLimitType: "seven_day_sonnet",
+            utilization: 87.5,
+            resetsAt: 1780000000,
+          },
+        } as unknown as SDKMessage);
+
+        const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+        const rateLimitEvent = runtimeEvents.find(
+          (event) => event.type === "account.rate-limits.updated",
+        );
+        assert.equal(rateLimitEvent?.type, "account.rate-limits.updated");
+        if (rateLimitEvent?.type === "account.rate-limits.updated") {
+          const rateLimits = rateLimitEvent.payload.rateLimits;
+          assert.isTrue("status" in rateLimits);
+          if ("status" in rateLimits) {
+            assert.equal(rateLimits.status, "allowed_warning");
+            assert.equal(rateLimits.rateLimitType, "seven_day_sonnet");
+            assert.equal(rateLimits.utilization, 87.5);
+          }
+        }
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
   it.effect("does not emit turn.completed for a result with no active turn", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

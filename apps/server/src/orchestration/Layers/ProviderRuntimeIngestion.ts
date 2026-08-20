@@ -783,6 +783,37 @@ export function runtimeEventToActivities(
       ];
     }
 
+    case "account.rate-limits.updated": {
+      const rateLimits = event.payload.rateLimits;
+      // Codex's rate-limit model (primary/secondary positional windows, no
+      // status enum) has no bucket-percentage story yet on the status strip
+      // - deliberately out of scope for this pass. Only Claude's named-bucket
+      // shape (discriminated by its required `status` field) is persisted.
+      if (!("status" in rateLimits)) {
+        return [];
+      }
+      // The SDK only populates `utilization` near/at a warning threshold -
+      // a permanent upstream gap, not a bug. Skip persisting entirely rather
+      // than storing a status-only row a client would have to hide anyway;
+      // this keeps "no percentage known" and "never happened" the same state.
+      if (rateLimits.utilization === undefined) {
+        return [];
+      }
+
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "account.rate-limits.updated",
+          summary: "Rate limit status updated",
+          payload: rateLimits,
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
     case "item.updated": {
       if (!isToolLifecycleItemType(event.payload.itemType)) {
         return [];

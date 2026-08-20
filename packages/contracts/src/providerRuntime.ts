@@ -699,8 +699,85 @@ const AccountUpdatedPayload = Schema.Struct({
 });
 export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
 
+/**
+ * Mirrors the Claude Agent SDK's `SDKRateLimitInfo` (rate_limit_event message)
+ * field-for-field - verified against the installed
+ * `@anthropic-ai/claude-agent-sdk` type defs, not guessed. One event describes
+ * one bucket's status; `rateLimitType` names which bucket. `utilization` is
+ * populated only near/at a warning threshold by upstream SDK design - that
+ * gap is permanent, not a bug, so consumers must treat its absence as "no
+ * percentage available" rather than retrying or defaulting to 0.
+ */
+const RateLimitStatus = Schema.Literals(["allowed", "allowed_warning", "rejected"]);
+export type RateLimitStatus = typeof RateLimitStatus.Type;
+
+export const RateLimitBucket = Schema.Literals([
+  "five_hour",
+  "seven_day",
+  "seven_day_opus",
+  "seven_day_sonnet",
+  "overage",
+]);
+export type RateLimitBucket = typeof RateLimitBucket.Type;
+
+const RateLimitOverageDisabledReason = Schema.Literals([
+  "overage_not_provisioned",
+  "org_level_disabled",
+  "org_level_disabled_until",
+  "out_of_credits",
+  "seat_tier_level_disabled",
+  "member_level_disabled",
+  "seat_tier_zero_credit_limit",
+  "group_zero_credit_limit",
+  "member_zero_credit_limit",
+  "org_service_level_disabled",
+  "no_limits_configured",
+  "fetch_error",
+  "unknown",
+]);
+
+export const RateLimitSnapshot = Schema.Struct({
+  status: RateLimitStatus,
+  resetsAt: Schema.optional(NonNegativeInt),
+  rateLimitType: Schema.optional(RateLimitBucket),
+  utilization: Schema.optional(Schema.Number),
+  overageStatus: Schema.optional(RateLimitStatus),
+  overageResetsAt: Schema.optional(NonNegativeInt),
+  overageDisabledReason: Schema.optional(RateLimitOverageDisabledReason),
+  isUsingOverage: Schema.optional(Schema.Boolean),
+  overageInUse: Schema.optional(Schema.Boolean),
+  surpassedThreshold: Schema.optional(Schema.Number),
+});
+export type RateLimitSnapshot = typeof RateLimitSnapshot.Type;
+
+const CodexRateLimitWindow = Schema.Struct({
+  resetsAt: Schema.optional(Schema.NullOr(NonNegativeInt)),
+  usedPercent: Schema.Number,
+  windowDurationMins: Schema.optional(Schema.NullOr(NonNegativeInt)),
+});
+
+/**
+ * Codex's app-server `account/rateLimits/updated` notification carries an
+ * unrelated shape (verified against
+ * `packages/effect-codex-app-server/src/_generated/schema.gen.ts`'s
+ * `V2AccountRateLimitsUpdatedNotification__RateLimitSnapshot`): no `status`
+ * enum, two positional windows instead of Claude's named buckets. Kept as a
+ * second union member rather than forced into `RateLimitSnapshot` - the two
+ * providers' rate-limit models don't actually correspond field-for-field, and
+ * pretending otherwise would misrepresent Codex data.
+ */
+const CodexRateLimitSnapshot = Schema.Struct({
+  limitId: Schema.optional(Schema.NullOr(Schema.String)),
+  limitName: Schema.optional(Schema.NullOr(Schema.String)),
+  primary: Schema.optional(Schema.NullOr(CodexRateLimitWindow)),
+  secondary: Schema.optional(Schema.NullOr(CodexRateLimitWindow)),
+  rateLimitReachedType: Schema.optional(Schema.NullOr(Schema.String)),
+  spendControlReached: Schema.optional(Schema.NullOr(Schema.Boolean)),
+});
+export type CodexRateLimitSnapshot = typeof CodexRateLimitSnapshot.Type;
+
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
-  rateLimits: Schema.Unknown,
+  rateLimits: Schema.Union([RateLimitSnapshot, CodexRateLimitSnapshot]),
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
 

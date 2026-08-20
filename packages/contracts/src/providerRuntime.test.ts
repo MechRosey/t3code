@@ -181,6 +181,88 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
   });
+
+  it("decodes account.rate-limits.updated with the SDK's typed rate_limit_info fields", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "account.rate-limits.updated",
+      eventId: "event-rate-limit-1",
+      provider: "claudeAgent",
+      createdAt: "2026-02-28T00:00:05.000Z",
+      threadId: "thread-1",
+      payload: {
+        rateLimits: {
+          status: "allowed_warning",
+          resetsAt: 1780000000,
+          rateLimitType: "seven_day_sonnet",
+          utilization: 87.5,
+          isUsingOverage: false,
+        },
+      },
+    });
+
+    expect(parsed.type).toBe("account.rate-limits.updated");
+    if (parsed.type !== "account.rate-limits.updated") {
+      throw new Error("expected account.rate-limits.updated");
+    }
+    const rateLimits = parsed.payload.rateLimits;
+    if (!("status" in rateLimits)) {
+      throw new Error("expected Claude-shaped rate limits");
+    }
+    expect(rateLimits.status).toBe("allowed_warning");
+    expect(rateLimits.rateLimitType).toBe("seven_day_sonnet");
+    expect(rateLimits.utilization).toBe(87.5);
+  });
+
+  it("decodes Codex's positional primary/secondary rate-limit windows", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "account.rate-limits.updated",
+      eventId: "event-rate-limit-codex-1",
+      provider: "codex",
+      createdAt: "2026-02-28T00:00:05.500Z",
+      threadId: "thread-1",
+      payload: {
+        rateLimits: {
+          limitId: "primary",
+          primary: { usedPercent: 42, windowDurationMins: 300 },
+          secondary: { usedPercent: 12, resetsAt: 1780000000 },
+        },
+      },
+    });
+
+    expect(parsed.type).toBe("account.rate-limits.updated");
+    if (parsed.type !== "account.rate-limits.updated") {
+      throw new Error("expected account.rate-limits.updated");
+    }
+    const rateLimits = parsed.payload.rateLimits;
+    if ("status" in rateLimits) {
+      throw new Error("expected Codex-shaped rate limits");
+    }
+    expect(rateLimits.primary?.usedPercent).toBe(42);
+    expect(rateLimits.secondary?.usedPercent).toBe(12);
+  });
+
+  it("rejects an account.rate-limits.updated payload that matches neither provider's shape", () => {
+    expect(() =>
+      decodeRuntimeEvent({
+        type: "account.rate-limits.updated",
+        eventId: "event-rate-limit-2",
+        provider: "claudeAgent",
+        createdAt: "2026-02-28T00:00:06.000Z",
+        threadId: "thread-1",
+        payload: {
+          rateLimits: {
+            // Invalid against Claude's shape (bad status/bucket enums) *and*
+            // against Codex's shape (usedPercent must be a number) - proves
+            // the union rejects garbage rather than silently coercing it via
+            // whichever member happens to ignore the offending keys.
+            status: "not-a-real-status",
+            rateLimitType: "not-a-real-bucket",
+            primary: { usedPercent: "not-a-number" },
+          },
+        },
+      }),
+    ).toThrow();
+  });
 });
 
 describe("classifyTaskAgentKind", () => {
