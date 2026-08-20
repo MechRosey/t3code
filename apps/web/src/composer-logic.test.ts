@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  buildComposerHistoryEntries,
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
+  cycleComposerHistoryNewer,
+  cycleComposerHistoryOlder,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
+  resolveComposerHistoryArrowKey,
   shouldSubmitComposerOnEnter,
 } from "./composer-logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
@@ -356,6 +360,178 @@ describe("isCollapsedCursorAdjacentToInlineToken", () => {
 
     expect(isCollapsedCursorAdjacentToInlineToken(text, tokenEnd, "left")).toBe(true);
     expect(isCollapsedCursorAdjacentToInlineToken(text, tokenStart, "right")).toBe(true);
+  });
+});
+
+describe("buildComposerHistoryEntries", () => {
+  it("keeps only the user's own messages, most-recent-first", () => {
+    const messages = [
+      { role: "user" as const, text: "first" },
+      { role: "assistant" as const, text: "reply" },
+      { role: "user" as const, text: "second" },
+      { role: "system" as const, text: "note" },
+      { role: "user" as const, text: "third" },
+    ];
+
+    expect(buildComposerHistoryEntries(messages)).toEqual(["third", "second", "first"]);
+  });
+
+  it("substitutes [image removed] for each image attachment after the message text", () => {
+    const messages = [
+      {
+        role: "user" as const,
+        text: "check this out",
+        attachments: [{ type: "image" }, { type: "image" }],
+      },
+    ];
+
+    expect(buildComposerHistoryEntries(messages)).toEqual([
+      "check this out\n[image removed]\n[image removed]",
+    ]);
+  });
+
+  it("substitutes [image removed] with no leading text when the message was image-only", () => {
+    const messages = [{ role: "user" as const, text: "", attachments: [{ type: "image" }] }];
+
+    expect(buildComposerHistoryEntries(messages)).toEqual(["[image removed]"]);
+  });
+
+  it("returns an empty list when the user has no messages yet", () => {
+    expect(buildComposerHistoryEntries([{ role: "assistant" as const, text: "hi" }])).toEqual([]);
+  });
+});
+
+describe("cycleComposerHistoryOlder", () => {
+  it("stashes the current draft and jumps to the most recent history entry", () => {
+    const step = cycleComposerHistoryOlder(null, "unsent draft", ["newest", "middle", "oldest"]);
+
+    expect(step).toEqual({
+      nextState: { stashedDraft: "unsent draft", index: 0 },
+      text: "newest",
+    });
+  });
+
+  it("steps further back on each subsequent call, preserving the stashed draft", () => {
+    const entries = ["newest", "middle", "oldest"];
+    const first = cycleComposerHistoryOlder(null, "unsent draft", entries);
+    const second = cycleComposerHistoryOlder(first?.nextState ?? null, "unsent draft", entries);
+
+    expect(second).toEqual({
+      nextState: { stashedDraft: "unsent draft", index: 1 },
+      text: "middle",
+    });
+  });
+
+  it("is a no-op once the oldest entry is reached", () => {
+    const entries = ["newest", "middle", "oldest"];
+    const atOldest = { stashedDraft: "unsent draft", index: 2 };
+
+    expect(cycleComposerHistoryOlder(atOldest, "unsent draft", entries)).toBeNull();
+  });
+
+  it("is a no-op when there is no history to cycle into", () => {
+    expect(cycleComposerHistoryOlder(null, "unsent draft", [])).toBeNull();
+  });
+});
+
+describe("cycleComposerHistoryNewer", () => {
+  it("is a no-op when not currently cycling", () => {
+    expect(cycleComposerHistoryNewer(null, ["newest", "middle"])).toBeNull();
+  });
+
+  it("steps toward the newest entry while mid-history", () => {
+    const entries = ["newest", "middle", "oldest"];
+    const state = { stashedDraft: "unsent draft", index: 2 };
+
+    expect(cycleComposerHistoryNewer(state, entries)).toEqual({
+      nextState: { stashedDraft: "unsent draft", index: 1 },
+      text: "middle",
+    });
+  });
+
+  it("restores the exact stashed draft and stops cycling once past the newest entry", () => {
+    const state = { stashedDraft: "unsent draft, verbatim  ", index: 0 };
+
+    expect(cycleComposerHistoryNewer(state, ["newest", "middle"])).toEqual({
+      nextState: null,
+      text: "unsent draft, verbatim  ",
+    });
+  });
+});
+
+describe("composer history cycling invariant", () => {
+  it("never loses the unsent draft: up then down round-trips to the exact original text", () => {
+    const entries = ["newest message", "older message"];
+    const originalDraft = "half-typed thought, not sent yet";
+
+    const afterFirstUp = cycleComposerHistoryOlder(null, originalDraft, entries);
+    const afterSecondUp = cycleComposerHistoryOlder(
+      afterFirstUp?.nextState ?? null,
+      originalDraft,
+      entries,
+    );
+    const afterFirstDown = cycleComposerHistoryNewer(afterSecondUp?.nextState ?? null, entries);
+    const afterSecondDown = cycleComposerHistoryNewer(afterFirstDown?.nextState ?? null, entries);
+
+    expect(afterSecondDown).toEqual({ nextState: null, text: originalDraft });
+  });
+});
+
+describe("resolveComposerHistoryArrowKey", () => {
+  it("does not handle the key when the cursor is not at the relevant visual edge", () => {
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "up",
+      atVisualEdge: false,
+      entries: ["newest"],
+      state: null,
+      currentDraft: "typing something",
+    });
+
+    expect(resolution).toEqual({ handled: false, nextState: null });
+  });
+
+  it("does not handle the key when there is no history to cycle into", () => {
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "up",
+      atVisualEdge: true,
+      entries: [],
+      state: null,
+      currentDraft: "",
+    });
+
+    expect(resolution).toEqual({ handled: false, nextState: null });
+  });
+
+  it("handles ArrowUp at the top edge by stashing the draft and recalling the newest entry", () => {
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "up",
+      atVisualEdge: true,
+      entries: ["newest", "older"],
+      state: null,
+      currentDraft: "unsent draft",
+    });
+
+    expect(resolution).toEqual({
+      handled: true,
+      nextState: { stashedDraft: "unsent draft", index: 0 },
+      nextText: "newest",
+    });
+  });
+
+  it("handles ArrowDown at the bottom edge by restoring the stashed draft", () => {
+    const resolution = resolveComposerHistoryArrowKey({
+      direction: "down",
+      atVisualEdge: true,
+      entries: ["newest", "older"],
+      state: { stashedDraft: "unsent draft", index: 0 },
+      currentDraft: "newest",
+    });
+
+    expect(resolution).toEqual({
+      handled: true,
+      nextState: null,
+      nextText: "unsent draft",
+    });
   });
 });
 

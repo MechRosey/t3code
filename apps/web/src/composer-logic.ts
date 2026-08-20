@@ -285,3 +285,130 @@ export function replaceTextRange(
   const nextText = `${text.slice(0, safeStart)}${replacement}${text.slice(safeEnd)}`;
   return { text: nextText, cursor: safeStart + replacement.length };
 }
+
+// --------------------------------------------------------------------------
+// Composer message history cycling (shell-history-style Up/Down)
+// --------------------------------------------------------------------------
+
+const COMPOSER_HISTORY_IMAGE_PLACEHOLDER = "[image removed]";
+
+export interface ComposerHistorySourceMessage {
+  readonly role: "user" | "assistant" | "system";
+  readonly text: string;
+  readonly attachments?: ReadonlyArray<{ readonly type: string }> | undefined;
+}
+
+function composerHistoryEntryText(message: ComposerHistorySourceMessage): string {
+  const imageAttachmentCount = (message.attachments ?? []).filter(
+    (attachment) => attachment.type === "image",
+  ).length;
+  if (imageAttachmentCount === 0) {
+    return message.text;
+  }
+  const placeholders = Array.from(
+    { length: imageAttachmentCount },
+    () => COMPOSER_HISTORY_IMAGE_PLACEHOLDER,
+  );
+  return message.text.length > 0
+    ? [message.text, ...placeholders].join("\n")
+    : placeholders.join("\n");
+}
+
+/** Own messages only, most-recent-first, with image attachments rendered as inline placeholders. */
+export function buildComposerHistoryEntries(
+  messages: ReadonlyArray<ComposerHistorySourceMessage>,
+): string[] {
+  return messages
+    .filter((message) => message.role === "user")
+    .reverse()
+    .map(composerHistoryEntryText);
+}
+
+export interface ComposerHistoryCycleState {
+  readonly stashedDraft: string;
+  readonly index: number;
+}
+
+export interface ComposerHistoryCycleStep {
+  readonly nextState: ComposerHistoryCycleState | null;
+  readonly text: string;
+}
+
+/**
+ * One step further back in history (Up). Stashes the current draft on the
+ * first call. Returns null when there is nowhere further back to go, so the
+ * caller can tell "no-op" apart from "stayed at the same entry".
+ */
+export function cycleComposerHistoryOlder(
+  state: ComposerHistoryCycleState | null,
+  currentDraft: string,
+  entries: ReadonlyArray<string>,
+): ComposerHistoryCycleStep | null {
+  if (entries.length === 0) {
+    return null;
+  }
+  if (state === null) {
+    return { nextState: { stashedDraft: currentDraft, index: 0 }, text: entries[0]! };
+  }
+  const nextIndex = state.index + 1;
+  if (nextIndex >= entries.length) {
+    return null;
+  }
+  return {
+    nextState: { stashedDraft: state.stashedDraft, index: nextIndex },
+    text: entries[nextIndex]!,
+  };
+}
+
+/**
+ * One step toward the present (Down). Once index 0 is passed, restores the
+ * exact stashed draft and stops cycling (state becomes null).
+ */
+export function cycleComposerHistoryNewer(
+  state: ComposerHistoryCycleState | null,
+  entries: ReadonlyArray<string>,
+): ComposerHistoryCycleStep | null {
+  if (state === null) {
+    return null;
+  }
+  if (state.index === 0) {
+    return { nextState: null, text: state.stashedDraft };
+  }
+  const nextIndex = state.index - 1;
+  return {
+    nextState: { stashedDraft: state.stashedDraft, index: nextIndex },
+    text: entries[nextIndex] ?? state.stashedDraft,
+  };
+}
+
+export interface ComposerHistoryArrowKeyResolution {
+  readonly handled: boolean;
+  readonly nextState: ComposerHistoryCycleState | null;
+  readonly nextText?: string;
+}
+
+/**
+ * Decides what an Up/Down press should do to composer history, given whether
+ * the cursor sits at the relevant visual edge (top for up, bottom for down)
+ * of the input. Keeping the edge check as a boolean input keeps this testable
+ * without a real layout engine - the caller supplies it from DOM geometry.
+ */
+export function resolveComposerHistoryArrowKey(input: {
+  direction: "up" | "down";
+  atVisualEdge: boolean;
+  entries: ReadonlyArray<string>;
+  state: ComposerHistoryCycleState | null;
+  currentDraft: string;
+}): ComposerHistoryArrowKeyResolution {
+  if (!input.atVisualEdge) {
+    return { handled: false, nextState: input.state };
+  }
+  const step =
+    input.direction === "up"
+      ? cycleComposerHistoryOlder(input.state, input.currentDraft, input.entries)
+      : cycleComposerHistoryNewer(input.state, input.entries);
+  if (!step) {
+    return { handled: false, nextState: input.state };
+  }
+  return { handled: true, nextState: step.nextState, nextText: step.text };
+}
