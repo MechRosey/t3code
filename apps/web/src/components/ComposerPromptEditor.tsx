@@ -39,6 +39,7 @@ import {
   type LexicalNode,
   type SerializedLexicalNode,
   type EditorState,
+  type LexicalEditor,
   type NodeKey,
   type Spread,
 } from "lexical";
@@ -805,6 +806,41 @@ function $readExpandedSelectionOffsetFromEditorState(fallback: number): number {
   return Math.max(0, Math.min(offset, expandedLength));
 }
 
+const COMPOSER_VISUAL_EDGE_TOLERANCE_PX = 2;
+
+/**
+ * Whether the collapsed caret sits on the editor's topmost ("up") or
+ * bottommost ("down") rendered row. A single logical line can still wrap to
+ * several visual rows, so this can't be derived from the text or the Lexical
+ * node tree (neither knows about soft-wrap) - it has to read real layout
+ * geometry, the same way `ComposerHomeEndKeyPlugin` leans on the browser
+ * `Selection` API instead of reimplementing wrapped-line math.
+ */
+function isCollapsedSelectionAtVisualEdge(
+  editor: LexicalEditor,
+  direction: "up" | "down",
+): boolean {
+  const rootElement = editor.getRootElement();
+  const domSelection = window.getSelection();
+  if (!rootElement || !domSelection || domSelection.rangeCount === 0 || !domSelection.isCollapsed) {
+    return false;
+  }
+  const anchorNode = domSelection.anchorNode;
+  if (!anchorNode || !rootElement.contains(anchorNode)) {
+    return false;
+  }
+
+  const caretRect = domSelection.getRangeAt(0).getBoundingClientRect();
+  const edgeRange = document.createRange();
+  edgeRange.selectNodeContents(rootElement);
+  edgeRange.collapse(direction === "up");
+  const edgeRect = edgeRange.getBoundingClientRect();
+
+  return direction === "up"
+    ? Math.abs(caretRect.top - edgeRect.top) <= COMPOSER_VISUAL_EDGE_TOLERANCE_PX
+    : Math.abs(caretRect.bottom - edgeRect.bottom) <= COMPOSER_VISUAL_EDGE_TOLERANCE_PX;
+}
+
 function $appendTextWithLineBreaks(parent: ElementNode, text: string): void {
   const lines = text.split("\n");
   for (let index = 0; index < lines.length; index += 1) {
@@ -875,6 +911,14 @@ export interface ComposerPromptEditorHandle {
     expandedCursor: number;
     terminalContextIds: string[];
   };
+  /**
+   * Whether the collapsed caret sits on the topmost ("up") or bottommost
+   * ("down") rendered row of the editor. A wrapped single line has no
+   * newline to count, so this reads real layout geometry rather than the
+   * text - the only way to tell "start of document" from "start of a
+   * visually-wrapped line" apart.
+   */
+  isCollapsedSelectionAtVisualEdge: (direction: "up" | "down") => boolean;
 }
 
 interface ComposerPromptEditorProps {
@@ -918,9 +962,15 @@ function ComposerCommandKeyPlugin(props: {
         return false;
       }
 
-      if (key === "Enter" && (event.isComposing || event.keyCode === 229)) {
+      const isComposingEvent = event.isComposing || event.keyCode === 229;
+      if (key === "Enter" && isComposingEvent) {
         event.stopPropagation();
         return true;
+      }
+      if ((key === "ArrowUp" || key === "ArrowDown") && isComposingEvent) {
+        // Let the IME's own candidate-list navigation use these keys instead
+        // of recalling composer history out from under it.
+        return false;
       }
 
       const handled = props.onCommandKeyDown(key, event);
@@ -1693,8 +1743,10 @@ function ComposerPromptEditorInner({
         );
       },
       readSnapshot,
+      isCollapsedSelectionAtVisualEdge: (direction) =>
+        isCollapsedSelectionAtVisualEdge(editor, direction),
     }),
-    [focusAt, readSnapshot],
+    [editor, focusAt, readSnapshot],
   );
 
   const handleEditorChange = useCallback((editorState: EditorState) => {

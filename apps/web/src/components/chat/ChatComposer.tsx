@@ -34,12 +34,15 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  buildComposerHistoryEntries,
   clampCollapsedComposerCursor,
+  type ComposerHistoryCycleState,
   type ComposerTrigger,
   collapseExpandedComposerCursor,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   replaceTextRange,
+  resolveComposerHistoryArrowKey,
   shouldSubmitComposerOnEnter,
 } from "../../composer-logic";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
@@ -224,7 +227,7 @@ import {
 } from "../../providerInstances";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
-import type { SessionPhase, Thread } from "../../types";
+import type { ChatMessage, SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
@@ -515,6 +518,10 @@ export interface ChatComposerProps {
   activeThreadId: ThreadId | null;
   activeThreadEnvironmentId: EnvironmentId | undefined;
   activeThread: Thread | undefined;
+  // Deduped server + optimistic messages for the active thread, used to
+  // build the Up/Down history-cycling stack. `activeThread.messages` alone
+  // goes stale right after sending, before the server message lands.
+  historyMessages: ReadonlyArray<ChatMessage>;
   isServerThread: boolean;
   isLocalDraftThread: boolean;
   forceExpandedOnMobile: boolean;
@@ -624,6 +631,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeThreadId,
     activeThreadEnvironmentId: _activeThreadEnvironmentId,
     activeThread,
+    historyMessages,
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
     forceExpandedOnMobile,
@@ -994,6 +1002,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const providerInputRejectedRef = useRef(false);
   const composerSelectLockRef = useRef(false);
+  // Up/Down shell-history cycling through the user's own thread messages.
+  // Lives in a ref (not state) since a keypress both reads and writes it
+  // synchronously and never needs to trigger a render on its own.
+  const composerHistoryCycleStateRef = useRef<ComposerHistoryCycleState | null>(null);
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
   const activeComposerMenuItemRef = useRef<ComposerCommandItem | null>(null);
@@ -1452,6 +1464,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setComposerCursor(collapseExpandedComposerCursor(promptRef.current, promptRef.current.length));
     setComposerTrigger(detectComposerTrigger(promptRef.current, promptRef.current.length));
     setIsDragOverComposer(false);
+    composerHistoryCycleStateRef.current = null;
   }, [draftId, activeThreadId, promptRef]);
 
   // ------------------------------------------------------------------
@@ -1889,6 +1902,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       });
       setComposerSubmissionError(submission.validationMessage);
       if (!submission.didDispatch) return;
+      // Sending is the only thing allowed to consume the stashed draft -
+      // either the draft itself went out, or a recalled/edited history entry
+      // did. Either way, the cycling session is over.
+      composerHistoryCycleStateRef.current = null;
       if (shouldBlurMobileComposerOnSubmit()) {
         blurMobileComposerAfterSend();
       }
@@ -1928,6 +1945,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   }, []);
 
   // ------------------------------------------------------------------
+  // Message history (Up/Down shell-history-style cycling)
+  // ------------------------------------------------------------------
+  const composerHistoryEntries = useMemo(
+    () => buildComposerHistoryEntries(historyMessages),
+    [historyMessages],
+  );
+
+  // ------------------------------------------------------------------
   // Callbacks: command key
   // ------------------------------------------------------------------
   const onComposerCommandKey = (
@@ -1963,6 +1988,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ) {
       submitComposer();
       return true;
+    }
+    if (!menuIsActive && (key === "ArrowUp" || key === "ArrowDown")) {
+      const direction = key === "ArrowUp" ? "up" : "down";
+      const atVisualEdge =
+        composerEditorRef.current?.isCollapsedSelectionAtVisualEdge(direction) ?? false;
+      const resolution = resolveComposerHistoryArrowKey({
+        direction,
+        atVisualEdge,
+        entries: composerHistoryEntries,
+        state: composerHistoryCycleStateRef.current,
+        currentDraft: promptRef.current,
+      });
+      if (resolution.handled && resolution.nextText !== undefined) {
+        composerHistoryCycleStateRef.current = resolution.nextState;
+        const nextText = resolution.nextText;
+        promptRef.current = nextText;
+        setPrompt(nextText);
+        setComposerCursor(collapseExpandedComposerCursor(nextText, nextText.length));
+        setComposerTrigger(detectComposerTrigger(nextText, nextText.length));
+        composerEditorRef.current?.focusAtEnd();
+        return true;
+      }
     }
     return false;
   };
