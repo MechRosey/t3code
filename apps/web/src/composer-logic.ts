@@ -382,11 +382,13 @@ export function cycleComposerHistoryNewer(
   };
 }
 
-export interface ComposerHistoryArrowKeyResolution {
-  readonly handled: boolean;
-  readonly nextState: ComposerHistoryCycleState | null;
-  readonly nextText?: string;
-}
+export type ComposerHistoryArrowKeyResolution =
+  | {
+      readonly handled: true;
+      readonly nextState: ComposerHistoryCycleState | null;
+      readonly nextText: string;
+    }
+  | { readonly handled: false; readonly nextState: ComposerHistoryCycleState | null };
 
 /**
  * Decides what an Up/Down press should do to composer history, given whether

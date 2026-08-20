@@ -2000,7 +2000,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         state: composerHistoryCycleStateRef.current,
         currentDraft: promptRef.current,
       });
-      if (resolution.handled && resolution.nextText !== undefined) {
+      if (resolution.handled) {
         composerHistoryCycleStateRef.current = resolution.nextState;
         const nextText = resolution.nextText;
         promptRef.current = nextText;
