@@ -1311,8 +1311,8 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
 // does not create a React commit every second while a response is streaming.
 // ---------------------------------------------------------------------------
 
-/** Live "Working for Xs" label. */
-function WorkingTimer({ createdAt }: { createdAt: string }) {
+/** Live "Working for Xs" label. Exported for reuse by ComposerStatusStrip. */
+export function WorkingTimer({ createdAt }: { createdAt: string }) {
   const textRef = useRef<HTMLSpanElement>(null);
   const initialText = formatWorkingTimerNow(createdAt);
 

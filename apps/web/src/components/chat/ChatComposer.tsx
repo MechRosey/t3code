@@ -228,6 +228,8 @@ import type { SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
+import { deriveLatestRateLimitSnapshots } from "../../lib/rateLimitStatus";
+import { ComposerStatusStrip } from "./ComposerStatusStrip";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -933,6 +935,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => resolveContextWindowModelDisplayName(activeThreadModelSelection, modelOptionsByInstance),
     [activeThreadModelSelection, modelOptionsByInstance],
   );
+
+  // ------------------------------------------------------------------
+  // Status strip (rate limits + turn timing)
+  // ------------------------------------------------------------------
+  const rateLimitSnapshots = useMemo(
+    () => deriveLatestRateLimitSnapshots(activeThreadActivities ?? []),
+    [activeThreadActivities],
+  );
+  const isStatusStripWorking = phase === "running";
+  const statusStripWorkingSince = isStatusStripWorking
+    ? (activeThread?.latestTurn?.startedAt ?? null)
+    : null;
+  const hasStatusStripContent =
+    rateLimitSnapshots.size > 0 || (isStatusStripWorking && statusStripWorkingSince !== null);
 
   // ------------------------------------------------------------------
   // Composer-local state
@@ -3199,6 +3215,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       runtimeMode={runtimeMode}
                       onToggleInteractionMode={toggleInteractionMode}
                       onRuntimeModeChange={handleRuntimeModeChange}
+                    />
+                  </>
+                )}
+                {isComposerFooterCompact || !hasStatusStripContent ? null : (
+                  <>
+                    <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                    <ComposerStatusStrip
+                      rateLimitSnapshots={rateLimitSnapshots}
+                      isWorking={isStatusStripWorking}
+                      workingSince={statusStripWorkingSince}
                     />
                   </>
                 )}
