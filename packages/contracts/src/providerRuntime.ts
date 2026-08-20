@@ -736,7 +736,7 @@ const RateLimitOverageDisabledReason = Schema.Literals([
   "unknown",
 ]);
 
-export const RateLimitSnapshot = Schema.Struct({
+export const RateLimitSnapshot = Schema.TaggedStruct("claude", {
   status: RateLimitStatus,
   resetsAt: Schema.optional(NonNegativeInt),
   rateLimitType: Schema.optional(RateLimitBucket),
@@ -766,7 +766,7 @@ const CodexRateLimitWindow = Schema.Struct({
  * providers' rate-limit models don't actually correspond field-for-field, and
  * pretending otherwise would misrepresent Codex data.
  */
-const CodexRateLimitSnapshot = Schema.Struct({
+const CodexRateLimitSnapshot = Schema.TaggedStruct("codex", {
   limitId: Schema.optional(Schema.NullOr(Schema.String)),
   limitName: Schema.optional(Schema.NullOr(Schema.String)),
   primary: Schema.optional(Schema.NullOr(CodexRateLimitWindow)),
@@ -776,6 +776,15 @@ const CodexRateLimitSnapshot = Schema.Struct({
 });
 export type CodexRateLimitSnapshot = typeof CodexRateLimitSnapshot.Type;
 
+/**
+ * Both branches are all-optional-fields-but-one-required at best, so an
+ * untagged `Schema.Union` here would match almost anything (including `{}`)
+ * against whichever branch happens to have fewer required fields, rather
+ * than raising a decode error for a payload that matches neither provider's
+ * real shape. `_tag` is a required discriminant on both branches - stamped by
+ * the emitting adapter (ClaudeAdapter.ts, CodexAdapter.ts) - so the union
+ * fails closed instead of silently misclassifying a malformed payload.
+ */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
   rateLimits: Schema.Union([RateLimitSnapshot, CodexRateLimitSnapshot]),
 });

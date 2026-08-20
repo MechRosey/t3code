@@ -191,6 +191,7 @@ describe("ProviderRuntimeEvent", () => {
       threadId: "thread-1",
       payload: {
         rateLimits: {
+          _tag: "claude",
           status: "allowed_warning",
           resetsAt: 1780000000,
           rateLimitType: "seven_day_sonnet",
@@ -205,7 +206,7 @@ describe("ProviderRuntimeEvent", () => {
       throw new Error("expected account.rate-limits.updated");
     }
     const rateLimits = parsed.payload.rateLimits;
-    if (!("status" in rateLimits)) {
+    if (rateLimits._tag !== "claude") {
       throw new Error("expected Claude-shaped rate limits");
     }
     expect(rateLimits.status).toBe("allowed_warning");
@@ -222,6 +223,7 @@ describe("ProviderRuntimeEvent", () => {
       threadId: "thread-1",
       payload: {
         rateLimits: {
+          _tag: "codex",
           limitId: "primary",
           primary: { usedPercent: 42, windowDurationMins: 300 },
           secondary: { usedPercent: 12, resetsAt: 1780000000 },
@@ -234,7 +236,7 @@ describe("ProviderRuntimeEvent", () => {
       throw new Error("expected account.rate-limits.updated");
     }
     const rateLimits = parsed.payload.rateLimits;
-    if ("status" in rateLimits) {
+    if (rateLimits._tag !== "codex") {
       throw new Error("expected Codex-shaped rate limits");
     }
     expect(rateLimits.primary?.usedPercent).toBe(42);
@@ -258,6 +260,28 @@ describe("ProviderRuntimeEvent", () => {
             status: "not-a-real-status",
             rateLimitType: "not-a-real-bucket",
             primary: { usedPercent: "not-a-number" },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a malformed Claude rate-limit payload instead of silently matching Codex's all-optional shape", () => {
+    // Every field of CodexRateLimitSnapshot is optional, so before the `_tag`
+    // discriminant was added, a Claude payload missing `status` (e.g. an SDK
+    // regression) would satisfy the Codex branch trivially - decoding
+    // "successfully" as an empty Codex snapshot instead of raising an error.
+    expect(() =>
+      decodeRuntimeEvent({
+        type: "account.rate-limits.updated",
+        eventId: "event-rate-limit-3",
+        provider: "claudeAgent",
+        createdAt: "2026-02-28T00:00:07.000Z",
+        threadId: "thread-1",
+        payload: {
+          rateLimits: {
+            rateLimitType: "seven_day_sonnet",
+            utilization: 87.5,
           },
         },
       }),

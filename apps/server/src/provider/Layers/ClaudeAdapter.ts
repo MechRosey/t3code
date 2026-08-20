@@ -3509,7 +3509,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...base,
         type: "account.rate-limits.updated",
         payload: {
-          rateLimits: message.rate_limit_info,
+          rateLimits: { _tag: "claude", ...message.rate_limit_info },
         },
       });
       return;

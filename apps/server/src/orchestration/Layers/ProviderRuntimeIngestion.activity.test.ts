@@ -24,6 +24,7 @@ describe("runtimeEventToActivities rate limits", () => {
       eventId: EventId.make("evt-rate-limit-1"),
       payload: {
         rateLimits: {
+          _tag: "claude",
           status: "allowed_warning",
           rateLimitType: "seven_day_sonnet",
           utilization: 87.5,
@@ -51,6 +52,7 @@ describe("runtimeEventToActivities rate limits", () => {
       eventId: EventId.make("evt-rate-limit-2"),
       payload: {
         rateLimits: {
+          _tag: "claude",
           status: "allowed",
           rateLimitType: "five_hour",
         },

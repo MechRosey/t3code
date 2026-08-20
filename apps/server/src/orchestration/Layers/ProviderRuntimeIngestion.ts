@@ -788,8 +788,8 @@ export function runtimeEventToActivities(
       // Codex's rate-limit model (primary/secondary positional windows, no
       // status enum) has no bucket-percentage story yet on the status strip
       // - deliberately out of scope for this pass. Only Claude's named-bucket
-      // shape (discriminated by its required `status` field) is persisted.
-      if (!("status" in rateLimits)) {
+      // shape (discriminated by the required `_tag` field) is persisted.
+      if (rateLimits._tag !== "claude") {
         return [];
       }
       // The SDK only populates `utilization` near/at a warning threshold -
