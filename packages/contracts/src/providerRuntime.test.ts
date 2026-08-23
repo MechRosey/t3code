@@ -226,6 +226,9 @@ describe("ProviderRuntimeEvent", () => {
           limitId: "primary",
           primary: { usedPercent: 42, windowDurationMins: 300 },
           secondary: { usedPercent: 12, resetsAt: 1780000000 },
+          credits: { balance: "12.50", hasCredits: true, unlimited: false },
+          individualLimit: { limit: "100", remainingPercent: 65, resetsAt: 1780000000, used: "35" },
+          planType: "pro",
         },
       },
     });
@@ -240,6 +243,11 @@ describe("ProviderRuntimeEvent", () => {
     }
     expect(rateLimits.primary?.usedPercent).toBe(42);
     expect(rateLimits.secondary?.usedPercent).toBe(12);
+    expect(rateLimits.credits?.balance).toBe("12.50");
+    expect(rateLimits.credits?.hasCredits).toBe(true);
+    expect(rateLimits.individualLimit?.remainingPercent).toBe(65);
+    expect(rateLimits.individualLimit?.resetsAt).toBe(1780000000);
+    expect(rateLimits.planType).toBe("pro");
   });
 
   it("rejects an account.rate-limits.updated payload that matches neither provider's shape", () => {
