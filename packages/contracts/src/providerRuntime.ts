@@ -700,13 +700,12 @@ const AccountUpdatedPayload = Schema.Struct({
 export type AccountUpdatedPayload = typeof AccountUpdatedPayload.Type;
 
 /**
- * Mirrors the Claude Agent SDK's `SDKRateLimitInfo` (rate_limit_event message)
- * field-for-field - verified against the installed
- * `@anthropic-ai/claude-agent-sdk` type defs, not guessed. One event describes
- * one bucket's status; `rateLimitType` names which bucket. `utilization` is
- * populated only near/at a warning threshold by upstream SDK design - that
- * gap is permanent, not a bug, so consumers must treat its absence as "no
- * percentage available" rather than retrying or defaulting to 0.
+ * Mirrors the Claude Agent SDK's `SDKRateLimitInfo` (rate_limit_event
+ * message) field-for-field. One event describes one bucket's status;
+ * `rateLimitType` names which bucket. Upstream only populates `utilization`
+ * near/at a warning threshold - a permanent gap, so consumers must treat its
+ * absence as "no percentage available" rather than retrying or defaulting
+ * to 0.
  */
 const RateLimitStatus = Schema.Literals(["allowed", "allowed_warning", "rejected"]);
 export type RateLimitStatus = typeof RateLimitStatus.Type;
@@ -757,14 +756,10 @@ const CodexRateLimitWindow = Schema.Struct({
 });
 
 /**
- * Codex's app-server `account/rateLimits/updated` notification carries an
- * unrelated shape (verified against
- * `packages/effect-codex-app-server/src/_generated/schema.gen.ts`'s
- * `V2AccountRateLimitsUpdatedNotification__RateLimitSnapshot`): no `status`
- * enum, two positional windows instead of Claude's named buckets. Kept as a
- * second union member rather than forced into `RateLimitSnapshot` - the two
- * providers' rate-limit models don't actually correspond field-for-field, and
- * pretending otherwise would misrepresent Codex data.
+ * Codex's rate-limit notification has an unrelated shape to Claude's: no
+ * `status` enum, two positional windows instead of named buckets. Kept as a
+ * second union member rather than forced into `RateLimitSnapshot`, since
+ * forcing a field-for-field match would misrepresent Codex data.
  */
 const CodexRateLimitSnapshot = Schema.TaggedStruct("codex", {
   limitId: Schema.optional(Schema.NullOr(Schema.String)),
@@ -777,13 +772,10 @@ const CodexRateLimitSnapshot = Schema.TaggedStruct("codex", {
 export type CodexRateLimitSnapshot = typeof CodexRateLimitSnapshot.Type;
 
 /**
- * Both branches are all-optional-fields-but-one-required at best, so an
- * untagged `Schema.Union` here would match almost anything (including `{}`)
- * against whichever branch happens to have fewer required fields, rather
- * than raising a decode error for a payload that matches neither provider's
- * real shape. `_tag` is a required discriminant on both branches - stamped by
- * the emitting adapter (ClaudeAdapter.ts, CodexAdapter.ts) - so the union
- * fails closed instead of silently misclassifying a malformed payload.
+ * Both branches are nearly all-optional, so an untagged `Schema.Union` would
+ * match almost any payload against whichever branch has fewer required
+ * fields instead of failing to decode. `_tag` is a required discriminant
+ * stamped by the emitting adapter, keeping the union fail-closed.
  */
 const AccountRateLimitsUpdatedPayload = Schema.Struct({
   rateLimits: Schema.Union([RateLimitSnapshot, CodexRateLimitSnapshot]),

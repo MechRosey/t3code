@@ -37,12 +37,10 @@ export type RateLimitStatusSnapshot = {
 };
 
 /**
- * Folds `account.rate-limits.updated` activities into the latest snapshot
- * per bucket. Each server-persisted activity already carries a numeric
- * `utilization` (the server never persists one without it - see
- * ProviderRuntimeIngestion.ts), so a bucket that never appears here has
- * never had a known percentage: the caller's job is to omit that bucket's
- * segment entirely, never render a status-only or reset-time-only fallback.
+ * Folds `account.rate-limits.updated` activities into the latest snapshot per
+ * bucket. The server never persists one without a numeric `utilization`, so
+ * a bucket that never appears here must have its segment omitted entirely -
+ * never rendered as a status-only or reset-time-only fallback.
  */
 export function deriveLatestRateLimitSnapshots(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
