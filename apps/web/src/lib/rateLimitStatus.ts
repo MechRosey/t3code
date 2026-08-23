@@ -1,4 +1,5 @@
 import type { OrchestrationThreadActivity, RateLimitBucket } from "@t3tools/contracts";
+import { asFiniteNumber, asRecord } from "@t3tools/shared/jsonValue";
 
 const KNOWN_BUCKETS: ReadonlySet<string> = new Set([
   "five_hour",
@@ -9,14 +10,6 @@ const KNOWN_BUCKETS: ReadonlySet<string> = new Set([
 ]);
 
 const KNOWN_STATUSES: ReadonlySet<string> = new Set(["allowed", "allowed_warning", "rejected"]);
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
-
-function asFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
 
 function asKnownBucket(value: unknown): RateLimitBucket | null {
   return typeof value === "string" && KNOWN_BUCKETS.has(value) ? (value as RateLimitBucket) : null;

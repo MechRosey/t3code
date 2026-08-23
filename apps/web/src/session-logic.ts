@@ -1,6 +1,7 @@
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
 import { isBackgroundTaskActivity } from "@t3tools/client-runtime/state/subagentRuntime";
+import { asFiniteNumber, asRecord } from "@t3tools/shared/jsonValue";
 import {
   ApprovalRequestId,
   isToolLifecycleItemType,
@@ -1111,20 +1112,12 @@ function toLatestProposedPlanState(proposedPlan: ProposedPlan): LatestProposedPl
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
-
 function asTrimmedString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function trimMatchingOuterQuotes(value: string): string {
@@ -1363,7 +1356,7 @@ function summarizeToolRawOutput(payload: Record<string, unknown> | null): string
     return null;
   }
 
-  const totalFiles = asNumber(rawOutput.totalFiles);
+  const totalFiles = asFiniteNumber(rawOutput.totalFiles);
   if (totalFiles !== null) {
     const suffix = rawOutput.truncated === true ? "+" : "";
     return `${totalFiles.toLocaleString()} file${totalFiles === 1 ? "" : "s"}${suffix}`;

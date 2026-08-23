@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./jsonValue": {
+      "types": "./src/jsonValue.ts",
+      "import": "./src/jsonValue.ts"
+    },
     "./themePalettes": {
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"
