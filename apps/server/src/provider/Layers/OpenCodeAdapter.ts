@@ -577,6 +577,8 @@ const stopOpenCodeContext = Effect.fn("stopOpenCodeContext")(function* (
   return true;
 });
 
+// OpenCode's SDK event stream has no rate-limit/context-window notification -
+// statusline surfacing is not implemented for this provider, not overlooked.
 export function makeOpenCodeAdapter(
   openCodeSettings: OpenCodeSettings,
   options?: OpenCodeAdapterLiveOptions,

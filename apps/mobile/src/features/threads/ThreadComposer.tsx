@@ -269,6 +269,8 @@ const ComposerConnectionStatusPill = memo(function ComposerConnectionStatusPill(
   );
 });
 
+// The web composer footer shows a rate-limit/context-window statusline strip;
+// mobile has no equivalent yet - not implemented for this surface, not overlooked.
 export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposerProps) {
   const navigation = useNavigation();
   const { themeAppearance } = useAppearancePreferences();

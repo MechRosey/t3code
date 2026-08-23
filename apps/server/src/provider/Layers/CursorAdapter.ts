@@ -310,6 +310,8 @@ function selectAutoApprovedPermissionOption(
   return undefined;
 }
 
+// Cursor's ACP transport has no rate-limit/context-window notification -
+// statusline surfacing is not implemented for this provider, not overlooked.
 export function makeCursorAdapter(
   cursorSettings: CursorSettings,
   options?: CursorAdapterLiveOptions,
