@@ -196,7 +196,6 @@ describe("ProviderRuntimeEvent", () => {
           resetsAt: 1780000000,
           rateLimitType: "seven_day_sonnet",
           utilization: 87.5,
-          isUsingOverage: false,
         },
       },
     });

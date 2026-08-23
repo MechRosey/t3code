@@ -719,33 +719,11 @@ export const RateLimitBucket = Schema.Literals([
 ]);
 export type RateLimitBucket = typeof RateLimitBucket.Type;
 
-const RateLimitOverageDisabledReason = Schema.Literals([
-  "overage_not_provisioned",
-  "org_level_disabled",
-  "org_level_disabled_until",
-  "out_of_credits",
-  "seat_tier_level_disabled",
-  "member_level_disabled",
-  "seat_tier_zero_credit_limit",
-  "group_zero_credit_limit",
-  "member_zero_credit_limit",
-  "org_service_level_disabled",
-  "no_limits_configured",
-  "fetch_error",
-  "unknown",
-]);
-
 export const RateLimitSnapshot = Schema.TaggedStruct("claude", {
   status: RateLimitStatus,
   resetsAt: Schema.optional(NonNegativeInt),
   rateLimitType: Schema.optional(RateLimitBucket),
   utilization: Schema.optional(Schema.Number),
-  overageStatus: Schema.optional(RateLimitStatus),
-  overageResetsAt: Schema.optional(NonNegativeInt),
-  overageDisabledReason: Schema.optional(RateLimitOverageDisabledReason),
-  isUsingOverage: Schema.optional(Schema.Boolean),
-  overageInUse: Schema.optional(Schema.Boolean),
-  surpassedThreshold: Schema.optional(Schema.Number),
 });
 export type RateLimitSnapshot = typeof RateLimitSnapshot.Type;
 
@@ -754,6 +732,34 @@ const CodexRateLimitWindow = Schema.Struct({
   usedPercent: Schema.Number,
   windowDurationMins: Schema.optional(Schema.NullOr(NonNegativeInt)),
 });
+
+const CodexCreditsSnapshot = Schema.Struct({
+  balance: Schema.optional(Schema.NullOr(Schema.String)),
+  hasCredits: Schema.Boolean,
+  unlimited: Schema.Boolean,
+});
+
+const CodexIndividualLimitSnapshot = Schema.Struct({
+  limit: Schema.String,
+  remainingPercent: Schema.Number,
+  resetsAt: NonNegativeInt,
+  used: Schema.String,
+});
+
+const CodexPlanType = Schema.Literals([
+  "free",
+  "go",
+  "plus",
+  "pro",
+  "prolite",
+  "team",
+  "self_serve_business_usage_based",
+  "business",
+  "enterprise_cbp_usage_based",
+  "enterprise",
+  "edu",
+  "unknown",
+]);
 
 /**
  * Codex's rate-limit notification has an unrelated shape to Claude's: no
@@ -768,6 +774,9 @@ const CodexRateLimitSnapshot = Schema.TaggedStruct("codex", {
   secondary: Schema.optional(Schema.NullOr(CodexRateLimitWindow)),
   rateLimitReachedType: Schema.optional(Schema.NullOr(Schema.String)),
   spendControlReached: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  credits: Schema.optional(Schema.NullOr(CodexCreditsSnapshot)),
+  individualLimit: Schema.optional(Schema.NullOr(CodexIndividualLimitSnapshot)),
+  planType: Schema.optional(Schema.NullOr(CodexPlanType)),
 });
 export type CodexRateLimitSnapshot = typeof CodexRateLimitSnapshot.Type;
 
