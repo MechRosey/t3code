@@ -19,6 +19,60 @@ export interface AnchoredTurnMetrics {
   readonly scrollDeltaToRevealEnd: number;
 }
 
+export interface InitialAnchorScrollTarget {
+  readonly scrollTarget: number;
+  readonly revealedPriorContextPx: number;
+}
+
+/**
+ * Where to land the viewport when a newly sent turn is first anchored.
+ *
+ * Invariant: once settled, the new message row is visible and at least
+ * `minimumPriorContextPx` of the previous row's tail is visible above it -
+ * unless there is no previous row (or it hasn't been measured yet, both
+ * signalled by an undefined `previousRowBottom`), in which case this
+ * returns null so the caller can fall back to top-anchoring the new row.
+ * When honoring the full minimum would push the new row's own bottom past
+ * `viewportHeight`, the reveal shrinks to whatever room is left, and the
+ * new row is prioritized. Near the start of a thread, where less than
+ * `minimumPriorContextPx` of prior content exists at all, the reveal
+ * shrinks to whatever exists.
+ */
+export function getInitialAnchorScrollTarget({
+  previousRowBottom,
+  anchorRowTop,
+  anchorRowBottom,
+  viewportHeight,
+  minimumPriorContextPx,
+}: {
+  readonly previousRowBottom: number | undefined;
+  readonly anchorRowTop: number;
+  readonly anchorRowBottom: number | undefined;
+  readonly viewportHeight: number;
+  readonly minimumPriorContextPx: number;
+}): InitialAnchorScrollTarget | null {
+  if (
+    typeof previousRowBottom !== "number" ||
+    !Number.isFinite(previousRowBottom) ||
+    previousRowBottom > anchorRowTop
+  ) {
+    return null;
+  }
+
+  const anchorRowHeight =
+    typeof anchorRowBottom === "number" && Number.isFinite(anchorRowBottom)
+      ? Math.max(0, anchorRowBottom - anchorRowTop)
+      : 0;
+  const roomForPriorContext = Math.max(0, viewportHeight - anchorRowHeight);
+  const revealTarget = Math.max(0, Math.min(minimumPriorContextPx, roomForPriorContext));
+  const scrollTarget = Math.max(0, previousRowBottom - revealTarget);
+
+  return {
+    scrollTarget,
+    revealedPriorContextPx: previousRowBottom - scrollTarget,
+  };
+}
+
 export function getRowBottom(state: TimelineListMeasurementState, index: number): number | null {
   const top = state.positionAtIndex(index);
   const height = state.sizeAtIndex(index);

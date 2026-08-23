@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { getAnchoredTurnMetrics, getRowBottom } from "./timelineScrollAnchoring";
+import {
+  getAnchoredTurnMetrics,
+  getInitialAnchorScrollTarget,
+  getRowBottom,
+} from "./timelineScrollAnchoring";
 
 function buildState({
   positions,
@@ -134,5 +138,116 @@ describe("timeline scroll anchoring", () => {
 
     expect(withoutComposer?.overflowsUsableViewport).toBe(false);
     expect(withComposer?.overflowsUsableViewport).toBe(true);
+  });
+});
+
+describe("initial anchor scroll target", () => {
+  it("keeps a minimum slice of the previous message's tail above the new message", () => {
+    const state = buildState({
+      // Row 0 is the previous reply, row 1 is the newly sent message.
+      positions: [0, 400],
+      sizes: [400, 60],
+      scrollLength: 700,
+    });
+    const anchorIndex = 1;
+    const previousRowBottom = getRowBottom(state, anchorIndex - 1) ?? undefined;
+    const anchorRowTop = state.positionAtIndex(anchorIndex);
+    const anchorRowBottom = getRowBottom(state, anchorIndex) ?? undefined;
+
+    const target = getInitialAnchorScrollTarget({
+      previousRowBottom,
+      anchorRowTop: anchorRowTop!,
+      anchorRowBottom,
+      viewportHeight: state.scrollLength,
+      minimumPriorContextPx: 96,
+    });
+
+    expect(target?.revealedPriorContextPx).toBe(96);
+    expect(target?.scrollTarget).toBe(400 - 96);
+  });
+
+  it("returns null when there is no previous row, so the caller can fall back to top-anchoring", () => {
+    const state = buildState({
+      positions: [0],
+      sizes: [60],
+      scrollLength: 700,
+    });
+    const anchorIndex = 0;
+    const previousRowBottom = getRowBottom(state, anchorIndex - 1) ?? undefined;
+    const anchorRowTop = state.positionAtIndex(anchorIndex);
+
+    const target = getInitialAnchorScrollTarget({
+      previousRowBottom,
+      anchorRowTop: anchorRowTop!,
+      anchorRowBottom: getRowBottom(state, anchorIndex) ?? undefined,
+      viewportHeight: state.scrollLength,
+      minimumPriorContextPx: 96,
+    });
+
+    expect(target).toBeNull();
+  });
+
+  it("returns null when the previous row has not been measured yet", () => {
+    const target = getInitialAnchorScrollTarget({
+      previousRowBottom: undefined,
+      anchorRowTop: 400,
+      anchorRowBottom: 460,
+      viewportHeight: 700,
+      minimumPriorContextPx: 96,
+    });
+
+    expect(target).toBeNull();
+  });
+
+  it("shows as much of the previous tail as fits when the new message leaves little room", () => {
+    const state = buildState({
+      // The previous reply is long; the new message itself is tall enough
+      // that giving it the full minimum prior context would push its own
+      // bottom past the usable viewport.
+      positions: [0, 2000],
+      sizes: [2000, 650],
+      scrollLength: 700,
+    });
+    const anchorIndex = 1;
+    const previousRowBottom = getRowBottom(state, anchorIndex - 1) ?? undefined;
+    const anchorRowTop = state.positionAtIndex(anchorIndex);
+    const anchorRowBottom = getRowBottom(state, anchorIndex) ?? undefined;
+
+    const target = getInitialAnchorScrollTarget({
+      previousRowBottom,
+      anchorRowTop: anchorRowTop!,
+      anchorRowBottom,
+      viewportHeight: state.scrollLength,
+      minimumPriorContextPx: 96,
+    });
+
+    // Only 50px of room is left once the 650px-tall new message reserves its
+    // own space in the 700px viewport, so the reveal is capped there instead
+    // of the requested 96px.
+    expect(target?.revealedPriorContextPx).toBe(50);
+    expect(target?.scrollTarget).toBe(2000 - 50);
+  });
+
+  it("clamps the reveal to what exists above when the previous row sits near the start of the thread", () => {
+    const state = buildState({
+      positions: [0, 40],
+      sizes: [40, 60],
+      scrollLength: 700,
+    });
+    const anchorIndex = 1;
+    const previousRowBottom = getRowBottom(state, anchorIndex - 1) ?? undefined;
+    const anchorRowTop = state.positionAtIndex(anchorIndex);
+    const anchorRowBottom = getRowBottom(state, anchorIndex) ?? undefined;
+
+    const target = getInitialAnchorScrollTarget({
+      previousRowBottom,
+      anchorRowTop: anchorRowTop!,
+      anchorRowBottom,
+      viewportHeight: state.scrollLength,
+      minimumPriorContextPx: 96,
+    });
+
+    expect(target?.scrollTarget).toBe(0);
+    expect(target?.revealedPriorContextPx).toBe(40);
   });
 });
