@@ -1,11 +1,65 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { classifyTaskAgentKind, ProviderRuntimeEvent } from "./providerRuntime.ts";
+import {
+  classifyTaskAgentKind,
+  ProviderRuntimeEvent,
+  type ProviderRuntimeEventType,
+} from "./providerRuntime.ts";
 
 const decodeRuntimeEvent = Schema.decodeUnknownSync(ProviderRuntimeEvent);
 
 describe("ProviderRuntimeEvent", () => {
+  it("includes every runtime event in the public event type", () => {
+    expectTypeOf<ProviderRuntimeEvent["type"]>().toEqualTypeOf<ProviderRuntimeEventType>();
+  });
+
+  it("requires input and output totals for complete turn usage", () => {
+    const completeEvent = {
+      type: "turn.completed",
+      eventId: "event-complete-usage",
+      provider: "codex",
+      createdAt: "2026-02-28T00:00:00.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        state: "completed",
+        tokenUsage: {
+          usageStatus: "complete",
+          usageScope: "main_agent",
+          hasSubagents: false,
+        },
+      },
+    };
+
+    expect(() => decodeRuntimeEvent(completeEvent)).toThrow();
+    expect(
+      decodeRuntimeEvent({
+        ...completeEvent,
+        payload: {
+          ...completeEvent.payload,
+          tokenUsage: {
+            ...completeEvent.payload.tokenUsage,
+            inputTokens: 10,
+            outputTokens: 2,
+          },
+        },
+      }).type,
+    ).toBe("turn.completed");
+    expect(
+      decodeRuntimeEvent({
+        ...completeEvent,
+        payload: {
+          ...completeEvent.payload,
+          tokenUsage: {
+            ...completeEvent.payload.tokenUsage,
+            usageStatus: "partial",
+          },
+        },
+      }).type,
+    ).toBe("turn.completed");
+  });
+
   it("accepts fork-provided driver kinds as branded slugs", () => {
     const parsed = decodeRuntimeEvent({
       type: "session.started",
@@ -182,118 +236,6 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.usage.usedTokens).toBe(31251);
   });
 
-  it("decodes account.rate-limits.updated with the SDK's typed rate_limit_info fields", () => {
-    const parsed = decodeRuntimeEvent({
-      type: "account.rate-limits.updated",
-      eventId: "event-rate-limit-1",
-      provider: "claudeAgent",
-      createdAt: "2026-02-28T00:00:05.000Z",
-      threadId: "thread-1",
-      payload: {
-        rateLimits: {
-          _tag: "claude",
-          status: "allowed_warning",
-          resetsAt: 1780000000,
-          rateLimitType: "seven_day_sonnet",
-          utilization: 87.5,
-        },
-      },
-    });
-
-    expect(parsed.type).toBe("account.rate-limits.updated");
-    if (parsed.type !== "account.rate-limits.updated") {
-      throw new Error("expected account.rate-limits.updated");
-    }
-    const rateLimits = parsed.payload.rateLimits;
-    if (rateLimits._tag !== "claude") {
-      throw new Error("expected Claude-shaped rate limits");
-    }
-    expect(rateLimits.status).toBe("allowed_warning");
-    expect(rateLimits.rateLimitType).toBe("seven_day_sonnet");
-    expect(rateLimits.utilization).toBe(87.5);
-  });
-
-  it("decodes Codex's positional primary/secondary rate-limit windows", () => {
-    const parsed = decodeRuntimeEvent({
-      type: "account.rate-limits.updated",
-      eventId: "event-rate-limit-codex-1",
-      provider: "codex",
-      createdAt: "2026-02-28T00:00:05.500Z",
-      threadId: "thread-1",
-      payload: {
-        rateLimits: {
-          _tag: "codex",
-          limitId: "primary",
-          primary: { usedPercent: 42, windowDurationMins: 300 },
-          secondary: { usedPercent: 12, resetsAt: 1780000000 },
-          credits: { balance: "12.50", hasCredits: true, unlimited: false },
-          individualLimit: { limit: "100", remainingPercent: 65, resetsAt: 1780000000, used: "35" },
-          planType: "pro",
-        },
-      },
-    });
-
-    expect(parsed.type).toBe("account.rate-limits.updated");
-    if (parsed.type !== "account.rate-limits.updated") {
-      throw new Error("expected account.rate-limits.updated");
-    }
-    const rateLimits = parsed.payload.rateLimits;
-    if (rateLimits._tag !== "codex") {
-      throw new Error("expected Codex-shaped rate limits");
-    }
-    expect(rateLimits.primary?.usedPercent).toBe(42);
-    expect(rateLimits.secondary?.usedPercent).toBe(12);
-    expect(rateLimits.credits?.balance).toBe("12.50");
-    expect(rateLimits.credits?.hasCredits).toBe(true);
-    expect(rateLimits.individualLimit?.remainingPercent).toBe(65);
-    expect(rateLimits.individualLimit?.resetsAt).toBe(1780000000);
-    expect(rateLimits.planType).toBe("pro");
-  });
-
-  it("rejects an account.rate-limits.updated payload that matches neither provider's shape", () => {
-    expect(() =>
-      decodeRuntimeEvent({
-        type: "account.rate-limits.updated",
-        eventId: "event-rate-limit-2",
-        provider: "claudeAgent",
-        createdAt: "2026-02-28T00:00:06.000Z",
-        threadId: "thread-1",
-        payload: {
-          rateLimits: {
-            // Invalid against Claude's shape (bad status/bucket enums) *and*
-            // against Codex's shape (usedPercent must be a number) - proves
-            // the union rejects garbage rather than silently coercing it via
-            // whichever member happens to ignore the offending keys.
-            status: "not-a-real-status",
-            rateLimitType: "not-a-real-bucket",
-            primary: { usedPercent: "not-a-number" },
-          },
-        },
-      }),
-    ).toThrow();
-  });
-
-  it("rejects a malformed Claude rate-limit payload instead of silently matching Codex's all-optional shape", () => {
-    // Every field of CodexRateLimitSnapshot is optional, so before the `_tag`
-    // discriminant was added, a Claude payload missing `status` (e.g. an SDK
-    // regression) would satisfy the Codex branch trivially - decoding
-    // "successfully" as an empty Codex snapshot instead of raising an error.
-    expect(() =>
-      decodeRuntimeEvent({
-        type: "account.rate-limits.updated",
-        eventId: "event-rate-limit-3",
-        provider: "claudeAgent",
-        createdAt: "2026-02-28T00:00:07.000Z",
-        threadId: "thread-1",
-        payload: {
-          rateLimits: {
-            rateLimitType: "seven_day_sonnet",
-            utilization: 87.5,
-          },
-        },
-      }),
-    ).toThrow();
-  });
 });
 
 describe("classifyTaskAgentKind", () => {

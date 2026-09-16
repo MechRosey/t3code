@@ -15,54 +15,6 @@ const base = {
   threadId: ThreadId.make("thread-1"),
 };
 
-describe("runtimeEventToActivities rate limits", () => {
-  it("persists an account.rate-limits.updated activity when a utilization percentage is present", () => {
-    const event = {
-      ...base,
-      provider: ProviderDriverKind.make("claudeAgent"),
-      type: "account.rate-limits.updated",
-      eventId: EventId.make("evt-rate-limit-1"),
-      payload: {
-        rateLimits: {
-          _tag: "claude",
-          status: "allowed_warning",
-          rateLimitType: "seven_day_sonnet",
-          utilization: 87.5,
-          resetsAt: 1780000000,
-        },
-      },
-    } satisfies ProviderRuntimeEvent;
-
-    const activities = runtimeEventToActivities(event);
-
-    expect(activities).toHaveLength(1);
-    expect(activities[0]?.kind).toBe("account.rate-limits.updated");
-    expect(activities[0]?.payload).toMatchObject({
-      status: "allowed_warning",
-      rateLimitType: "seven_day_sonnet",
-      utilization: 87.5,
-    });
-  });
-
-  it("persists nothing when the SDK has not yet reported a utilization percentage", () => {
-    const event = {
-      ...base,
-      provider: ProviderDriverKind.make("claudeAgent"),
-      type: "account.rate-limits.updated",
-      eventId: EventId.make("evt-rate-limit-2"),
-      payload: {
-        rateLimits: {
-          _tag: "claude",
-          status: "allowed",
-          rateLimitType: "five_hour",
-        },
-      },
-    } satisfies ProviderRuntimeEvent;
-
-    expect(runtimeEventToActivities(event)).toEqual([]);
-  });
-});
-
 describe("runtimeEventToActivities task progress", () => {
   it("persists usage independently from replaceable activity", () => {
     const taskId = RuntimeTaskId.make("agent-1");

@@ -1,8 +1,16 @@
-import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
-import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
+import type { AssistantCitation } from "@t3tools/contracts";
+import {
+  serializeAssistantCitation,
+  withAssistantCitationComment,
+} from "@t3tools/shared/assistantCitations";
+import {
+  splitPromptIntoComposerSegments,
+  type ComposerPromptSegment,
+} from "./composer-editor-mentions";
 
-export type ComposerTriggerKind = "path" | "slash-command" | "skill";
+export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
 export type ComposerSlashCommand = "model" | "plan" | "default";
+export type ComposerSubmissionIntent = "foreground" | "background";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -11,20 +19,23 @@ export interface ComposerTrigger {
   rangeEnd: number;
 }
 
-export function shouldSubmitComposerOnEnter(input: {
-  isMobileViewport: boolean;
-  shiftKey: boolean;
-}): boolean {
-  return !input.isMobileViewport && !input.shiftKey;
+export function formatAssistantCitationForComposer(citation: AssistantCitation, comment = "") {
+  return `${serializeAssistantCitation(withAssistantCitationComment(citation, comment))} `;
 }
 
-const isInlineTokenSegment = (
-  segment:
-    | { type: "text"; text: string }
-    | { type: "mention" }
-    | { type: "skill" }
-    | { type: "terminal-context" },
-): boolean => segment.type !== "text";
+export function composerSubmissionIntentForEnter(input: {
+  isMobileViewport: boolean;
+  shiftKey: boolean;
+  modifierKey: boolean;
+  isDraftThread: boolean;
+}): ComposerSubmissionIntent | null {
+  if (input.isMobileViewport || input.shiftKey) {
+    return null;
+  }
+  return input.modifierKey && input.isDraftThread ? "background" : "foreground";
+}
+
+const isInlineTokenSegment = (segment: ComposerPromptSegment): boolean => segment.type !== "text";
 
 function clampCursor(text: string, cursor: number): number {
   if (!Number.isFinite(cursor)) return text.length;
@@ -32,13 +43,7 @@ function clampCursor(text: string, cursor: number): number {
 }
 
 function isWhitespace(char: string): boolean {
-  return (
-    char === " " ||
-    char === "\n" ||
-    char === "\t" ||
-    char === "\r" ||
-    char === INLINE_TERMINAL_CONTEXT_PLACEHOLDER
-  );
+  return char === " " || char === "\n" || char === "\t" || char === "\r";
 }
 
 function tokenStartForCursor(text: string, cursor: number): number {
@@ -60,7 +65,11 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
   let expandedCursor = 0;
 
   for (const segment of segments) {
-    if (segment.type === "mention") {
+    if (
+      segment.type === "mention" ||
+      segment.type === "citation" ||
+      segment.type === "context-reference"
+    ) {
       const expandedLength = segment.source.length;
       if (remaining <= 1) {
         return expandedCursor + (remaining === 0 ? 0 : expandedLength);
@@ -78,14 +87,6 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
       expandedCursor += expandedLength;
       continue;
     }
-    if (segment.type === "terminal-context") {
-      if (remaining <= 1) {
-        return expandedCursor + remaining;
-      }
-      remaining -= 1;
-      expandedCursor += 1;
-      continue;
-    }
 
     const segmentLength = segment.text.length;
     if (remaining <= segmentLength) {
@@ -98,13 +99,7 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
   return expandedCursor;
 }
 
-function collapsedSegmentLength(
-  segment:
-    | { type: "text"; text: string }
-    | { type: "mention" }
-    | { type: "skill" }
-    | { type: "terminal-context" },
-): number {
+function collapsedSegmentLength(segment: ComposerPromptSegment): number {
   if (segment.type === "text") {
     return segment.text.length;
   }
@@ -112,12 +107,7 @@ function collapsedSegmentLength(
 }
 
 function clampCollapsedComposerCursorForSegments(
-  segments: ReadonlyArray<
-    | { type: "text"; text: string }
-    | { type: "mention" }
-    | { type: "skill" }
-    | { type: "terminal-context" }
-  >,
+  segments: ReadonlyArray<ComposerPromptSegment>,
   cursorInput: number,
 ): number {
   const collapsedLength = segments.reduce(
@@ -148,7 +138,11 @@ export function collapseExpandedComposerCursor(text: string, cursorInput: number
   let collapsedCursor = 0;
 
   for (const segment of segments) {
-    if (segment.type === "mention") {
+    if (
+      segment.type === "mention" ||
+      segment.type === "citation" ||
+      segment.type === "context-reference"
+    ) {
       const expandedLength = segment.source.length;
       if (remaining === 0) {
         return collapsedCursor;
@@ -169,14 +163,6 @@ export function collapseExpandedComposerCursor(text: string, cursorInput: number
         return collapsedCursor + 1;
       }
       remaining -= expandedLength;
-      collapsedCursor += 1;
-      continue;
-    }
-    if (segment.type === "terminal-context") {
-      if (remaining <= 1) {
-        return collapsedCursor + remaining;
-      }
-      remaining -= 1;
       collapsedCursor += 1;
       continue;
     }
@@ -220,8 +206,6 @@ export function isCollapsedCursorAdjacentToInlineToken(
   return false;
 }
 
-export const isCollapsedCursorAdjacentToMention = isCollapsedCursorAdjacentToInlineToken;
-
 export function detectComposerTrigger(text: string, cursorInput: number): ComposerTrigger | null {
   const cursor = clampCursor(text, cursorInput);
   const lineStart = text.lastIndexOf("\n", Math.max(0, cursor - 1)) + 1;
@@ -242,6 +226,15 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 
   const tokenStart = tokenStartForCursor(text, cursor);
   const token = text.slice(tokenStart, cursor);
+  const pullRequestMatch = /^#([\p{L}\p{N}][\p{L}\p{N}_-]*)?$/u.exec(token);
+  if (pullRequestMatch) {
+    return {
+      kind: "pull-request",
+      query: pullRequestMatch[1] ?? "",
+      rangeStart: tokenStart,
+      rangeEnd: cursor,
+    };
+  }
   if (token.startsWith("$")) {
     return {
       kind: "skill",
@@ -284,136 +277,4 @@ export function replaceTextRange(
   const safeEnd = Math.max(safeStart, Math.min(text.length, rangeEnd));
   const nextText = `${text.slice(0, safeStart)}${replacement}${text.slice(safeEnd)}`;
   return { text: nextText, cursor: safeStart + replacement.length };
-}
-
-const COMPOSER_HISTORY_IMAGE_PLACEHOLDER = "[image removed]";
-
-export interface ComposerHistorySourceMessage {
-  readonly role: "user" | "assistant" | "system";
-  readonly text: string;
-  readonly attachments?: ReadonlyArray<{ readonly type: string }> | undefined;
-}
-
-function composerHistoryEntryText(message: ComposerHistorySourceMessage): string {
-  const imageAttachmentCount = (message.attachments ?? []).filter(
-    (attachment) => attachment.type === "image",
-  ).length;
-  if (imageAttachmentCount === 0) {
-    return message.text;
-  }
-  const placeholders = Array.from(
-    { length: imageAttachmentCount },
-    () => COMPOSER_HISTORY_IMAGE_PLACEHOLDER,
-  );
-  return message.text.length > 0
-    ? [message.text, ...placeholders].join("\n")
-    : placeholders.join("\n");
-}
-
-/** Own messages only, most-recent-first, with image attachments rendered as inline placeholders. */
-export function buildComposerHistoryEntries(
-  messages: ReadonlyArray<ComposerHistorySourceMessage>,
-): string[] {
-  return messages
-    .filter((message) => message.role === "user")
-    .toReversed()
-    .map(composerHistoryEntryText);
-}
-
-export interface ComposerHistoryCycleState {
-  readonly stashedDraft: string;
-  readonly index: number;
-  /** Snapshotted when the session starts; stays fixed even if the live history changes shape mid-cycle. */
-  readonly entries: ReadonlyArray<string>;
-}
-
-export interface ComposerHistoryCycleStep {
-  readonly nextState: ComposerHistoryCycleState | null;
-  readonly text: string;
-}
-
-/**
- * One step further back in history (Up). Stashes the current draft and
- * snapshots `entries` on the first call, so the rest of the session is
- * immune to the live entries array changing shape. Returns null when there
- * is nowhere further back to go, so the caller can tell "no-op" apart from
- * "stayed at the same entry".
- */
-export function cycleComposerHistoryOlder(
-  state: ComposerHistoryCycleState | null,
-  currentDraft: string,
-  entries: ReadonlyArray<string>,
-): ComposerHistoryCycleStep | null {
-  if (state === null) {
-    if (entries.length === 0) {
-      return null;
-    }
-    return { nextState: { stashedDraft: currentDraft, index: 0, entries }, text: entries[0]! };
-  }
-  const nextIndex = state.index + 1;
-  if (nextIndex >= state.entries.length) {
-    return null;
-  }
-  return {
-    nextState: { stashedDraft: state.stashedDraft, index: nextIndex, entries: state.entries },
-    text: state.entries[nextIndex]!,
-  };
-}
-
-/**
- * One step toward the present (Down). Once index 0 is passed, restores the
- * exact stashed draft and stops cycling (state becomes null). Reads the
- * entries snapshotted in `state`; there is no live entries array to fall out
- * of sync with.
- */
-export function cycleComposerHistoryNewer(
-  state: ComposerHistoryCycleState | null,
-): ComposerHistoryCycleStep | null {
-  if (state === null) {
-    return null;
-  }
-  if (state.index === 0) {
-    return { nextState: null, text: state.stashedDraft };
-  }
-  const nextIndex = state.index - 1;
-  return {
-    nextState: { stashedDraft: state.stashedDraft, index: nextIndex, entries: state.entries },
-    text: state.entries[nextIndex] ?? state.stashedDraft,
-  };
-}
-
-export type ComposerHistoryArrowKeyResolution =
-  | {
-      readonly handled: true;
-      readonly nextState: ComposerHistoryCycleState | null;
-      readonly nextText: string;
-    }
-  | { readonly handled: false; readonly nextState: ComposerHistoryCycleState | null };
-
-/**
- * Decides what an Up/Down press should do to composer history, given whether
- * the cursor sits at the relevant visual edge (top for up, bottom for down)
- * of the input. Keeping the edge check as a boolean input keeps this testable
- * without a real layout engine - the caller supplies it from DOM geometry.
- * `entries` is only consulted to start a new session; once `state` is
- * non-null, the snapshot it carries is authoritative.
- */
-export function resolveComposerHistoryArrowKey(input: {
-  direction: "up" | "down";
-  atVisualEdge: boolean;
-  entries: ReadonlyArray<string>;
-  state: ComposerHistoryCycleState | null;
-  currentDraft: string;
-}): ComposerHistoryArrowKeyResolution {
-  if (!input.atVisualEdge) {
-    return { handled: false, nextState: input.state };
-  }
-  const step =
-    input.direction === "up"
-      ? cycleComposerHistoryOlder(input.state, input.currentDraft, input.entries)
-      : cycleComposerHistoryNewer(input.state);
-  if (!step) {
-    return { handled: false, nextState: input.state };
-  }
-  return { handled: true, nextState: step.nextState, nextText: step.text };
 }
