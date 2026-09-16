@@ -1,5 +1,12 @@
 import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
-import { asFiniteNumber, asRecord } from "@t3tools/shared/jsonValue";
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
 function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;

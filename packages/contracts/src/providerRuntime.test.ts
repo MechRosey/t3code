@@ -235,7 +235,6 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
   });
-
 });
 
 describe("classifyTaskAgentKind", () => {

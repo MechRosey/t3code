@@ -3,10 +3,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./jsonValue": {
-      "types": "./src/jsonValue.ts",
-      "import": "./src/jsonValue.ts"
-    },
     "./legacyCliLauncher": {
       "types": "./src/legacyCliLauncher.ts",
       "import": "./src/legacyCliLauncher.ts"

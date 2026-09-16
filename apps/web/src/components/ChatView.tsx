@@ -136,8 +136,6 @@ import { type LegendListRef } from "@legendapp/list/react";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
   getAnchoredTurnMetrics,
-  getInitialAnchorScrollTarget,
-  getRowBottom,
   timelineContentOverflowsViewport,
   type TimelineScrollMode,
 } from "./chat/timelineScrollAnchoring";
@@ -712,9 +710,6 @@ function formatOutgoingPrompt(params: {
 }
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
-// How much of the previous message's tail the initial send-anchor keeps
-// visible above the new message, when it fits.
-const TIMELINE_INITIAL_ANCHOR_MIN_PRIOR_CONTEXT_PX = 96;
 
 function isCompactCommandMessage(message: ChatMessage): boolean {
   const text = message.text.trim().toLowerCase();
@@ -1444,33 +1439,6 @@ function releaseChatTimelineAnchor<T extends { readonly messageId: MessageId | n
   current: T,
 ): T {
   return current.messageId === null ? current : { ...current, messageId: null };
-}
-
-// Reads the row measurements LegendList has for the anchor row and the row
-// above it, then defers to getInitialAnchorScrollTarget for the actual
-// placement math. Falls back to the plain top-anchor offset whenever there
-// is no previous row or its position hasn't been measured yet.
-function resolveInitialAnchorViewOffset(
-  list: LegendListRef,
-  anchorIndex: number,
-  composerOverlayHeight: number,
-): number {
-  const state = list.getState();
-  const anchorRowTop = state?.positionAtIndex(anchorIndex);
-  if (!state || typeof anchorRowTop !== "number" || !Number.isFinite(anchorRowTop)) {
-    return CHAT_TIMELINE_ANCHOR_OFFSET;
-  }
-
-  const target = getInitialAnchorScrollTarget({
-    previousRowBottom:
-      anchorIndex > 0 ? (getRowBottom(state, anchorIndex - 1) ?? undefined) : undefined,
-    anchorRowTop,
-    anchorRowBottom: getRowBottom(state, anchorIndex) ?? undefined,
-    viewportHeight: Math.max(0, state.scrollLength - composerOverlayHeight),
-    minimumPriorContextPx: TIMELINE_INITIAL_ANCHOR_MIN_PRIOR_CONTEXT_PX,
-  });
-
-  return target ? anchorRowTop - target.scrollTarget : CHAT_TIMELINE_ANCHOR_OFFSET;
 }
 
 export default function ChatView(props: ChatViewProps) {
@@ -5538,54 +5506,51 @@ export default function ChatView(props: ChatViewProps) {
     };
   }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport]);
 
-  const onTimelineAnchorReady = useCallback(
-    (messageId: MessageId, anchorIndex: number) => {
-      // Anchored-end space can be remeasured when the turn completes. Once the
-      // user has scrolled away (or returned to ordinary end-following), that
-      // remeasurement must not restart the send-time anchor positioning.
-      if (timelineScrollModeRef.current !== "anchoring-new-turn") {
-        return;
-      }
-      if (pendingTimelineAnchorRef.current === messageId) {
-        pendingTimelineAnchorRef.current = null;
-      }
-      activeTimelineAnchorIndexRef.current = anchorIndex;
-      if (positionedTimelineAnchorRef.current === messageId) {
-        return;
-      }
-      positionedTimelineAnchorRef.current = messageId;
-      settledTimelineAnchorRef.current = null;
-      const positionAnchor = (remainingAttempts: number) => {
-        requestAnimationFrame(() => {
-          if (positionedTimelineAnchorRef.current !== messageId) {
-            return;
+  const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
+    // Anchored-end space can be remeasured when the turn completes. Once the
+    // user has scrolled away (or returned to ordinary end-following), that
+    // remeasurement must not restart the send-time anchor positioning.
+    if (timelineScrollModeRef.current !== "anchoring-new-turn") {
+      return;
+    }
+    if (pendingTimelineAnchorRef.current === messageId) {
+      pendingTimelineAnchorRef.current = null;
+    }
+    activeTimelineAnchorIndexRef.current = anchorIndex;
+    if (positionedTimelineAnchorRef.current === messageId) {
+      return;
+    }
+    positionedTimelineAnchorRef.current = messageId;
+    settledTimelineAnchorRef.current = null;
+    const positionAnchor = (remainingAttempts: number) => {
+      requestAnimationFrame(() => {
+        if (positionedTimelineAnchorRef.current !== messageId) {
+          return;
+        }
+        const list = legendListRef.current;
+        if (!list) {
+          if (remainingAttempts > 0) {
+            positionAnchor(remainingAttempts - 1);
           }
-          const list = legendListRef.current;
-          if (!list) {
-            if (remainingAttempts > 0) {
-              positionAnchor(remainingAttempts - 1);
+          return;
+        }
+        void list
+          .scrollToIndex({
+            index: anchorIndex,
+            animated: true,
+            viewPosition: 0,
+            viewOffset: CHAT_TIMELINE_ANCHOR_OFFSET,
+          })
+          .then(() => {
+            if (positionedTimelineAnchorRef.current !== messageId) {
+              return;
             }
-            return;
-          }
-          void list
-            .scrollToIndex({
-              index: anchorIndex,
-              animated: true,
-              viewPosition: 0,
-              viewOffset: resolveInitialAnchorViewOffset(list, anchorIndex, composerTimelineInset),
-            })
-            .then(() => {
-              if (positionedTimelineAnchorRef.current !== messageId) {
-                return;
-              }
-              settledTimelineAnchorRef.current = messageId;
-            });
-        });
-      };
-      requestAnimationFrame(() => positionAnchor(12));
-    },
-    [composerTimelineInset],
-  );
+            settledTimelineAnchorRef.current = messageId;
+          });
+      });
+    };
+    requestAnimationFrame(() => positionAnchor(12));
+  }, []);
 
   const onToolOutputCollapsedAtEnd = useCallback(() => {
     composerRef.current?.restoreAfterTimelineReachedEnd();

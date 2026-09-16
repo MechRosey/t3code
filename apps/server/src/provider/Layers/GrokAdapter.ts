@@ -343,8 +343,6 @@ export function grokPromptSettlementBelongsToContext(input: {
   );
 }
 
-// Grok's transport has no rate-limit/context-window notification -
-// statusline surfacing is not implemented for this provider, not overlooked.
 export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapterLiveOptions) {
   return Effect.gen(function* () {
     const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("grok");

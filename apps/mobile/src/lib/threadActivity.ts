@@ -15,7 +15,6 @@ import type {
   UserInputQuestion,
 } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
-import { asRecord } from "@t3tools/shared/jsonValue";
 import {
   commandDetailRepeatsCommand,
   extractCommandOutputText,
@@ -1180,6 +1179,10 @@ function singleToolCallLabel(activity: ThreadFeedActivity): string {
   if (presentation) return presentation.displayName;
   const command = activity.workEntry.command?.trim();
   return command || activity.summary;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 function asTrimmedString(value: unknown): string | null {
