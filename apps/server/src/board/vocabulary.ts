@@ -36,8 +36,3 @@ export const canonicalStatus = (status: string): string => knownStatus(status) ?
 
 export const isKnownStatus = (value: string): value is BoardStatus =>
   knownStatus(value) !== undefined;
-
-export const formatBoardTimestamp = (date: Date): string => {
-  const pad = (value: number, width = 2) => String(value).padStart(width, "0");
-  return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
