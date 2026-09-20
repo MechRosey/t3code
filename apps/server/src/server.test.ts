@@ -26,6 +26,7 @@ import {
   type OrchestrationThreadActivity,
   type OrchestrationThreadShell,
   TerminalNotRunningError,
+  type TodoBoardSnapshot,
   type OrchestrationCommand,
   type OrchestrationEvent,
   ORCHESTRATION_WS_METHODS,
@@ -88,7 +89,7 @@ import { OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as NetAddress from "effect/unstable/net/NetAddress";
 import * as Socket from "effect/unstable/socket/Socket";
-import { vi } from "vite-plus/test";
+import { describe, vi } from "vite-plus/test";
 
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
 const SUCCESSFUL_GIT_EXECUTION = {
@@ -165,6 +166,7 @@ import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import * as TodoBoard from "./board/TodoBoard.ts";
+import { fixturesRoot } from "./board/fixtures.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as VcsDriver from "./vcs/VcsDriver.ts";
@@ -12356,6 +12358,124 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assertFailure(result, terminalError);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+});
+
+const installBoardOverWire = (fixtureBoard: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const target = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-board-ws-" });
+    const boardDir = path.join(target, "project", ".todo");
+    yield* fileSystem.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
+    const cwd = path.join(target, "project", "sub", "deep");
+    yield* fileSystem.makeDirectory(cwd, { recursive: true });
+    return { cwd };
+  });
+
+describe("todo board websocket rpc", () => {
+  it.effect("reads the seeded board over the wire", () =>
+    Effect.gen(function* () {
+      const { cwd } = yield* installBoardOverWire("board-before");
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+
+      const board = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.todoBoardRead]({ cwd })),
+      );
+
+      assert.equal(board.repoName, "project");
+      assertInclude(board.root.replace(/\\/g, "/"), "project/.todo");
+      assert.equal(board.issues.length, 16);
+      const root = board.issues.find((issue) => issue.id === "0f853-board-foundation");
+      assert.isDefined(root);
+      assert.equal(root?.depth, 0);
+      assert.equal(root?.parentId, null);
+      assert.equal(root?.status, "backlog");
+      assert.equal(root?.archived, false);
+      const child = board.issues.find((issue) => issue.id === "6ba55-parser-fidelity");
+      assert.isDefined(child);
+      assert.equal(child?.depth, 1);
+      assert.equal(child?.parentId, root?.id);
+      assert.equal(child?.rootHue, root?.rootHue);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("mutates an issue status over the wire and round-trips typed failures", () =>
+    Effect.gen(function* () {
+      const { cwd } = yield* installBoardOverWire("board-before");
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const { issue } = yield* client[WS_METHODS.todoBoardMutate]({
+              action: "status",
+              cwd,
+              id: "e20d1-status-target",
+              status: "doing",
+            });
+            assert.equal(issue.status, "doing");
+
+            const reread = yield* client[WS_METHODS.todoBoardRead]({ cwd });
+            const confirmed = reread.issues.find(
+              (boardIssue) => boardIssue.id === "e20d1-status-target",
+            );
+            assert.equal(confirmed?.status, "doing");
+
+            const failure = yield* client[WS_METHODS.todoBoardMutate]({
+              action: "status",
+              cwd,
+              id: "00000-nonexistent",
+              status: "doing",
+            }).pipe(Effect.flip);
+            assert.equal(failure._tag, "TodoBoardError");
+            if (failure._tag === "TodoBoardError") {
+              assert.equal(failure.failure, "issue_not_found");
+            }
+          }),
+        ),
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest), Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("streams the pre-change snapshot and then the mutation over the wire", () =>
+    Effect.gen(function* () {
+      const { cwd } = yield* installBoardOverWire("board-before");
+      yield* buildAppUnderTest();
+      const wsUrl = yield* getWsServerUrl("/ws");
+
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            const snapshots = yield* Queue.unbounded<TodoBoardSnapshot>();
+            yield* client[WS_METHODS.todoBoardSubscribe]({ cwd }).pipe(
+              Stream.runForEach((snapshot) => Queue.offer(snapshots, snapshot)),
+              Effect.forkScoped,
+            );
+
+            const first = yield* Queue.take(snapshots);
+            assert.equal(first.issues.length, 16);
+
+            yield* client[WS_METHODS.todoBoardMutate]({
+              action: "status",
+              cwd,
+              id: "e20d1-status-target",
+              status: "doing",
+            });
+
+            const second = yield* Queue.take(snapshots);
+            const changed = second.issues.find((issue) => issue.id === "e20d1-status-target");
+            assert.equal(changed?.status, "doing");
+          }),
+        ),
+      );
+    }).pipe(
+      Effect.timeout("30 seconds"),
+      Effect.provide(NodeHttpServer.layerTest),
+      Effect.provide(NodeServices.layer),
+    ),
   );
 });
 
