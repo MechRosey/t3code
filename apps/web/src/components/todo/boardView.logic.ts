@@ -2,8 +2,8 @@ import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 
 export const BOARD_STATUS_ORDER = [
   "backlog",
-  "doing",
   "read",
+  "doing",
   "blocked",
   "done",
   "cancelled",
