@@ -1,7 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { ArrowDownUpIcon, ArrowLeftIcon, Maximize2Icon, TagIcon } from "lucide-react";
+import {
+  ArrowDownUpIcon,
+  ArrowLeftIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  TagIcon,
+} from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
@@ -37,6 +43,7 @@ export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
   readonly cwd: string;
   readonly onOpenFullPage?: (() => void) | undefined;
+  readonly onOpenInPanel?: (() => void) | undefined;
   readonly className?: string;
 }
 
@@ -235,7 +242,13 @@ function BoardIssueDrawer({
   );
 }
 
-export function BoardView({ environmentId, cwd, onOpenFullPage, className }: BoardViewProps) {
+export function BoardView({
+  environmentId,
+  cwd,
+  onOpenFullPage,
+  onOpenInPanel,
+  className,
+}: BoardViewProps) {
   const probe = useAtomValue(todoBoardRead({ environmentId, input: { cwd } }));
   const snapshotQuery = useEnvironmentQuery(todoBoardSubscribe({ environmentId, input: { cwd } }));
   const resolvedRoot = snapshotQuery.data?.root ?? null;
@@ -331,6 +344,23 @@ export function BoardView({ environmentId, cwd, onOpenFullPage, className }: Boa
               }
             />
             <TooltipPopup side="top">Open full page</TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onOpenInPanel ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost-muted"
+                  aria-label="Open the board in the side panel"
+                  onClick={onOpenInPanel}
+                >
+                  <Minimize2Icon className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipPopup side="top">Open in side panel</TooltipPopup>
           </Tooltip>
         ) : null}
       </div>

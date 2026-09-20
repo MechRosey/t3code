@@ -1,17 +1,20 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { SquareKanban } from "lucide-react";
 import { useMemo } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../components/WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { BoardView } from "../components/todo/BoardView";
+import { resolveBoardPanelSwitch } from "../components/todo/boardPanelSwitch";
 import { isElectron } from "../env";
-import { useProjects } from "../state/entities";
+import { useProjects, useThreadShells } from "../state/entities";
+import { useRightPanelStore } from "../rightPanelStore";
 
 interface BoardSearch {
   readonly environmentId?: EnvironmentId;
   readonly cwd?: string;
+  readonly threadId?: ThreadId;
 }
 
 export const Route = createFileRoute("/_chat/board")({
@@ -20,13 +23,18 @@ export const Route = createFileRoute("/_chat/board")({
       ? { environmentId: raw.environmentId as EnvironmentId }
       : {}),
     ...(typeof raw.cwd === "string" && raw.cwd ? { cwd: raw.cwd.slice(0, 500) } : {}),
+    ...(typeof raw.threadId === "string" && raw.threadId
+      ? { threadId: raw.threadId as ThreadId }
+      : {}),
   }),
   component: BoardRouteView,
 });
 
 function BoardRouteView() {
   const search = Route.useSearch();
+  const navigate = useNavigate();
   const projects = useProjects();
+  const threads = useThreadShells();
   const project = useMemo(
     () =>
       projects.find(
@@ -36,6 +44,10 @@ function BoardRouteView() {
           (search.cwd === undefined || candidate.workspaceRoot === search.cwd),
       ) ?? null,
     [projects, search.cwd, search.environmentId],
+  );
+  const panelSwitchTarget = useMemo(
+    () => resolveBoardPanelSwitch(search, projects, threads),
+    [projects, search, threads],
   );
   const environmentId = project?.environmentId ?? search.environmentId;
   const cwd = project?.workspaceRoot ?? search.cwd ?? null;
@@ -59,7 +71,21 @@ function BoardRouteView() {
       </WorkspacePageHeader>
       <div className="min-h-0 flex-1 overflow-hidden">
         {environmentId !== undefined ? (
-          <BoardView environmentId={environmentId} cwd={cwd ?? ""} />
+          <BoardView
+            environmentId={environmentId}
+            cwd={cwd ?? ""}
+            onOpenInPanel={
+              panelSwitchTarget === null
+                ? undefined
+                : () => {
+                    useRightPanelStore.getState().open(panelSwitchTarget.threadRef, "board");
+                    void navigate({
+                      to: panelSwitchTarget.routeTarget.to,
+                      params: panelSwitchTarget.routeTarget.params,
+                    });
+                  }
+            }
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-4">
             <p className="text-sm text-muted-foreground">

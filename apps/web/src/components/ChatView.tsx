@@ -9689,6 +9689,7 @@ export default function ChatView(props: ChatViewProps) {
               search: {
                 environmentId: activeThread.environmentId,
                 cwd: activeWorkspaceRoot ?? "",
+                threadId: activeThreadRef.threadId,
               },
             })
           }

@@ -1,9 +1,9 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import { resolveBoardPanelSwitch } from "./boardPanelSwitch";
 
-const ENV: EnvironmentId = "env-1";
+const ENV = "env-1" as EnvironmentId;
 
 function project(
   overrides: {
@@ -13,7 +13,7 @@ function project(
   } = {},
 ) {
   return {
-    id: overrides.id ?? "proj-1",
+    id: (overrides.id ?? "proj-1") as ProjectId,
     environmentId: overrides.environmentId ?? ENV,
     workspaceRoot: overrides.workspaceRoot ?? "C:/repo",
   };
@@ -30,8 +30,8 @@ function thread(
   } = {},
 ) {
   return {
-    id: overrides.id ?? "thread-1",
-    projectId: overrides.projectId ?? "proj-1",
+    id: (overrides.id ?? "thread-1") as ThreadId,
+    projectId: (overrides.projectId ?? "proj-1") as ProjectId,
     environmentId: overrides.environmentId ?? ENV,
     worktreePath: overrides.worktreePath ?? null,
     archivedAt: overrides.archivedAt ?? null,
