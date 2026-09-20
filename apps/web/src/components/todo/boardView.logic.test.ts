@@ -184,7 +184,7 @@ describe("board grouping and filtering", () => {
     );
     assert.deepEqual(
       sortBoardIssues(issues, "created-asc").map((issue) => issue.id),
-      ["5d03e", "c44aa", "1bfa3"],
+      ["5d03e", "1bfa3", "c44aa"],
     );
     assert.deepEqual(
       sortBoardIssues(issues, "id-asc").map((issue) => issue.id),
@@ -308,18 +308,21 @@ describe("board view-model golden", () => {
         parentId: "root",
         depth: 1,
         rootHue: 210,
+        tags: ["ui"],
         updated: "2026-09-06T00:00:00.000Z",
       }),
       issue({
         id: "blocked",
         title: "waiting",
         status: "blocked",
+        tags: ["ui"],
         links: { blocks: [], relates: [] },
       }),
       issue({
         id: "blocker",
         title: "the cause",
         status: "backlog",
+        tags: ["ui"],
         links: { blocks: ["blocked"], relates: [] },
       }),
     ];
