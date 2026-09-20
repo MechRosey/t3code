@@ -3719,8 +3719,8 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const boardAvailable = useTodoBoardAvailability(
-    activeThread?.environmentId ?? null,
-    activeWorkspaceRoot ?? null,
+    activeProject?.environmentId ?? activeThread?.environmentId ?? null,
+    activeProjectCwd,
   );
   useLayoutEffect(() => {
     if (
