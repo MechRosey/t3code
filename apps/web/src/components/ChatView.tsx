@@ -220,7 +220,6 @@ import { BoardView } from "./todo/BoardView";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
 import { useDeviceState } from "~/state/device";
-import { useTodoBoardAvailability } from "~/state/todoBoard";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
 import { WizardPopup } from "./ui/wizard";
@@ -3718,10 +3717,6 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
-  const boardAvailable = useTodoBoardAvailability(
-    activeProject?.environmentId ?? activeThread?.environmentId ?? null,
-    activeProjectCwd,
-  );
   useLayoutEffect(() => {
     if (
       threadDetailLoading ||
@@ -9834,7 +9829,6 @@ export default function ChatView(props: ChatViewProps) {
             rightPanelOpen={rightPanelOpen}
             gitCwd={gitCwd}
             onNewThreadInProject={handleNewThreadInActiveProject}
-            {...(boardAvailable === true ? { onOpenBoard: addBoardSurface } : {})}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}

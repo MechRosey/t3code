@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon, SquareKanban } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -65,7 +65,6 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   gitCwd: string | null;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
-  readonly onOpenBoard?: (() => void) | undefined;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -135,7 +134,6 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   gitCwd,
   onOpenPullRequest,
-  onOpenBoard,
   onNewThreadInProject,
   onOpenProjectSettings,
   onRunProjectScript,
@@ -329,7 +327,7 @@ export const ChatHeader = memo(function ChatHeader({
             doesn't answer it. */}
         {activeProject ? (
           <>
-            <WorkspaceBreadcrumbItem className="flex shrink items-center gap-0.5">
+            <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -346,23 +344,6 @@ export const ChatHeader = memo(function ChatHeader({
                 </TooltipTrigger>
                 <TooltipPopup side="top">New thread in {activeProjectName}</TooltipPopup>
               </Tooltip>
-              {onOpenBoard ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        size="icon-xs"
-                        variant="ghost-muted"
-                        aria-label="Open board"
-                        onClick={onOpenBoard}
-                      >
-                        <SquareKanban className="size-3.5" />
-                      </Button>
-                    }
-                  />
-                  <TooltipPopup side="top">Board</TooltipPopup>
-                </Tooltip>
-              ) : null}
             </WorkspaceBreadcrumbItem>
             <WorkspaceBreadcrumbSeparator />
           </>
