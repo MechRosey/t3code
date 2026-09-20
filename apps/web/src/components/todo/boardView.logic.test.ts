@@ -1,0 +1,353 @@
+import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import { assert, describe, it } from "vite-plus/test";
+
+import {
+  BOARD_SORT_OPTIONS,
+  BOARD_STATUS_GLYPHS,
+  boardQuestionBadge,
+  boardStatusColourClass,
+  boardStatusGlyph,
+  boardStatusLabel,
+  boardTags,
+  buildBlockedByIndex,
+  buildBoardViewModel,
+  cardHueStyle,
+  filterIssuesByTag,
+  sortBoardIssues,
+} from "./boardView.logic";
+import { DEFAULT_BOARD_UI_STATE, type BoardUiState } from "./boardUiState";
+
+function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">): TodoIssue {
+  return {
+    status: "backlog",
+    created: "2026-09-01T00:00:00.000Z",
+    updated: "2026-09-01T00:00:00.000Z",
+    tags: [],
+    epic: null,
+    parentId: null,
+    depth: 0,
+    rootHue: null,
+    markerPath: `.todo/issues/${overrides.id}.md`,
+    archived: false,
+    sections: {
+      brief: { content: false, text: false },
+      reading: { content: false, marker: false },
+      doing: { content: false, marker: false },
+      log: { content: false },
+      openQuestions: { content: false, hasOpen: false, hasHumanOpen: false },
+    },
+    body: "",
+    links: { blocks: [], relates: [] },
+    ...overrides,
+  };
+}
+
+function snapshot(issues: TodoIssue[]): TodoBoardSnapshot {
+  return { root: "C:/repo/.todo", repoName: "repo", issues };
+}
+
+describe("board status furniture", () => {
+  it("labels every canonical status and falls back to the raw status", () => {
+    assert.equal(boardStatusLabel("doing"), "Doing");
+    assert.equal(boardStatusLabel("cancelled"), "Cancelled");
+    assert.equal(boardStatusLabel("weird"), "weird");
+  });
+
+  it("gives every canonical status a glyph and unknown statuses the neutral one", () => {
+    assert.equal(boardStatusGlyph("backlog"), "○");
+    assert.equal(boardStatusGlyph("read"), "◐");
+    assert.equal(boardStatusGlyph("doing"), "▶");
+    assert.equal(boardStatusGlyph("blocked"), "⛔");
+    assert.equal(boardStatusGlyph("done"), "✓");
+    assert.equal(boardStatusGlyph("cancelled"), "✕");
+    assert.equal(boardStatusGlyph("weird"), "○");
+  });
+
+  it("maps glyph and colour lookups consistently with the furniture tables", () => {
+    for (const status of Object.keys(BOARD_STATUS_GLYPHS)) {
+      assert.equal(boardStatusGlyph(status), BOARD_STATUS_GLYPHS[status as never]);
+      assert.match(boardStatusColourClass(status), /^text-/);
+    }
+  });
+
+  it("flags [human]-marked open questions red and ordinary ones amber", () => {
+    assert.equal(
+      boardQuestionBadge(
+        issue({
+          id: "a",
+          title: "a",
+          sections: {
+            brief: { content: false, text: false },
+            reading: { content: false, marker: false },
+            doing: { content: false, marker: false },
+            log: { content: false },
+            openQuestions: { content: true, hasOpen: true, hasHumanOpen: true },
+          },
+        }),
+      ),
+      "human",
+    );
+    assert.equal(
+      boardQuestionBadge(
+        issue({
+          id: "b",
+          title: "b",
+          sections: {
+            brief: { content: false, text: false },
+            reading: { content: false, marker: false },
+            doing: { content: false, marker: false },
+            log: { content: false },
+            openQuestions: { content: true, hasOpen: true, hasHumanOpen: false },
+          },
+        }),
+      ),
+      "open",
+    );
+    assert.equal(boardQuestionBadge(issue({ id: "c", title: "c" })), null);
+  });
+});
+
+describe("board grouping and filtering", () => {
+  it("omits empty columns and keeps the canonical status order", () => {
+    const issues = [
+      issue({ id: "d", title: "done one", status: "done" }),
+      issue({ id: "b", title: "backlog one", status: "backlog" }),
+      issue({ id: "g", title: "going", status: "doing" }),
+    ];
+    const model = buildBoardViewModel(snapshot(issues), DEFAULT_BOARD_UI_STATE);
+    assert.deepEqual(
+      model.columns.map((column) => [column.status, column.cards.map((card) => card.issue.id)]),
+      [
+        ["backlog", ["b"]],
+        ["doing", ["g"]],
+        ["done", ["d"]],
+      ],
+    );
+  });
+
+  it("appends unknown statuses after the canonical ones, sorted", () => {
+    const issues = [
+      issue({ id: "z", title: "zebra", status: "zebra" }),
+      issue({ id: "a", title: "alpha", status: "backlog" }),
+      issue({ id: "y", title: "yak", status: "archived" }),
+    ];
+    const model = buildBoardViewModel(snapshot(issues), DEFAULT_BOARD_UI_STATE);
+    assert.deepEqual(
+      model.columns.map((column) => column.status),
+      ["backlog", "archived", "zebra"],
+    );
+    assert.equal(model.columns[1]!.label, "archived");
+  });
+
+  it("filters by tag and collects the board's tag vocabulary", () => {
+    const issues = [
+      issue({ id: "a", title: "tagged", tags: ["ui", "board"] }),
+      issue({ id: "b", title: "other", tags: ["ui"] }),
+      issue({ id: "c", title: "plain" }),
+    ];
+    assert.deepEqual(boardTags(issues), ["board", "ui"]);
+    assert.deepEqual(
+      filterIssuesByTag(issues, "ui").map((issue) => issue.id),
+      ["a", "b"],
+    );
+    assert.deepEqual(
+      filterIssuesByTag(issues, "board").map((issue) => issue.id),
+      ["a"],
+    );
+    assert.equal(filterIssuesByTag(issues, null).length, 3);
+  });
+
+  it("sorts by updated desc, created asc, and ticket id per the declared options", () => {
+    const issues = [
+      issue({
+        id: "c44aa",
+        title: "late",
+        created: "2026-09-02T00:00:00.000Z",
+        updated: "2026-09-10T00:00:00.000Z",
+      }),
+      issue({
+        id: "5d03e",
+        title: "early",
+        created: "2026-09-01T00:00:00.000Z",
+        updated: "2026-09-11T00:00:00.000Z",
+      }),
+      issue({
+        id: "1bfa3",
+        title: "mid",
+        created: "2026-09-02T00:00:00.000Z",
+        updated: "2026-09-09T00:00:00.000Z",
+      }),
+    ];
+    assert.deepEqual(
+      sortBoardIssues(issues, "updated-desc").map((issue) => issue.id),
+      ["5d03e", "c44aa", "1bfa3"],
+    );
+    assert.deepEqual(
+      sortBoardIssues(issues, "created-asc").map((issue) => issue.id),
+      ["5d03e", "c44aa", "1bfa3"],
+    );
+    assert.deepEqual(
+      sortBoardIssues(issues, "id-asc").map((issue) => issue.id),
+      ["1bfa3", "5d03e", "c44aa"],
+    );
+    assert.ok(BOARD_SORT_OPTIONS.some((option) => option.value === "updated-desc"));
+  });
+});
+
+describe("blocked-by reverse index", () => {
+  it("inverts blocks edges onto the blocked issue and deduplicates", () => {
+    const issues = [
+      issue({ id: "a", title: "blocker", links: { blocks: ["b", "c"], relates: [] } }),
+      issue({ id: "d", title: "second blocker", links: { blocks: ["b"], relates: [] } }),
+      issue({ id: "b", title: "blocked" }),
+      issue({ id: "c", title: "also blocked" }),
+    ];
+    const index = buildBlockedByIndex(issues);
+    assert.deepEqual(index.get("b"), ["a", "d"]);
+    assert.deepEqual(index.get("c"), ["a"]);
+    assert.equal(index.has("a"), false);
+    assert.equal(index.has("d"), false);
+  });
+});
+
+describe("card lineage presentation", () => {
+  it("marks roots and children, carrying the lineage hue", () => {
+    const root = issue({ id: "root", title: "root", rootHue: 210 });
+    const child = issue({ id: "child", title: "child", parentId: "root", depth: 1, rootHue: 210 });
+    const model = buildBoardViewModel(snapshot([root, child]), DEFAULT_BOARD_UI_STATE);
+    const cards = new Map(model.columns[0]!.cards.map((card) => [card.issue.id, card]));
+    assert.equal(cards.get("root")!.isRoot, true);
+    assert.equal(cards.get("root")!.hue, 210);
+    assert.equal(cards.get("child")!.isRoot, false);
+    assert.equal(cards.get("child")!.hue, 210);
+  });
+
+  it("tints hue-bearing cards but leaves blocked cards and hueless cards untinted", () => {
+    const root = issue({ id: "root", title: "root", status: "doing", rootHue: 210 });
+    const child = issue({ id: "child", title: "child", parentId: "root", depth: 1, rootHue: 210 });
+    const blocked = issue({ id: "blocked", title: "stuck", status: "blocked", rootHue: 210 });
+    const neutral = issue({ id: "neutral", title: "plain", status: "done" });
+    const model = buildBoardViewModel(
+      snapshot([root, child, blocked, neutral]),
+      DEFAULT_BOARD_UI_STATE,
+    );
+    const cards = new Map(
+      model.columns.flatMap((column) => column.cards).map((card) => [card.issue.id, card]),
+    );
+    assert.equal(cards.get("root")!.tinted, true);
+    assert.equal(cards.get("child")!.tinted, true);
+    assert.equal(cards.get("blocked")!.tinted, false);
+    assert.equal(cards.get("neutral")!.tinted, false);
+  });
+
+  it("emits a per-card hue custom property only for hue-bearing cards", () => {
+    assert.deepEqual(cardHueStyle(issue({ id: "a", title: "a", rootHue: 210 })), {
+      "--card-hue": "210",
+    });
+    assert.deepEqual(cardHueStyle(issue({ id: "b", title: "b", rootHue: null })), {});
+  });
+
+  it("attaches the parent chip and resolved blocked-by rows to child cards", () => {
+    const root = issue({ id: "root", title: "the root" });
+    const blocker = issue({ id: "blocker", title: "first do this", status: "doing" });
+    const child = issue({
+      id: "child",
+      title: "the child",
+      parentId: "root",
+      depth: 1,
+      links: { blocks: [], relates: [] },
+    });
+    buildBlockedByIndex([child, blocker, root]);
+    const model = buildBoardViewModel(snapshot([root, blocker, child]), DEFAULT_BOARD_UI_STATE);
+    const cards = new Map(
+      model.columns.flatMap((column) => column.cards).map((card) => [card.issue.id, card]),
+    );
+    assert.deepEqual(cards.get("child")!.parent, { id: "root", title: "the root" });
+    assert.equal(cards.get("root")!.parent, null);
+    assert.deepEqual(cards.get("root")!.blockedBy, []);
+  });
+
+  it("resolves blocked-by edges to ids and titles on the card", () => {
+    const blocker = issue({
+      id: "blocker",
+      title: "first do this",
+      status: "doing",
+      links: { blocks: ["target"], relates: [] },
+    });
+    const target = issue({ id: "target", title: "the target", status: "backlog" });
+    const model = buildBoardViewModel(snapshot([blocker, target]), DEFAULT_BOARD_UI_STATE);
+    const cards = new Map(
+      model.columns.flatMap((column) => column.cards).map((card) => [card.issue.id, card]),
+    );
+    assert.deepEqual(cards.get("target")!.blockedBy, [{ id: "blocker", title: "first do this" }]);
+  });
+});
+
+describe("board view-model golden", () => {
+  it("derives the whole render model from snapshot and ui state", () => {
+    const issues = [
+      issue({
+        id: "root",
+        title: "epic one",
+        status: "doing",
+        rootHue: 210,
+        tags: ["ui"],
+        updated: "2026-09-05T00:00:00.000Z",
+        sections: {
+          brief: { content: true, text: true },
+          reading: { content: false, marker: false },
+          doing: { content: false, marker: false },
+          log: { content: false },
+          openQuestions: { content: true, hasOpen: true, hasHumanOpen: true },
+        },
+      }),
+      issue({
+        id: "child",
+        title: "child task",
+        status: "doing",
+        parentId: "root",
+        depth: 1,
+        rootHue: 210,
+        updated: "2026-09-06T00:00:00.000Z",
+      }),
+      issue({
+        id: "blocked",
+        title: "waiting",
+        status: "blocked",
+        links: { blocks: [], relates: [] },
+      }),
+      issue({
+        id: "blocker",
+        title: "the cause",
+        status: "backlog",
+        links: { blocks: ["blocked"], relates: [] },
+      }),
+    ];
+    const uiState: BoardUiState = { tag: "ui", sort: "updated-desc" };
+    const model = buildBoardViewModel(snapshot(issues), uiState);
+    assert.equal(model.root, "C:/repo/.todo");
+    assert.equal(model.repoName, "repo");
+    assert.deepEqual(model.tags, ["ui"]);
+    assert.deepEqual(
+      model.columns.map((column) => column.status),
+      ["backlog", "doing", "blocked"],
+    );
+    const doing = model.columns.find((column) => column.status === "doing")!;
+    assert.deepEqual(
+      doing.cards.map((card) => card.issue.id),
+      ["child", "root"],
+    );
+    const childCard = doing.cards[0]!;
+    assert.equal(childCard.glyph, "▶");
+    assert.equal(childCard.badge, null);
+    assert.deepEqual(childCard.parent, { id: "root", title: "epic one" });
+    const rootCard = doing.cards[1]!;
+    assert.equal(rootCard.badge, "human");
+    assert.equal(rootCard.isRoot, true);
+    const blockedCard = model.columns
+      .find((column) => column.status === "blocked")!
+      .cards.find((card) => card.issue.id === "blocked")!;
+    assert.deepEqual(blockedCard.blockedBy, [{ id: "blocker", title: "the cause" }]);
+    assert.equal(blockedCard.tinted, false);
+  });
+});
