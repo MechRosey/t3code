@@ -2411,6 +2411,10 @@ export default function Sidebar() {
         : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
     [projectGroups, projectScopeKey],
   );
+  const scopedProjectBoardAvailable = useTodoBoardAvailability(
+    scopedProjectGroup?.environmentId ?? null,
+    scopedProjectGroup?.workspaceRoot ?? null,
+  );
   const scopedProjectKeys = useMemo(
     () =>
       scopedProjectGroup === null
@@ -4535,6 +4539,18 @@ export default function Sidebar() {
                 </Combobox>
               }
               onNewProject={openAddProjectCommandPalette}
+              onOpenBoard={
+                scopedProjectGroup !== null && scopedProjectBoardAvailable === true
+                  ? () =>
+                      void router.navigate({
+                        to: "/board",
+                        search: {
+                          environmentId: scopedProjectGroup.environmentId,
+                          cwd: scopedProjectGroup.workspaceRoot,
+                        },
+                      })
+                  : undefined
+              }
               onNewThread={handleNewThreadClick}
               newThreadDisabled={projects.length === 0}
               newThreadShortcutLabel={newThreadShortcutLabel}

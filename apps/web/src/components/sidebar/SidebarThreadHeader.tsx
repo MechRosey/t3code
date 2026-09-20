@@ -10,7 +10,7 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, SearchIcon, SquareKanbanIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -32,6 +32,8 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   /** The project scope combobox, rendered as the first icon of the group. */
   projectScope: ReactNode;
+  /** Opens the active project's board; absent when no project is scoped or none has a board. */
+  onOpenBoard?: (() => void) | undefined;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
@@ -54,6 +56,7 @@ export function SidebarThreadHeader({
   searchFieldRef,
   hasProjects,
   projectScope,
+  onOpenBoard,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -129,6 +132,11 @@ export function SidebarThreadHeader({
         {hasProjects ? (
           <>
             {projectScope}
+            {onOpenBoard ? (
+              <SidebarHeaderIconButton label="Board" onClick={onOpenBoard}>
+                <SquareKanbanIcon />
+              </SidebarHeaderIconButton>
+            ) : null}
             <SidebarHeaderIconButton label="New project" onClick={onNewProject}>
               <FolderPlusIcon />
             </SidebarHeaderIconButton>
