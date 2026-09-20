@@ -902,7 +902,7 @@ function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | un
     entry.taskId &&
     (entry.sourceActivityKind === "task.progress" || entry.sourceActivityKind === "task.completed")
   ) {
-    return `task${entry.taskId}`;
+    return `task\u001F${entry.taskId}`;
   }
   if (
     entry.sourceActivityKind !== "tool.updated" &&
