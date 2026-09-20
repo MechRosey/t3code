@@ -204,8 +204,9 @@ function BoardIssueDrawer({
                 >
                   {statusOptions.map((status) => (
                     <MenuRadioItem key={status} value={status}>
-                      <span className={cn("mr-1", boardStatusColourClass(status))}>{status}</span>
-                      {boardStatusLabel(status)}
+                      <span className={boardStatusColourClass(status)}>
+                        {boardStatusLabel(status)}
+                      </span>
                     </MenuRadioItem>
                   ))}
                 </MenuRadioGroup>
