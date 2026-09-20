@@ -1,8 +1,20 @@
-export interface IssueDirLookup {
-  tag: "found" | "notFound" | "ambiguous";
-  name?: string;
-  matches?: Array<string>;
+export interface MarkerStat {
+  readonly mtimeMs: number;
+  readonly size: number;
 }
+
+export const ensureUnchanged = (baseline: MarkerStat, current: MarkerStat): void => {
+  if (baseline.mtimeMs !== current.mtimeMs || baseline.size !== current.size) {
+    throw new Error(
+      `Marker file changed during the write critical section (mtime ${baseline.mtimeMs} -> ${current.mtimeMs}, size ${baseline.size} -> ${current.size}).`,
+    );
+  }
+};
+
+export type IssueDirLookup =
+  | { tag: "found"; name: string }
+  | { tag: "notFound" }
+  | { tag: "ambiguous"; matches: Array<string> };
 
 export const isIssueMarkerFile = (dirName: string, baseName: string): boolean => {
   if (dirName.length < 5) return false;
@@ -13,10 +25,12 @@ export const findIssueDirName = (dirNames: readonly string[], issueId: string): 
   for (const dirName of dirNames) {
     if (dirName === issueId) return { tag: "found", name: dirName };
   }
-  const prefixMatches = dirNames.filter((dirName) =>
-    dirName.toLowerCase().startsWith(issueId.toLowerCase()),
-  );
-  if (prefixMatches.length === 1) return { tag: "found", name: prefixMatches[0] };
+  const lowerId = issueId.toLowerCase();
+  const prefixMatches = dirNames.filter((dirName) => dirName.toLowerCase().startsWith(lowerId));
+  const firstMatch = prefixMatches[0];
+  if (prefixMatches.length === 1 && firstMatch !== undefined) {
+    return { tag: "found", name: firstMatch };
+  }
   if (prefixMatches.length > 1) return { tag: "ambiguous", matches: [...prefixMatches] };
   return { tag: "notFound" };
 };
@@ -24,8 +38,10 @@ export const findIssueDirName = (dirNames: readonly string[], issueId: string): 
 export const resolveLinkId = (ref: string, knownIds: readonly string[]): string => {
   if (ref === "") return ref;
   if (knownIds.includes(ref)) return ref;
-  const prefixMatches = knownIds.filter((id) => id.toLowerCase().startsWith(ref.toLowerCase()));
-  if (prefixMatches.length === 1) return prefixMatches[0];
+  const lowerRef = ref.toLowerCase();
+  const prefixMatches = knownIds.filter((id) => id.toLowerCase().startsWith(lowerRef));
+  const firstMatch = prefixMatches[0];
+  if (prefixMatches.length === 1 && firstMatch !== undefined) return firstMatch;
   return ref;
 };
 

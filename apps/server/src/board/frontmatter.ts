@@ -79,17 +79,17 @@ export const parseIssue = (text: string, dirName: string): BoardIssue => {
       if (inLinks) {
         const sub = /^\s+([A-Za-z]+):\s*(.*)$/.exec(line);
         if (sub) {
-          const key = sub[1] as BoardLinkType;
+          const key = (sub[1] ?? "") as BoardLinkType;
           if ((LINK_TYPES as readonly string[]).includes(key)) {
-            fm.links[key] = fromYamlList(sub[2]);
+            fm.links[key] = fromYamlList(sub[2] ?? "");
           }
           continue;
         }
       }
       const field = /^([A-Za-z]+):\s*(.*)$/.exec(line);
       if (field) {
-        const key = field[1];
-        const value = field[2];
+        const key = field[1] ?? "";
+        const value = field[2] ?? "";
         inLinks = false;
         switch (key) {
           case "tags":

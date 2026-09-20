@@ -48,19 +48,22 @@ export const getSectionMap = (body: string): IssueSections => {
   const headerPattern = /^##[ \t]+(.+?)[ \t]*$/gm;
   for (let match = headerPattern.exec(body); match !== null; match = headerPattern.exec(body)) {
     headers.push({
-      name: match[1],
+      name: match[1] ?? "",
       start: match.index,
       end: match.index + match[0].length,
     });
   }
 
   for (let i = 0; i < headers.length; i++) {
-    const { name, start, end } = headers[i];
+    const header = headers[i];
+    if (header === undefined) continue;
+    const { name, start, end } = header;
     const isOpenQuestions = name.toLowerCase() === "open questions";
     const kind = SECTION_KINDS[name.toLowerCase()];
     if (!isOpenQuestions && kind === undefined) continue;
     const sectionStart = end;
-    const sectionEnd = i + 1 < headers.length ? headers[i + 1].start : body.length;
+    const nextHeader = headers[i + 1];
+    const sectionEnd = nextHeader !== undefined ? nextHeader.start : body.length;
     const text = body.slice(sectionStart, sectionEnd);
     const trimmed = text.trim();
     if (isOpenQuestions) {
@@ -73,6 +76,7 @@ export const getSectionMap = (body: string): IssueSections => {
       }
       continue;
     }
+    if (kind === undefined) continue;
     if (trimmed.length > 0) content[kind] = true;
     if (kind === "brief" && trimmed.length > 0) briefText = trimmed;
     if (kind === "log") logText = text;

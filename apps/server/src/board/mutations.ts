@@ -2,17 +2,19 @@ import type { BoardIssue } from "./frontmatter.ts";
 import { canonicalStatus, isKnownStatus, LINK_TYPES, type BoardLinkType } from "./vocabulary.ts";
 import { resolveLinkId } from "./issues.ts";
 
+export type BoardRuleFailure =
+  | "invalid_status"
+  | "invalid_link_type"
+  | "open_children"
+  | "subtree_open"
+  | "no_parent";
+
 export class BoardRuleError extends Error {
-  constructor(
-    readonly failure:
-      | "invalid_status"
-      | "invalid_link_type"
-      | "open_children"
-      | "subtree_open"
-      | "no_parent",
-    message: string,
-  ) {
+  readonly failure: BoardRuleFailure;
+
+  constructor(failure: BoardRuleFailure, message: string) {
     super(message);
+    this.failure = failure;
   }
 }
 
@@ -147,7 +149,7 @@ export const addChildResolution = (
 
   let childIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (CHILD_RESOLUTIONS_HEADING.test(lines[i])) {
+    if (CHILD_RESOLUTIONS_HEADING.test(lines[i] ?? "")) {
       childIdx = i;
       break;
     }
@@ -156,14 +158,14 @@ export const addChildResolution = (
   if (childIdx >= 0) {
     let endIdx = lines.length;
     for (let j = childIdx + 1; j < lines.length; j++) {
-      if (ANY_HEADING.test(lines[j])) {
+      if (ANY_HEADING.test(lines[j] ?? "")) {
         endIdx = j;
         break;
       }
     }
     let inserted = false;
     for (let k = childIdx + 1; k < endIdx; k++) {
-      if (childPattern.test(lines[k])) {
+      if (childPattern.test(lines[k] ?? "")) {
         lines[k] = entry;
         inserted = true;
         break;
@@ -177,7 +179,7 @@ export const addChildResolution = (
 
   let logIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Log\s*$/.test(lines[i])) {
+    if (/^##\s+Log\s*$/.test(lines[i] ?? "")) {
       logIdx = i;
       break;
     }

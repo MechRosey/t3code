@@ -270,6 +270,14 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  TodoBoardError,
+  TodoBoardMutateInput,
+  TodoBoardMutateResult,
+  TodoBoardReadInput,
+  TodoBoardReadResult,
+  TodoBoardSubscribeInput,
+} from "./todoBoard.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -292,6 +300,11 @@ export const WS_METHODS = {
   assetsCreateUrl: "assets.createUrl",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
   attachmentsDelete: "attachments.delete",
+
+  // Todo board methods
+  todoBoardRead: "todo.read",
+  todoBoardMutate: "todo.mutate",
+  todoBoardSubscribe: "todo.subscribe",
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
@@ -937,6 +950,25 @@ const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   error: Schema.Union([ProjectWriteFileError, EnvironmentAuthorizationError]),
 });
 
+const WsTodoBoardReadRpc = Rpc.make(WS_METHODS.todoBoardRead, {
+  payload: TodoBoardReadInput,
+  success: TodoBoardReadResult,
+  error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
+});
+
+const WsTodoBoardMutateRpc = Rpc.make(WS_METHODS.todoBoardMutate, {
+  payload: TodoBoardMutateInput,
+  success: TodoBoardMutateResult,
+  error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
+});
+
+const WsTodoBoardSubscribeRpc = Rpc.make(WS_METHODS.todoBoardSubscribe, {
+  payload: TodoBoardSubscribeInput,
+  success: TodoBoardReadResult,
+  error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1449,6 +1481,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchContentsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsTodoBoardReadRpc,
+  WsTodoBoardMutateRpc,
+  WsTodoBoardSubscribeRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,
