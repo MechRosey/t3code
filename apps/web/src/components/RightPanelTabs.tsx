@@ -23,6 +23,7 @@ import {
   Files,
   Globe2,
   Plus,
+  SquareKanban,
   TerminalSquare,
   Volume2,
   VolumeOff,
@@ -115,6 +116,7 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
+  onAddBoard: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
   browserAvailable: boolean;
@@ -123,6 +125,7 @@ interface RightPanelTabsProps {
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
+  boardAvailable: boolean;
   agentsAvailable: boolean;
   deviceAvailable: boolean;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
@@ -154,6 +157,7 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
+  board: "The board is only available when a project is open.",
   agents: "Agents are only available from a thread.",
   device: "Devices are only available from a thread.",
 } as const;
@@ -627,6 +631,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "pull-requests":
       return "Pull requests";
+    case "board":
+      return "Board";
     case "agents":
       return "Agents";
     case "device":
@@ -712,6 +718,8 @@ function SurfaceIcon({
       );
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "board":
+      return <SquareKanban className="size-3 shrink-0" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
     case "device":
@@ -908,6 +916,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "Board",
+      icon: SquareKanban,
+      shortcut: "O",
+      available: props.boardAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.board,
+      onClick: props.onAddBoard,
     },
     {
       label: "Agents",

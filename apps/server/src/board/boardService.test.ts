@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as TodoBoard from "./TodoBoard.ts";
+import type { TodoBoardSnapshot } from "@t3tools/contracts";
 import { ensureUnchanged } from "./issues.ts";
 import { fixturesRoot, readFixture } from "./fixtures.ts";
 
@@ -318,7 +319,7 @@ describe("board watching", () => {
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
         const board = yield* TodoBoard.TodoBoard;
-        const seen = yield* Queue.unbounded<TodoBoard.TodoBoardSnapshot>();
+        const seen = yield* Queue.unbounded<TodoBoardSnapshot>();
         yield* Stream.runForEach(board.stream({ cwd }), (snapshot) =>
           Queue.offer(seen, snapshot),
         ).pipe(Effect.forkScoped);

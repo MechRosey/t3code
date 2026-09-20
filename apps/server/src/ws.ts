@@ -129,6 +129,7 @@ import { deletePendingAttachment, issueAttachmentUploadUrl } from "./assets/Atta
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as TodoBoard from "./board/TodoBoard.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
@@ -573,6 +574,7 @@ const makeWsRpcLayer = (
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+      const todoBoard = yield* TodoBoard.TodoBoard;
       const canReplayPersistedRange = Effect.fnUntraced(function* (
         afterSequence: number,
         headSequence: number,
@@ -3044,6 +3046,18 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.todoBoardRead]: (input) =>
+          observeRpcEffect(WS_METHODS.todoBoardRead, todoBoard.read(input), {
+            "rpc.aggregate": "workspace",
+          }),
+        [WS_METHODS.todoBoardMutate]: (input) =>
+          observeRpcEffect(WS_METHODS.todoBoardMutate, todoBoard.mutate(input), {
+            "rpc.aggregate": "workspace",
+          }),
+        [WS_METHODS.todoBoardSubscribe]: (input) =>
+          observeRpcStream(WS_METHODS.todoBoardSubscribe, todoBoard.stream(input), {
+            "rpc.aggregate": "workspace",
+          }),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
             "rpc.aggregate": "workspace",

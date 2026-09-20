@@ -1988,6 +1988,7 @@ function PullRequestsRouteView() {
             onAddFiles={() => undefined}
             onAddPullRequest={() => undefined}
             onAddPullRequests={() => undefined}
+            onAddBoard={() => undefined}
             onAddAgents={() => undefined}
             onAddDevice={() => undefined}
             browserAvailable={false}
@@ -1996,6 +1997,7 @@ function PullRequestsRouteView() {
             filesAvailable={false}
             pullRequestAvailable={false}
             pullRequestsAvailable={false}
+            boardAvailable={false}
             agentsAvailable={false}
             deviceAvailable={false}
             liveAgentCount={0}
