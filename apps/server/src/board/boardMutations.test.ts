@@ -11,7 +11,7 @@ import {
   assertStatusChildrenGuard,
   BoardRuleError,
 } from "./mutations.ts";
-import { findMarkerPath, fixturesRoot, readFixture } from "./fixtures.ts";
+import { findMarkerPath, readFixture } from "./fixtures.ts";
 
 const issueIds = [
   "0f853-board-foundation",
@@ -50,7 +50,7 @@ const expectBytes = (actual: Buffer, expected: Buffer) => {
 
 describe("status mutation equivalence", () => {
   it("matches the skill's status byte output", () => {
-    const { bytes, parsed } = loadBefore("e20d1-status-target");
+    const { parsed } = loadBefore("e20d1-status-target");
     const next = applyStatus(parsed, { status: "doing" }, NOW);
     expectBytes(Buffer.from(serializeIssue(next)), goldenAfter("status", "e20d1-status-target"));
   });

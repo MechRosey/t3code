@@ -57,7 +57,7 @@ export const getSectionMap = (body: string): IssueSections => {
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i];
     if (header === undefined) continue;
-    const { name, start, end } = header;
+    const { name, end } = header;
     const isOpenQuestions = name.toLowerCase() === "open questions";
     const kind = SECTION_KINDS[name.toLowerCase()];
     if (!isOpenQuestions && kind === undefined) continue;

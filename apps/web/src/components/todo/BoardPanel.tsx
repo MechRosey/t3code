@@ -57,9 +57,7 @@ export function BoardPanel({ environmentId, cwd }: { environmentId: EnvironmentI
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border/50 px-3 py-2">
         <div className="text-xs font-medium">{repoName}</div>
-        <div className="truncate font-mono text-[.6rem] text-muted-foreground/60" title={root}>
-          {root}
-        </div>
+        <div className="truncate font-mono text-[.6rem] text-muted-foreground/60">{root}</div>
       </div>
       <div className="flex-1 overflow-auto p-2">
         {STATUS_ORDER.map((status) => {

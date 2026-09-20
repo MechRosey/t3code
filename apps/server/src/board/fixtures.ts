@@ -1,9 +1,9 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeURL from "node:url";
 
 export const fixturesRoot = NodePath.join(
-  NodePath.dirname(fileURLToPath(import.meta.url)),
+  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
   "__fixtures__",
 );
 

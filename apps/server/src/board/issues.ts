@@ -54,13 +54,13 @@ export const isArchivedPath = (boardRoot: string, candidatePath: string): boolea
   return candidate.startsWith(`${archiveRoot}\\`);
 };
 
-const BRANCH_CHECKOUT_FOLDER_NAMES = ["dev", "main", "master"];
+const BRANCH_CHECKOUT_FOLDER_NAMES = new Set(["dev", "main", "master"]);
 
 export const repoDisplayName = (rootPath: string): string => {
   const segments = rootPath.split(/[\\/]/).filter((segment) => segment !== "");
   const containerSegments = segments.slice(0, -1);
   let name = containerSegments[containerSegments.length - 1] ?? "";
-  if (BRANCH_CHECKOUT_FOLDER_NAMES.includes(name)) {
+  if (BRANCH_CHECKOUT_FOLDER_NAMES.has(name)) {
     const grandparent = containerSegments[containerSegments.length - 2];
     if (grandparent !== undefined) name = grandparent;
   }
