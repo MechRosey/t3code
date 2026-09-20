@@ -64,9 +64,9 @@ describe("resolveBoardPanelSwitch", () => {
     assert.equal(target, null);
   });
 
-  it("hides the switch when the origin threadId is unknown", () => {
+  it("hides the switch when the origin threadId is unknown and no thread matches the cwd", () => {
     const target = resolveBoardPanelSwitch(
-      { environmentId: ENV, cwd: "C:/repo", threadId: "ghost" as ThreadId },
+      { environmentId: ENV, cwd: "C:/nowhere", threadId: "ghost" as ThreadId },
       [project()],
       [thread()],
     );
