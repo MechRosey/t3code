@@ -379,15 +379,18 @@ export const make = Effect.gen(function* () {
 
       switch (input.action) {
         case "status": {
-          const childStatuses: Array<string> = [];
+          const children: Array<{ id: string; status: string }> = [];
           const prefix = `${target.rel}/`;
           for (const dir of dirs) {
             if (!dir.rel.startsWith(prefix)) continue;
             if (dir.rel.slice(prefix.length).includes("/")) continue;
             const { text } = yield* readMarker(root, dir);
-            childStatuses.push(parseIssue(text, dir.name).fm.status);
+            const parsed = parseIssue(text, dir.name);
+            children.push({ id: parsed.fm.id, status: parsed.fm.status });
           }
-          yield* runRule(() => assertStatusChildrenGuard(input.status, childStatuses, input.force));
+          yield* runRule(() =>
+            assertStatusChildrenGuard(input.id, input.status, children, input.force),
+          );
           const { text, stat } = yield* readMarker(root, target);
           const parsed = parseIssue(text, target.name);
           const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
@@ -474,12 +477,13 @@ export const make = Effect.gen(function* () {
           const subtree = dirs.filter(
             (dir) => dir.rel === target.rel || dir.rel.startsWith(`${target.rel}/`),
           );
-          const statuses: Array<string> = [];
+          const members: Array<{ id: string; status: string }> = [];
           for (const member of subtree) {
             const { text } = yield* readMarker(root, member);
-            statuses.push(parseIssue(text, member.name).fm.status);
+            const parsed = parseIssue(text, member.name);
+            members.push({ id: parsed.fm.id, status: parsed.fm.status });
           }
-          yield* runRule(() => assertSubtreeClosed(statuses));
+          yield* runRule(() => assertSubtreeClosed(input.id, members));
           const before = yield* rebuildFromDisk(root, target.name);
           const archiveRoot = path.join(root, "archive");
           yield* fs

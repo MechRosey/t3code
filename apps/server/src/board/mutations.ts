@@ -37,25 +37,35 @@ export const applyStatus = (
 };
 
 export const assertStatusChildrenGuard = (
+  typedId: string,
   targetStatus: string,
-  directChildStatuses: readonly string[],
+  directChildren: ReadonlyArray<{ id: string; status: string }>,
   force: boolean | undefined,
 ): void => {
-  if (!["done", "cancelled"].includes(canonicalStatus(targetStatus))) return;
+  const canonical = canonicalStatus(targetStatus);
+  if (!["done", "cancelled"].includes(canonical)) return;
   if (force) return;
-  const open = directChildStatuses.filter((status) => !["done", "cancelled"].includes(status));
+  const open = directChildren.filter((child) => !["done", "cancelled"].includes(child.status));
   if (open.length > 0) {
+    const list = open.map((child) => `  ${child.id} [${child.status}]`).join("\n");
     throw new BoardRuleError(
       "open_children",
-      `Cannot set status to ${canonicalStatus(targetStatus)} - open children: ${open.join(", ")}`,
+      `Cannot set ${typedId} to ${canonical} - it has open children:\n${list}\nUse -Force to override.`,
     );
   }
 };
 
-export const assertSubtreeClosed = (statuses: readonly string[]): void => {
-  const open = statuses.filter((status) => !["done", "cancelled"].includes(status));
+export const assertSubtreeClosed = (
+  typedId: string,
+  members: ReadonlyArray<{ id: string; status: string }>,
+): void => {
+  const open = members.filter((member) => !["done", "cancelled"].includes(member.status));
   if (open.length > 0) {
-    throw new BoardRuleError("subtree_open", `Subtree has open issues: ${open.join(", ")}`);
+    const list = open.map((member) => `  ${member.id} [${member.status}]`).join("\n");
+    throw new BoardRuleError(
+      "subtree_open",
+      `Cannot archive ${typedId} - subtree has open issues:\n${list}`,
+    );
   }
 };
 

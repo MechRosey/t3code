@@ -295,7 +295,7 @@ describe("TodoBoard service", () => {
             .pipe(Effect.flip);
           expect(openArchive.failure).toBe("subtree_open");
           expect(openArchive.message).toBe(
-            "Cannot archive e594b-rollup-child - subtree has open issues:\n  e594b-rollup-child [backlog]\n  0fef4-rollup-grandchild [backlog]",
+            "Cannot archive e594b-rollup-child - subtree has open issues:\n  0fef4-rollup-grandchild [backlog]",
           );
           yield* board.mutate({
             action: "status",
