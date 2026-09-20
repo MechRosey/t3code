@@ -3,11 +3,23 @@ export interface MarkerStat {
   readonly size: number;
 }
 
-export const ensureUnchanged = (baseline: MarkerStat, current: MarkerStat): void => {
-  if (baseline.mtimeMs !== current.mtimeMs || baseline.size !== current.size) {
-    throw new Error(
+export class MarkerConflictError extends Error {
+  readonly baseline: MarkerStat;
+  readonly current: MarkerStat;
+
+  constructor(baseline: MarkerStat, current: MarkerStat) {
+    super(
       `Marker file changed during the write critical section (mtime ${baseline.mtimeMs} -> ${current.mtimeMs}, size ${baseline.size} -> ${current.size}).`,
     );
+    this.name = "MarkerConflictError";
+    this.baseline = baseline;
+    this.current = current;
+  }
+}
+
+export const ensureUnchanged = (baseline: MarkerStat, current: MarkerStat): void => {
+  if (baseline.mtimeMs !== current.mtimeMs || baseline.size !== current.size) {
+    throw new MarkerConflictError(baseline, current);
   }
 };
 

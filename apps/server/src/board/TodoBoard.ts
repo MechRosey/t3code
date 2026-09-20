@@ -23,12 +23,13 @@ import {
 
 import { parseIssue, serializeIssue, type BoardIssue } from "./frontmatter.ts";
 import {
+  ensureUnchanged,
   findIssueDirName,
   isArchivedPath,
   isIssueMarkerFile,
+  MarkerConflictError,
   repoDisplayName,
   resolveLinkId,
-  ensureUnchanged,
 } from "./issues.ts";
 import {
   applyComment,
@@ -106,9 +107,13 @@ const runRule = <A>(thunk: () => A): Effect.Effect<A, TodoBoardError> =>
     try {
       return Effect.succeed(thunk());
     } catch (error) {
-      return error instanceof BoardRuleError
-        ? Effect.fail(fromRuleError(error))
-        : Effect.die(error);
+      if (error instanceof BoardRuleError) return Effect.fail(fromRuleError(error));
+      if (error instanceof MarkerConflictError) {
+        return Effect.fail(
+          toError("conflict", error.message, { baseline: error.baseline, current: error.current }),
+        );
+      }
+      return Effect.die(error);
     }
   });
 
@@ -253,7 +258,7 @@ export const make = Effect.gen(function* () {
       const absolute = path.join(root, dir.markerRel);
       const info = yield* statInfo(absolute);
       const current = yield* markerStat(absolute, info);
-      ensureUnchanged(baseline, current);
+      yield* runRule(() => ensureUnchanged(baseline, current));
       yield* fs
         .writeFileString(absolute, serializeIssue(next))
         .pipe(
