@@ -191,7 +191,7 @@ export function buildBoardViewModel(
       column.push(issue);
     }
   }
-  const known = BOARD_STATUS_ORDER.filter((status) => grouped.has(status));
+  const known: ReadonlyArray<string> = BOARD_STATUS_ORDER;
   const extra = [...grouped.keys()]
     .filter((status) => !isBoardStatus(status))
     .sort((left, right) => left.localeCompare(right));

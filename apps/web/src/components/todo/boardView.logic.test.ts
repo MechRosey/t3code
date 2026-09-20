@@ -108,7 +108,7 @@ describe("board status furniture", () => {
 });
 
 describe("board grouping and filtering", () => {
-  it("omits empty columns and keeps the canonical status order", () => {
+  it("always renders every canonical column in order, empty ones included", () => {
     const issues = [
       issue({ id: "d", title: "done one", status: "done" }),
       issue({ id: "b", title: "backlog one", status: "backlog" }),
@@ -120,7 +120,10 @@ describe("board grouping and filtering", () => {
       [
         ["backlog", ["b"]],
         ["doing", ["g"]],
+        ["read", []],
+        ["blocked", []],
         ["done", ["d"]],
+        ["cancelled", []],
       ],
     );
   });
@@ -134,9 +137,9 @@ describe("board grouping and filtering", () => {
     const model = buildBoardViewModel(snapshot(issues), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(
       model.columns.map((column) => column.status),
-      ["backlog", "archived", "zebra"],
+      ["backlog", "doing", "read", "blocked", "done", "cancelled", "archived", "zebra"],
     );
-    assert.equal(model.columns[1]!.label, "archived");
+    assert.equal(model.columns[6]!.label, "archived");
   });
 
   it("filters by tag and collects the board's tag vocabulary", () => {
@@ -333,7 +336,7 @@ describe("board view-model golden", () => {
     assert.deepEqual(model.tags, ["ui"]);
     assert.deepEqual(
       model.columns.map((column) => column.status),
-      ["backlog", "doing", "blocked"],
+      ["backlog", "doing", "read", "blocked", "done", "cancelled"],
     );
     const doing = model.columns.find((column) => column.status === "doing")!;
     assert.deepEqual(

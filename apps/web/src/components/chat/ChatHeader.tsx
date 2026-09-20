@@ -329,7 +329,7 @@ export const ChatHeader = memo(function ChatHeader({
             doesn't answer it. */}
         {activeProject ? (
           <>
-            <WorkspaceBreadcrumbItem className="shrink">
+            <WorkspaceBreadcrumbItem className="flex shrink items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -346,6 +346,23 @@ export const ChatHeader = memo(function ChatHeader({
                 </TooltipTrigger>
                 <TooltipPopup side="top">New thread in {activeProjectName}</TooltipPopup>
               </Tooltip>
+              {onOpenBoard ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="icon-xs"
+                        variant="ghost-muted"
+                        aria-label="Open board"
+                        onClick={onOpenBoard}
+                      >
+                        <SquareKanban className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                  <TooltipPopup side="top">Board</TooltipPopup>
+                </Tooltip>
+              ) : null}
             </WorkspaceBreadcrumbItem>
             <WorkspaceBreadcrumbSeparator />
           </>
@@ -412,23 +429,6 @@ export const ChatHeader = memo(function ChatHeader({
           "[[data-panel-animations=true]_&]:motion-safe:transition-[padding-right] [[data-panel-animations=true]_&]:motion-safe:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:motion-safe:ease-out",
         )}
       >
-        {onOpenBoard ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  size="icon-sm"
-                  variant="ghost-muted"
-                  aria-label="Open board"
-                  onClick={onOpenBoard}
-                >
-                  <SquareKanban className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipPopup side="top">Board</TooltipPopup>
-          </Tooltip>
-        ) : null}
         {activeProjectScripts && (
           <ProjectScriptsControl
             scripts={activeProjectScripts}
