@@ -55,6 +55,7 @@ import {
   PlusIcon,
   SettingsIcon,
   ShieldQuestionIcon,
+  SquareKanban,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -133,6 +134,7 @@ import {
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
+import { useTodoBoardAvailability } from "../state/todoBoard";
 import { useEnvironmentQuery } from "../state/query";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
@@ -4508,6 +4510,7 @@ export default function Sidebar() {
                                 machineByEnvironmentId={environmentMachineById}
                               />
                             ) : null}
+                            {project ? <SidebarProjectBoardButton project={project} /> : null}
                             {project ? (
                               <Button
                                 size="icon-xs"
@@ -4933,5 +4936,31 @@ export default function Sidebar() {
       </SidebarContent>
       <SidebarChromeFooter />
     </>
+  );
+}
+
+function SidebarProjectBoardButton({ project }: { project: SidebarProjectSnapshot }) {
+  const router = useRouter();
+  const available = useTodoBoardAvailability(project.environmentId, project.workspaceRoot);
+  if (available !== true) return null;
+  return (
+    <Button
+      size="icon-xs"
+      variant="ghost-muted"
+      tabIndex={-1}
+      aria-hidden="true"
+      title={`Open board for ${project.displayName}`}
+      className="size-6 [--control-icon-color:currentColor] text-icon-muted focus-visible:bg-accent focus-visible:text-foreground"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        void router.navigate({
+          to: "/board",
+          search: { environmentId: project.environmentId, cwd: project.workspaceRoot },
+        });
+      }}
+    >
+      <SquareKanban className="size-3.5" />
+    </Button>
   );
 }

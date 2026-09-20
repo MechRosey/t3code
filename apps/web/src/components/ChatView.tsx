@@ -216,10 +216,11 @@ import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
-import { BoardPanel } from "./todo/BoardPanel";
+import { BoardView } from "./todo/BoardView";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
 import { useDeviceState } from "~/state/device";
+import { useTodoBoardAvailability } from "~/state/todoBoard";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
 import { WizardPopup } from "./ui/wizard";
@@ -3717,6 +3718,10 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  const boardAvailable = useTodoBoardAvailability(
+    activeThread?.environmentId ?? null,
+    activeWorkspaceRoot ?? null,
+  );
   useLayoutEffect(() => {
     if (
       threadDetailLoading ||
@@ -9679,10 +9684,19 @@ export default function ChatView(props: ChatViewProps) {
       />
     ) : renderedRightPanelSurface?.kind === "board" && activeThreadRef ? (
       <Suspense fallback={null}>
-        <BoardPanel
+        <BoardView
           key={`${activeThread.environmentId}:${activeWorkspaceRoot ?? ""}`}
           environmentId={activeThread.environmentId}
           cwd={activeWorkspaceRoot ?? ""}
+          onOpenFullPage={() =>
+            void navigate({
+              to: "/board",
+              search: {
+                environmentId: activeThread.environmentId,
+                cwd: activeWorkspaceRoot ?? "",
+              },
+            })
+          }
         />
       </Suspense>
     ) : renderedRightPanelSurface?.kind === "device" ? (
@@ -9820,6 +9834,7 @@ export default function ChatView(props: ChatViewProps) {
             rightPanelOpen={rightPanelOpen}
             gitCwd={gitCwd}
             onNewThreadInProject={handleNewThreadInActiveProject}
+            {...(boardAvailable === true ? { onOpenBoard: addBoardSurface } : {})}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }
               : {})}
