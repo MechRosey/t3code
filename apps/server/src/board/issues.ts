@@ -60,8 +60,10 @@ export const resolveLinkId = (ref: string, knownIds: readonly string[]): string 
 const normalizeBackslashes = (value: string): string => value.replace(/\//g, "\\");
 
 export const isArchivedPath = (boardRoot: string, candidatePath: string): boolean => {
-  const archiveRoot = normalizeBackslashes(`${boardRoot.replace(/[\\/]+$/, "")}/archive`);
-  const candidate = normalizeBackslashes(candidatePath);
+  const archiveRoot = normalizeBackslashes(
+    `${boardRoot.replace(/[\\/]+$/, "")}/archive`,
+  ).toLowerCase();
+  const candidate = normalizeBackslashes(candidatePath).toLowerCase();
   if (candidate.replace(/\\+$/, "") === archiveRoot) return true;
   return candidate.startsWith(`${archiveRoot}\\`);
 };

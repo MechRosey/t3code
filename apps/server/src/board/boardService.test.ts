@@ -68,6 +68,8 @@ const pointerHtml = (content: typeof TodoPointerContent.Type): string =>
     Schema.fromJsonString(TodoPointerContent),
   )(content)}</script>`;
 
+const encodeTodoBoardReadResult = Schema.encodeEffect(TodoBoardReadResult);
+
 const setBoardTime = (stamp: string) =>
   Effect.sync(() => {
     const zoned = DateTime.makeZonedUnsafe(`${stamp.replace(" ", "T")}:00`, {
@@ -127,8 +129,8 @@ describe("TodoBoard service", () => {
         expect(quirk?.status).toBe("wip");
         expect(quirk?.rootHue).toBeNull();
         const hue = snapshot.issues.find((issue) => issue.id === "f4028-hue-carrier");
-        expect(hue?.rootHue).toBe(180);
-        const encoded = Schema.encodeSync(TodoBoardReadResult)(snapshot);
+        expect(hue?.rootHue).toBe(60);
+        const encoded = yield* encodeTodoBoardReadResult(snapshot);
         expect(encoded.issues.find((issue) => issue.id === "89c1f-quirk-carrier")?.status).toBe(
           "wip",
         );

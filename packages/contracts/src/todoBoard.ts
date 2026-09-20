@@ -2,18 +2,6 @@ import * as Schema from "effect/Schema";
 
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-export const TODO_BOARD_STATUSES = [
-  "backlog",
-  "doing",
-  "read",
-  "blocked",
-  "done",
-  "cancelled",
-] as const;
-
-export const TodoBoardStatus = Schema.Literals(TODO_BOARD_STATUSES);
-export type TodoBoardStatus = typeof TodoBoardStatus.Type;
-
 export const TodoBoardLinkType = Schema.Literals(["blocks", "relates"]);
 export type TodoBoardLinkType = typeof TodoBoardLinkType.Type;
 
@@ -39,7 +27,7 @@ export type TodoIssueLinks = typeof TodoIssueLinks.Type;
 export const TodoIssue = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
-  status: TodoBoardStatus,
+  status: Schema.String,
   created: Schema.String,
   updated: Schema.String,
   tags: Schema.Array(Schema.String),

@@ -86,7 +86,8 @@ export const applyTag = (
 ): BoardIssue => {
   const next = withUpdated(issue, now);
   if (args.remove) {
-    next.fm.tags = next.fm.tags.filter((tag) => tag !== args.tag);
+    const removed = args.tag.toLowerCase();
+    next.fm.tags = next.fm.tags.filter((tag) => tag.toLowerCase() !== removed);
     return next;
   }
   if (!next.fm.tags.some((tag) => tag.toLowerCase() === args.tag.toLowerCase())) {

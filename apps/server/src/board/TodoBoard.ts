@@ -102,6 +102,12 @@ const fromRuleError = (error: BoardRuleError): TodoBoardError =>
 
 const normalizeSlashes = (value: string): string => value.replace(/\\/g, "/");
 
+const toRootHue = (colour: string | undefined): number | null => {
+  if (colour === undefined || colour.trim() === "") return null;
+  const value = Number(colour);
+  return Number.isInteger(value) ? value : null;
+};
+
 const runRule = <A>(thunk: () => A): Effect.Effect<A, TodoBoardError> =>
   Effect.suspend(() => {
     try {
@@ -255,17 +261,28 @@ export const make = Effect.gen(function* () {
     baseline: MarkerStat,
   ): Effect.Effect<void, TodoBoardError> =>
     Effect.gen(function* () {
-      const absolute = path.join(root, dir.markerRel);
-      const info = yield* statInfo(absolute);
-      const current = yield* markerStat(absolute, info);
+      const driftedAbs = path.join(root, dir.markerRel);
+      const info = yield* statInfo(driftedAbs);
+      const current = yield* markerStat(driftedAbs, info);
       yield* runRule(() => ensureUnchanged(baseline, current));
+      const canonicalRel = `${dir.rel}/${dir.name}.md`;
+      const canonicalAbs = path.join(root, canonicalRel);
       yield* fs
-        .writeFileString(absolute, serializeIssue(next))
+        .writeFileString(canonicalAbs, serializeIssue(next))
         .pipe(
           Effect.mapError((cause) =>
-            toError("operation_failed", `Failed to write ${absolute}`, cause),
+            toError("operation_failed", `Failed to write ${canonicalAbs}`, cause),
           ),
         );
+      if (dir.markerRel !== canonicalRel) {
+        yield* fs
+          .remove(driftedAbs, { force: true })
+          .pipe(
+            Effect.mapError((cause) =>
+              toError("operation_failed", `Failed to remove ${driftedAbs}`, cause),
+            ),
+          );
+      }
     });
 
   const readBoardAt = (root: string): Effect.Effect<TodoBoardSnapshot, TodoBoardError> =>
@@ -279,7 +296,7 @@ export const make = Effect.gen(function* () {
         const { text } = yield* readMarker(root, dir);
         const parsed = parseIssue(text, dir.name);
         if (dir.rel.split("/").length === 1) {
-          rootHues.set(dir.name, parsed.fm.colour !== undefined ? Number(parsed.fm.colour) : null);
+          rootHues.set(dir.name, toRootHue(parsed.fm.colour));
         }
         const segments = dir.rel.split("/");
         const depth = segments.length - 1;
@@ -287,7 +304,7 @@ export const make = Effect.gen(function* () {
         issues.push({
           id: parsed.fm.id,
           title: parsed.fm.title,
-          status: canonicalStatus(parsed.fm.status) as TodoIssue["status"],
+          status: canonicalStatus(parsed.fm.status),
           created: parsed.fm.created,
           updated: parsed.fm.updated,
           tags: [...parsed.fm.tags],
