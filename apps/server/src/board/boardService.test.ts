@@ -18,6 +18,33 @@ import { fixturesRoot, readFixture } from "./fixtures.ts";
 
 const TestLayer = TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer));
 
+interface MidFlightWrite {
+  readonly path: string;
+  readonly content: string;
+  count: number;
+}
+
+const midFlight: { current: MidFlightWrite | null } = { current: null };
+
+const conflictLayer = Layer.effect(
+  FileSystem.FileSystem,
+  Effect.map(FileSystem.FileSystem, (inner) =>
+    FileSystem.make({
+      ...inner,
+      stat: (path) => {
+        const trap = midFlight.current;
+        if (trap === null || path !== trap.path) return inner.stat(path);
+        trap.count += 1;
+        return trap.count === 2
+          ? Effect.andThen(inner.writeFileString(trap.path, trap.content), inner.stat(path))
+          : inner.stat(path);
+      },
+    }),
+  ),
+).pipe(Layer.provideMerge(NodeServices.layer));
+
+const conflictTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(conflictLayer));
+
 const installBoard = (fixtureBoard: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -325,6 +352,32 @@ describe("ensureUnchanged", () => {
     expect(() => ensureUnchanged({ mtimeMs: 5, size: 10 }, { mtimeMs: 6, size: 10 })).toThrow();
     expect(() => ensureUnchanged({ mtimeMs: 5, size: 10 }, { mtimeMs: 5, size: 11 })).toThrow();
   });
+});
+
+describe("mid-flight conflict", () => {
+  it.effect("surfaces a mid-flight external write as a typed conflict failure", () =>
+    Effect.gen(function* () {
+      const { boardDir, cwd } = yield* installBoard("board-before");
+      yield* setBoardTime("2026-09-20 12:00");
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const markerPath = path.join(boardDir, "762b5-comment-target", "762b5-comment-target.md");
+      const original = yield* fs.readFileString(markerPath);
+      midFlight.current = {
+        path: markerPath,
+        content: original.replace("## Links", "## Links\n\n- mid-flight external edit"),
+        count: 0,
+      };
+      const board = yield* TodoBoard.TodoBoard;
+      const failure = yield* board
+        .mutate({ action: "tag", cwd, id: "762b5-comment-target", tag: "beta" })
+        .pipe(Effect.flip);
+      expect(failure.failure).toBe("conflict");
+      const written = yield* fs.readFileString(markerPath);
+      expect(written).toContain("mid-flight external edit");
+      expect(written).not.toContain("tags: [beta]");
+    }).pipe(Effect.provide(conflictTestLayer)),
+  );
 });
 
 describe("board watching", () => {
