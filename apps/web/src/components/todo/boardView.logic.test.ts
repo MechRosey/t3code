@@ -119,8 +119,8 @@ describe("board grouping and filtering", () => {
       model.columns.map((column) => [column.status, column.cards.map((card) => card.issue.id)]),
       [
         ["backlog", ["b"]],
-        ["doing", ["g"]],
         ["read", []],
+        ["doing", ["g"]],
         ["blocked", []],
         ["done", ["d"]],
         ["cancelled", []],
@@ -137,7 +137,7 @@ describe("board grouping and filtering", () => {
     const model = buildBoardViewModel(snapshot(issues), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(
       model.columns.map((column) => column.status),
-      ["backlog", "doing", "read", "blocked", "done", "cancelled", "archived", "zebra"],
+      ["backlog", "read", "doing", "blocked", "done", "cancelled", "archived", "zebra"],
     );
     assert.equal(model.columns[6]!.label, "archived");
   });
@@ -336,7 +336,7 @@ describe("board view-model golden", () => {
     assert.deepEqual(model.tags, ["ui"]);
     assert.deepEqual(
       model.columns.map((column) => column.status),
-      ["backlog", "doing", "read", "blocked", "done", "cancelled"],
+      ["backlog", "read", "doing", "blocked", "done", "cancelled"],
     );
     const doing = model.columns.find((column) => column.status === "doing")!;
     assert.deepEqual(
