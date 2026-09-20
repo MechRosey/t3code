@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as TodoBoard from "./TodoBoard.ts";
-import type { TodoBoardSnapshot } from "@t3tools/contracts";
+import { TodoBoardReadResult, type TodoBoardSnapshot } from "@t3tools/contracts";
 import { ensureUnchanged } from "./issues.ts";
 import { fixturesRoot, readFixture } from "./fixtures.ts";
 
@@ -114,6 +114,23 @@ describe("TodoBoard service", () => {
         expect(child?.rootHue).toBe(root?.rootHue);
         expect(child?.markerPath.replace(/\\/g, "/")).toContain(
           "0f853-board-foundation/6ba55-parser-fidelity/6ba55-parser-fidelity.md",
+        );
+      }),
+    );
+
+    it.effect("carries an unknown status and a non-numeric colour through the read", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("board-quirks");
+        const board = yield* TodoBoard.TodoBoard;
+        const snapshot = yield* board.read({ cwd });
+        const quirk = snapshot.issues.find((issue) => issue.id === "89c1f-quirk-carrier");
+        expect(quirk?.status).toBe("wip");
+        expect(quirk?.rootHue).toBeNull();
+        const hue = snapshot.issues.find((issue) => issue.id === "f4028-hue-carrier");
+        expect(hue?.rootHue).toBe(180);
+        const encoded = Schema.encodeSync(TodoBoardReadResult)(snapshot);
+        expect(encoded.issues.find((issue) => issue.id === "89c1f-quirk-carrier")?.status).toBe(
+          "wip",
         );
       }),
     );
@@ -285,6 +302,35 @@ describe("TodoBoard service", () => {
           expect(archived).toBe(true);
           expect(yield* fs.exists(path.join(boardDir, "e594b-rollup-child"))).toBe(false);
         }),
+    );
+
+    it.effect("migrates a drifted marker name to the canonical name on mutation", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-drift");
+        yield* setBoardTime("2026-09-20 13:43");
+        const board = yield* TodoBoard.TodoBoard;
+        const result = yield* board.mutate({
+          action: "tag",
+          cwd,
+          id: "a4be6-drift-target",
+          tag: "beta",
+        });
+        expect(result.issue.markerPath.replace(/\\/g, "/")).toContain(
+          "a4be6-drift-target/a4be6-drift-target.md",
+        );
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const canonical = path.join(boardDir, "a4be6-drift-target", "a4be6-drift-target.md");
+        expectSameBytes(
+          Buffer.from(yield* fs.readFile(canonical)),
+          yield* readFixture("after-tag-drift/a4be6-drift-target/a4be6-drift-target.md"),
+        );
+        expect(
+          yield* fs.exists(
+            path.join(boardDir, "a4be6-drift-target", "a4be6-drift-target-renamed.md"),
+          ),
+        ).toBe(false);
+      }),
     );
 
     it.effect("reports an ambiguous id instead of picking one", () =>

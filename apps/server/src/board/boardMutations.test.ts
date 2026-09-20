@@ -169,6 +169,14 @@ it.layer(NodeServices.layer)((it) => {
       }),
     );
 
+    it.effect("removes a tag case-insensitively like the skill's -ne comparison", () =>
+      Effect.gen(function* () {
+        const parsed = yield* loadBefore("64eb7-tag-remove-target");
+        const next = applyTag(parsed, { tag: "ALPHA", remove: true }, NOW);
+        expect(next.fm.tags).toEqual([]);
+      }),
+    );
+
     it.effect("is idempotent when adding an existing tag", () =>
       Effect.gen(function* () {
         const parsed = yield* loadBefore("64eb7-tag-remove-target");

@@ -83,31 +83,30 @@ describe("TodoIssue", () => {
     expect(issue.sections.doing.marker).toBe(true);
   });
 
-  it("rejects a status outside the board vocabulary", () => {
-    expect(() =>
-      decodeIssue({
-        id: "abc12-alpha",
-        title: "Alpha",
-        status: "sideways",
-        created: "",
-        updated: "",
-        tags: [],
-        epic: null,
-        parentId: null,
-        depth: 0,
-        rootHue: null,
-        markerPath: "x",
-        archived: false,
-        sections: {
-          brief: { content: false, text: "" },
-          reading: { content: false, marker: false },
-          doing: { content: false, marker: false },
-          log: { content: false },
-          openQuestions: { content: false, hasOpen: false, hasHumanOpen: false },
-        },
-        body: "",
-        links: { blocks: [], relates: [] },
-      }),
-    ).toThrow();
+  it("carries an unknown status through untouched like the skill's export", () => {
+    const issue = decodeIssue({
+      id: "abc12-alpha",
+      title: "Alpha",
+      status: "sideways",
+      created: "",
+      updated: "",
+      tags: [],
+      epic: null,
+      parentId: null,
+      depth: 0,
+      rootHue: null,
+      markerPath: "x",
+      archived: false,
+      sections: {
+        brief: { content: false, text: "" },
+        reading: { content: false, marker: false },
+        doing: { content: false, marker: false },
+        log: { content: false },
+        openQuestions: { content: false, hasOpen: false, hasHumanOpen: false },
+      },
+      body: "",
+      links: { blocks: [], relates: [] },
+    });
+    expect(issue.status).toBe("sideways");
   });
 });

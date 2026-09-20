@@ -80,6 +80,12 @@ describe("isArchivedPath", () => {
     expect(isArchivedPath("C:\\board", "C:\\board\\archived")).toBe(false);
     expect(isArchivedPath("C:\\board", "C:\\board\\abc12-issue")).toBe(false);
   });
+
+  it("matches case-insensitively like the skill's OrdinalIgnoreCase compare", () => {
+    expect(isArchivedPath("C:\\board", "C:\\Board\\Archive\\abc12-issue")).toBe(true);
+    expect(isArchivedPath("C:\\Board", "c:\\board\\archive")).toBe(true);
+    expect(isArchivedPath("C:\\board", "C:\\Board\\Archive-old\\abc12-issue")).toBe(false);
+  });
 });
 
 describe("repoDisplayName", () => {
