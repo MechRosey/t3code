@@ -44,7 +44,7 @@ const BOARD_SORT_LABELS = new Map(
   BOARD_SORT_OPTIONS.map((option) => [option.value, option.label] as const),
 );
 
-const BOARD_TAG_ALL = "__all__";
+const BOARD_TAG_ALL = "\u0000all";
 
 function BoardCard({
   card,
