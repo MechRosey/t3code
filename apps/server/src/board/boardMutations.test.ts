@@ -12,6 +12,7 @@ import {
   applyStatus,
   applyTag,
   assertStatusChildrenGuard,
+  assertSubtreeClosed,
   BoardRuleError,
 } from "./mutations.ts";
 import { findMarkerPath, readFixture } from "./fixtures.ts";
@@ -98,14 +99,77 @@ it.layer(NodeServices.layer)((it) => {
     );
 
     it("refuses closing a parent with open direct children unless forced", () => {
-      expect(() => assertStatusChildrenGuard("done", ["backlog", "done"], undefined)).toThrow(
-        BoardRuleError,
-      );
-      expect(() => assertStatusChildrenGuard("done", ["backlog"], true)).not.toThrow();
       expect(() =>
-        assertStatusChildrenGuard("done", ["done", "cancelled"], undefined),
+        assertStatusChildrenGuard(
+          "e594b",
+          "done",
+          [
+            { id: "0fef4", status: "backlog" },
+            { id: "x", status: "done" },
+          ],
+          undefined,
+        ),
+      ).toThrow(BoardRuleError);
+      expect(() =>
+        assertStatusChildrenGuard("e594b", "done", [{ id: "0fef4", status: "backlog" }], true),
       ).not.toThrow();
-      expect(() => assertStatusChildrenGuard("doing", ["backlog"], undefined)).not.toThrow();
+      expect(() =>
+        assertStatusChildrenGuard(
+          "e594b",
+          "done",
+          [
+            { id: "0fef4", status: "done" },
+            { id: "x", status: "cancelled" },
+          ],
+          undefined,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        assertStatusChildrenGuard(
+          "e594b",
+          "doing",
+          [{ id: "0fef4", status: "backlog" }],
+          undefined,
+        ),
+      ).not.toThrow();
+    });
+  });
+
+  describe("refusal message parity", () => {
+    it("names open subtree members with their statuses like the skill's archive refusal", () => {
+      const refusal = () =>
+        assertSubtreeClosed("e594b", [
+          { id: "e594b-rollup-child", status: "backlog" },
+          { id: "0fef4-rollup-grandchild", status: "done" },
+          { id: "4b42b-epic-carrier", status: "read" },
+        ]);
+      expect(refusal).toThrow(BoardRuleError);
+      expect(refusal).toThrow(
+        "Cannot archive e594b - subtree has open issues:\n  e594b-rollup-child [backlog]\n  4b42b-epic-carrier [read]",
+      );
+    });
+
+    it("keeps a closed subtree archivable", () => {
+      expect(() =>
+        assertSubtreeClosed("e0ae5", [
+          { id: "e0ae5-archive-target", status: "done" },
+          { id: "df3cf-archive-child", status: "cancelled" },
+        ]),
+      ).not.toThrow();
+    });
+
+    it("names open direct children with their statuses like the skill's status refusal", () => {
+      const refusal = () =>
+        assertStatusChildrenGuard(
+          "e594b",
+          "done",
+          [{ id: "0fef4-rollup-grandchild", status: "backlog" }],
+          undefined,
+        );
+      expect(refusal).toThrow(BoardRuleError);
+      expect(refusal).toThrow(
+        "Cannot set e594b to done - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
+      );
     });
   });
 

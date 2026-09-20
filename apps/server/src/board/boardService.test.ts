@@ -279,6 +279,9 @@ describe("TodoBoard service", () => {
             .mutate({ action: "status", cwd, id: "e594b-rollup-child", status: "done" })
             .pipe(Effect.flip);
           expect(guarded.failure).toBe("open_children");
+          expect(guarded.message).toBe(
+            "Cannot set e594b-rollup-child to done - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
+          );
           const forced = yield* board.mutate({
             action: "status",
             cwd,
@@ -291,6 +294,9 @@ describe("TodoBoard service", () => {
             .mutate({ action: "archive", cwd, id: "e594b-rollup-child" })
             .pipe(Effect.flip);
           expect(openArchive.failure).toBe("subtree_open");
+          expect(openArchive.message).toBe(
+            "Cannot archive e594b-rollup-child - subtree has open issues:\n  e594b-rollup-child [backlog]\n  0fef4-rollup-grandchild [backlog]",
+          );
           yield* board.mutate({
             action: "status",
             cwd,
