@@ -59,8 +59,6 @@ export function writeBoardUiState(
   }
 }
 
-const noopUpdate = () => {};
-
 export function useBoardUiState(
   resolvedRoot: string | null,
 ): readonly [BoardUiState, (patch: Partial<BoardUiState>) => void] {
@@ -69,19 +67,24 @@ export function useBoardUiState(
     readonly root: string | null;
     readonly state: BoardUiState;
   }>(() => ({ root: resolvedRoot, state: readBoardUiState(storage, resolvedRoot) }));
-  if (entry.root !== resolvedRoot) {
-    setEntry({ root: resolvedRoot, state: readBoardUiState(storage, resolvedRoot) });
-    return [DEFAULT_BOARD_UI_STATE, noopUpdate];
-  }
+  const current =
+    entry.root === resolvedRoot
+      ? entry
+      : { root: resolvedRoot, state: readBoardUiState(storage, resolvedRoot) };
   const update = useCallback(
     (patch: Partial<BoardUiState>) => {
-      setEntry((current) => {
-        const next = { ...current.state, ...patch };
+      setEntry((prev) => {
+        const state =
+          prev.root === resolvedRoot ? prev.state : readBoardUiState(storage, resolvedRoot);
+        const next = { ...state, ...patch };
         writeBoardUiState(storage, resolvedRoot, next);
         return { root: resolvedRoot, state: next };
       });
     },
     [resolvedRoot, storage],
   );
-  return [entry.state, update];
+  if (current !== entry) {
+    setEntry(current);
+  }
+  return [current.state, update];
 }
