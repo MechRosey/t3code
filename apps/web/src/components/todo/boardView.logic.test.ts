@@ -30,7 +30,7 @@ function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">):
     markerPath: `.todo/issues/${overrides.id}.md`,
     archived: false,
     sections: {
-      brief: { content: false, text: false },
+      brief: { content: false, text: "" },
       reading: { content: false, marker: false },
       doing: { content: false, marker: false },
       log: { content: false },
@@ -77,7 +77,7 @@ describe("board status furniture", () => {
           id: "a",
           title: "a",
           sections: {
-            brief: { content: false, text: false },
+            brief: { content: false, text: "" },
             reading: { content: false, marker: false },
             doing: { content: false, marker: false },
             log: { content: false },
@@ -93,7 +93,7 @@ describe("board status furniture", () => {
           id: "b",
           title: "b",
           sections: {
-            brief: { content: false, text: false },
+            brief: { content: false, text: "" },
             reading: { content: false, marker: false },
             doing: { content: false, marker: false },
             log: { content: false },
@@ -294,7 +294,7 @@ describe("board view-model golden", () => {
         tags: ["ui"],
         updated: "2026-09-05T00:00:00.000Z",
         sections: {
-          brief: { content: true, text: true },
+          brief: { content: true, text: "brief" },
           reading: { content: false, marker: false },
           doing: { content: false, marker: false },
           log: { content: false },

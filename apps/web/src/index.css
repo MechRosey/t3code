@@ -2222,3 +2222,32 @@ code {
 .composer-tiptap li[data-checked] > div > p {
   margin: 0;
 }
+
+.board-card-root {
+  border-color: hsl(var(--card-hue) 55% 48%);
+  background-color: hsl(var(--card-hue) 30% 95%);
+}
+
+.dark .board-card-root {
+  border-color: hsl(var(--card-hue) 60% 62%);
+  background-color: hsl(var(--card-hue) 30% 17%);
+}
+
+.board-card-child {
+  border-color: hsl(var(--card-hue) 50% 66%);
+  background-color: hsl(var(--card-hue) 16% 96%);
+}
+
+.dark .board-card-child {
+  border-color: hsl(var(--card-hue) 52% 74%);
+  background-color: hsl(var(--card-hue) 16% 15%);
+}
+
+.board-card-blocked {
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--contrast-muted-foreground) 16%, transparent) 0 1px,
+    transparent 1px 5px
+  );
+}
