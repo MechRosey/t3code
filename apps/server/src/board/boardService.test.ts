@@ -1,14 +1,14 @@
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
+import { it, describe, expect } from "@effect/vitest";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it, describe, expect } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as TodoBoard from "./TodoBoard.ts";
@@ -21,13 +21,25 @@ const TestLayer = TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer));
 const installBoard = (fixtureBoard: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const target = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-board-" });
-    const boardDir = NodePath.join(target, "project", ".todo");
-    NodeFS.cpSync(NodePath.join(fixturesRoot, fixtureBoard), boardDir, { recursive: true });
-    const cwd = NodePath.join(target, "project", "sub", "deep");
-    NodeFS.mkdirSync(cwd, { recursive: true });
+    const boardDir = path.join(target, "project", ".todo");
+    yield* fs.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
+    const cwd = path.join(target, "project", "sub", "deep");
+    yield* fs.makeDirectory(cwd, { recursive: true });
     return { target, boardDir, cwd };
   });
+
+const TodoPointerContent = Schema.Struct({
+  central: Schema.String,
+  board: Schema.optional(Schema.String),
+  created: Schema.optional(Schema.String),
+});
+
+const pointerHtml = (content: typeof TodoPointerContent.Type): string =>
+  `<!doctype html><script type="application/json" id="todo-pointer">${Schema.encodeSync(
+    Schema.fromJsonString(TodoPointerContent),
+  )(content)}</script>`;
 
 const setBoardTime = (stamp: string) =>
   Effect.sync(() => {
@@ -82,16 +94,14 @@ describe("TodoBoard service", () => {
     it.effect("follows a .todo.html pointer to the central board", () =>
       Effect.gen(function* () {
         const { target, boardDir, cwd } = yield* installBoard("board-before");
-        const centralBoard = NodePath.join(target, "central", "key", ".todo");
-        NodeFS.mkdirSync(NodePath.dirname(centralBoard), { recursive: true });
-        NodeFS.cpSync(boardDir, centralBoard, { recursive: true });
-        NodeFS.writeFileSync(
-          NodePath.join(target, "project", ".todo.html"),
-          `<!doctype html><script type="application/json" id="todo-pointer">${JSON.stringify({
-            central: centralBoard,
-            board: "key",
-            created: "2026-09-20 12:00",
-          })}</script>`,
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const centralBoard = path.join(target, "central", "key", ".todo");
+        yield* fs.makeDirectory(path.dirname(centralBoard), { recursive: true });
+        yield* fs.copy(boardDir, centralBoard);
+        yield* fs.writeFileString(
+          path.join(target, "project", ".todo.html"),
+          pointerHtml({ central: centralBoard, board: "key", created: "2026-09-20 12:00" }),
         );
         const board = yield* TodoBoard.TodoBoard;
         const snapshot = yield* board.read({ cwd });
@@ -102,11 +112,11 @@ describe("TodoBoard service", () => {
     it.effect("fails loud on a dangling pointer", () =>
       Effect.gen(function* () {
         const { target, cwd } = yield* installBoard("board-before");
-        NodeFS.writeFileSync(
-          NodePath.join(target, "project", ".todo.html"),
-          `<!doctype html><script type="application/json" id="todo-pointer">${JSON.stringify({
-            central: NodePath.join(target, "missing", ".todo"),
-          })}</script>`,
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* fs.writeFileString(
+          path.join(target, "project", ".todo.html"),
+          pointerHtml({ central: path.join(target, "missing", ".todo") }),
         );
         const board = yield* TodoBoard.TodoBoard;
         const error = yield* board.read({ cwd }).pipe(Effect.flip);
@@ -148,12 +158,14 @@ describe("TodoBoard service", () => {
           status: "doing",
         });
         expect(result.issue.status).toBe("doing");
-        const written = NodeFS.readFileSync(
-          NodePath.join(boardDir, "e20d1-status-target", "e20d1-status-target.md"),
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const written = yield* fs.readFile(
+          path.join(boardDir, "e20d1-status-target", "e20d1-status-target.md"),
         );
         expectSameBytes(
-          written,
-          readFixture("after-status/e20d1-status-target/e20d1-status-target.md"),
+          Buffer.from(written),
+          yield* readFixture("after-status/e20d1-status-target/e20d1-status-target.md"),
         );
       }),
     );
@@ -161,9 +173,9 @@ describe("TodoBoard service", () => {
     it.effect("comment writes the skill's exact bytes", () =>
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
-        const golden = readFixture(
+        const golden = (yield* readFixture(
           "after-comment/762b5-comment-target/762b5-comment-target.md",
-        ).toString("utf8");
+        )).toString("utf8");
         const stamp = /- \*\*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\*\*/.exec(golden)?.[1];
         expect(stamp).toBeDefined();
         yield* setBoardTime(stamp!);
@@ -175,11 +187,13 @@ describe("TodoBoard service", () => {
           text: "A comment lands here.",
           by: "tester",
         });
-        const written = NodeFS.readFileSync(
-          NodePath.join(boardDir, "762b5-comment-target", "762b5-comment-target.md"),
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const written = yield* fs.readFileString(
+          path.join(boardDir, "762b5-comment-target", "762b5-comment-target.md"),
         );
         const expected = golden.replace("updated: 2026-09-20 12:00", `updated: ${stamp}`);
-        expectSameBytes(written, Buffer.from(expected, "utf8"));
+        expectSameBytes(Buffer.from(written, "utf8"), Buffer.from(expected, "utf8"));
       }),
     );
 
@@ -196,12 +210,14 @@ describe("TodoBoard service", () => {
           text: "Resolved cleanly",
         });
         expect(result.issue.id).toBe("e594b-rollup-child");
-        const written = NodeFS.readFileSync(
-          NodePath.join(boardDir, "e594b-rollup-child", "e594b-rollup-child.md"),
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const written = yield* fs.readFileString(
+          path.join(boardDir, "e594b-rollup-child", "e594b-rollup-child.md"),
         );
         expectSameBytes(
-          written,
-          readFixture("after-rollup/e594b-rollup-child/e594b-rollup-child.md"),
+          Buffer.from(written, "utf8"),
+          yield* readFixture("after-rollup/e594b-rollup-child/e594b-rollup-child.md"),
         );
       }),
     );
@@ -236,10 +252,11 @@ describe("TodoBoard service", () => {
             status: "done",
           });
           yield* board.mutate({ action: "archive", cwd, id: "e594b-rollup-child" });
-          expect(NodeFS.existsSync(NodePath.join(boardDir, "archive", "e594b-rollup-child"))).toBe(
-            true,
-          );
-          expect(NodeFS.existsSync(NodePath.join(boardDir, "e594b-rollup-child"))).toBe(false);
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const archived = yield* fs.exists(path.join(boardDir, "archive", "e594b-rollup-child"));
+          expect(archived).toBe(true);
+          expect(yield* fs.exists(path.join(boardDir, "e594b-rollup-child"))).toBe(false);
         }),
     );
 
@@ -271,9 +288,11 @@ describe("TodoBoard service", () => {
           ],
           { concurrency: 2 },
         );
-        const written = NodeFS.readFileSync(
-          NodePath.join(boardDir, "762b5-comment-target", "762b5-comment-target.md"),
-        ).toString("utf8");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const written = yield* fs.readFileString(
+          path.join(boardDir, "762b5-comment-target", "762b5-comment-target.md"),
+        );
         expect(written).toContain("tags: [beta]");
         expect(written).toContain("Landed while a tag was in flight.");
       }),
@@ -285,18 +304,14 @@ describe("TodoBoard service", () => {
         yield* setBoardTime("2026-09-20 12:00");
         const board = yield* TodoBoard.TodoBoard;
         yield* board.read({ cwd });
-        const markerPath = NodePath.join(
-          boardDir,
-          "762b5-comment-target",
-          "762b5-comment-target.md",
-        );
-        const external = NodeFS.readFileSync(markerPath, "utf8").replace(
-          "## Links",
-          "## Links\n\n- hand edit by the skill",
-        );
-        NodeFS.writeFileSync(markerPath, external);
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const markerPath = path.join(boardDir, "762b5-comment-target", "762b5-comment-target.md");
+        const original = yield* fs.readFileString(markerPath);
+        const external = original.replace("## Links", "## Links\n\n- hand edit by the skill");
+        yield* fs.writeFileString(markerPath, external);
         yield* board.mutate({ action: "tag", cwd, id: "762b5-comment-target", tag: "beta" });
-        const written = NodeFS.readFileSync(markerPath, "utf8");
+        const written = yield* fs.readFileString(markerPath);
         expect(written).toContain("hand edit by the skill");
         expect(written).toContain("tags: [beta]");
       }),
@@ -327,16 +342,12 @@ describe("board watching", () => {
         const first = yield* Queue.take(seen);
         expect(first.issues.length).toBe(16);
 
-        const markerPath = NodePath.join(
-          boardDir,
-          "762b5-comment-target",
-          "762b5-comment-target.md",
-        );
-        const external = NodeFS.readFileSync(markerPath, "utf8").replace(
-          "## Links",
-          "## Links\n\n- watcher probe edit",
-        );
-        NodeFS.writeFileSync(markerPath, external);
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const markerPath = path.join(boardDir, "762b5-comment-target", "762b5-comment-target.md");
+        const original = yield* fs.readFileString(markerPath);
+        const external = original.replace("## Links", "## Links\n\n- watcher probe edit");
+        yield* fs.writeFileString(markerPath, external);
 
         const second = yield* Queue.take(seen);
         const changed = second.issues.find((issue) => issue.id === "762b5-comment-target");

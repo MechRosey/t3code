@@ -1,24 +1,36 @@
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
-export const fixturesRoot = NodePath.join(
-  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
-  "__fixtures__",
-);
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 
-export const readFixture = (relativePath: string): Buffer =>
-  NodeFS.readFileSync(NodePath.join(fixturesRoot, relativePath));
+class FixtureMarkerNotFound extends Data.TaggedError("FixtureMarkerNotFound")<{
+  readonly message: string;
+}> {}
 
-export const findMarkerPath = (board: string, id: string): string => {
-  const queue = [NodePath.join(fixturesRoot, board)];
-  while (queue.length > 0) {
-    const dir = queue.shift()!;
-    for (const entry of NodeFS.readdirSync(dir, { withFileTypes: true })) {
-      const full = NodePath.join(dir, entry.name);
-      if (entry.isDirectory()) queue.push(full);
-      else if (entry.isFile() && entry.name === `${id}.md`) return full;
+const fixturesUrl = new URL("__fixtures__/", import.meta.url);
+
+export const fixturesRoot = NodeURL.fileURLToPath(fixturesUrl);
+
+const fixturePath = (relative: string): string =>
+  NodeURL.fileURLToPath(new URL(relative.replace(/\\/g, "/"), fixturesUrl));
+
+export const readFixture = (relativePath: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) =>
+    Effect.map(fs.readFile(fixturePath(relativePath)), Buffer.from),
+  );
+
+export const findMarkerPath = (board: string, id: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const entries = yield* fs.readDirectory(fixturePath(board), { recursive: true });
+    const match = entries
+      .map((entry) => entry.replace(/\\/g, "/"))
+      .find((entry) => entry.endsWith(`/${id}.md`));
+    if (match === undefined) {
+      return yield* new FixtureMarkerNotFound({
+        message: `fixture marker not found for ${id} in ${board}`,
+      });
     }
-  }
-  throw new Error(`fixture marker not found for ${id} in ${board}`);
-};
+    return fixturePath(`${board}/${match}`);
+  });
