@@ -37,6 +37,10 @@ function BoardRouteView() {
       ) ?? null,
     [projects, search.cwd, search.environmentId],
   );
+  const environmentId = project?.environmentId ?? search.environmentId;
+  const cwd = project?.workspaceRoot ?? search.cwd ?? null;
+  const breadcrumbLabel =
+    project?.title ?? (cwd !== null ? (cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? cwd) : null);
   return (
     <div className="@container/board flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <WorkspacePageHeader electron={isElectron} className="relative bg-background">
@@ -44,20 +48,18 @@ function BoardRouteView() {
           <WorkspaceBreadcrumbItem current>
             <h1 className="truncate">Board</h1>
           </WorkspaceBreadcrumbItem>
-          {project ? (
-            <>
-              <WorkspaceBreadcrumbItem className="shrink gap-1.5">
-                <SquareKanban aria-hidden className="size-4 text-muted-foreground" />
-                <span className="truncate">{project.title}</span>
-              </WorkspaceBreadcrumbItem>
-            </>
+          {breadcrumbLabel !== null ? (
+            <WorkspaceBreadcrumbItem className="shrink gap-1.5">
+              <SquareKanban aria-hidden className="size-4 text-muted-foreground" />
+              <span className="truncate">{breadcrumbLabel}</span>
+            </WorkspaceBreadcrumbItem>
           ) : null}
         </WorkspaceBreadcrumb>
         <div className="min-w-0 flex-1" />
       </WorkspacePageHeader>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {project ? (
-          <BoardView environmentId={project.environmentId} cwd={project.workspaceRoot} />
+        {environmentId !== undefined ? (
+          <BoardView environmentId={environmentId} cwd={cwd ?? ""} />
         ) : (
           <div className="flex h-full items-center justify-center p-4">
             <p className="text-sm text-muted-foreground">
