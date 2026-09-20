@@ -22,5 +22,4 @@ links:
 ## Links
 
 ## Child resolutions
-
 - child 0fef4-rollup-grandchild (Rollup grandchild) done: Resolved cleanly
