@@ -35,16 +35,24 @@ describe("board UI state storage key", () => {
 describe("board UI state persistence", () => {
   it("round-trips filter and sort state per resolved root", () => {
     const storage = memoryStorage();
-    const state: BoardUiState = { tag: "ui", sort: "created-asc" };
+    const state: BoardUiState = { tag: "ui", sort: "created-asc", dropHintDismissed: false };
     writeBoardUiState(storage, ROOT_A, state);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), state);
   });
 
   it("isolates state per resolved root: one board's filter never leaks into another", () => {
     const storage = memoryStorage();
-    writeBoardUiState(storage, ROOT_A, { tag: "ui", sort: "created-asc" });
+    writeBoardUiState(storage, ROOT_A, {
+      tag: "ui",
+      sort: "created-asc",
+      dropHintDismissed: true,
+    });
     assert.deepEqual(readBoardUiState(storage, ROOT_B), DEFAULT_BOARD_UI_STATE);
-    assert.deepEqual(readBoardUiState(storage, ROOT_A), { tag: "ui", sort: "created-asc" });
+    assert.deepEqual(readBoardUiState(storage, ROOT_A), {
+      tag: "ui",
+      sort: "created-asc",
+      dropHintDismissed: true,
+    });
   });
 
   it("falls back to defaults when nothing is stored", () => {
@@ -67,7 +75,47 @@ describe("board UI state persistence", () => {
 
   it("treats an empty resolved root as no state rather than a shared bucket", () => {
     const storage = memoryStorage();
-    writeBoardUiState(storage, "", { tag: "ui", sort: "created-asc" });
+    writeBoardUiState(storage, "", { tag: "ui", sort: "created-asc", dropHintDismissed: true });
     assert.deepEqual(readBoardUiState(storage, ""), DEFAULT_BOARD_UI_STATE);
+  });
+});
+
+describe("board drop hint persistence", () => {
+  it("defaults the drop hint to visible", () => {
+    assert.equal(DEFAULT_BOARD_UI_STATE.dropHintDismissed, false);
+    assert.deepEqual(readBoardUiState(memoryStorage(), ROOT_A).dropHintDismissed, false);
+  });
+
+  it("round-trips a dismissed drop hint per resolved root", () => {
+    const storage = memoryStorage();
+    writeBoardUiState(storage, ROOT_A, {
+      tag: null,
+      sort: "updated-desc",
+      dropHintDismissed: true,
+    });
+    assert.equal(readBoardUiState(storage, ROOT_A).dropHintDismissed, true);
+    assert.equal(readBoardUiState(storage, ROOT_B).dropHintDismissed, false);
+  });
+
+  it("resets the hint to visible for persisted JSON written before the field existed", () => {
+    const legacy = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({ tag: null, sort: "id-asc" }),
+    });
+    assert.deepEqual(readBoardUiState(legacy, ROOT_A), {
+      tag: null,
+      sort: "id-asc",
+      dropHintDismissed: false,
+    });
+  });
+
+  it("falls back to a visible hint on a wrong-shaped dismiss flag", () => {
+    const wrongShape = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: null,
+        sort: "id-asc",
+        dropHintDismissed: "yes",
+      }),
+    });
+    assert.deepEqual(readBoardUiState(wrongShape, ROOT_A), DEFAULT_BOARD_UI_STATE);
   });
 });
