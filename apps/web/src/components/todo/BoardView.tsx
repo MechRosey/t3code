@@ -10,7 +10,14 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDndContext,
+  useDroppable,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
@@ -110,6 +117,7 @@ import {
   cardHueStyle,
   type BoardCardViewModel,
   type BoardSortOrder,
+  type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
 import { MapView } from "./MapView";
@@ -233,6 +241,27 @@ function BoardDraggableCard({
   );
 }
 
+function BoardDragPreview({
+  model,
+  progressByIssueId,
+}: {
+  readonly model: BoardViewModel;
+  readonly progressByIssueId: Record<string, BoardDispatchProgress>;
+}) {
+  const { active } = useDndContext();
+  if (active === null) return null;
+  const issueId = String(active.id).slice("card:".length);
+  const card = model.columns
+    .flatMap((column) => column.cards)
+    .find((columnCard) => columnCard.issue.id === issueId);
+  if (card === undefined) return null;
+  return (
+    <DragOverlay dropAnimation={null}>
+      <BoardCard card={card} progress={progressByIssueId[issueId] ?? null} onOpen={() => {}} />
+    </DragOverlay>
+  );
+}
+
 function BoardColumnCards({
   status,
   children,
@@ -246,7 +275,7 @@ function BoardColumnCards({
       ref={setNodeRef}
       className={cn(
         "flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md pb-2",
-        isOver && "bg-muted/40",
+        isOver && "outline-[1.5px] outline-dashed outline-primary -outline-offset-4",
       )}
     >
       {children}
@@ -262,7 +291,9 @@ function BoardActionNowTarget({ status }: { readonly status: string }) {
       aria-label="Drop a card here to action it right away"
       className={cn(
         "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[.55rem] font-normal normal-case tracking-normal",
-        isOver ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+        isOver
+          ? "bg-muted text-primary outline-[1.5px] outline-dashed outline-primary outline-offset-[1px]"
+          : "bg-muted text-muted-foreground",
       )}
     >
       <ZapIcon className="size-2.5" />
@@ -1210,6 +1241,7 @@ export function BoardView({
               </div>
             ))}
           </div>
+          <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
         </DndContext>
       )}
       {addTaskOpen ? (
