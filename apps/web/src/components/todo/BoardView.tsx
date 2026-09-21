@@ -855,8 +855,9 @@ export function BoardView({
     readonly threadId: ThreadId;
     readonly threadTitle: string;
     readonly prompt: string;
+    readonly recordAssociation?: () => void;
   }) => {
-    const { dispatchKey, subject, threadId, threadTitle, prompt } = params;
+    const { dispatchKey, subject, threadId, threadTitle, prompt, recordAssociation } = params;
     if (dispatchInFlight.has(dispatchKey)) {
       toastManager.add({
         type: "info",
@@ -891,6 +892,7 @@ export function BoardView({
     }
     const runtimeMode = resolvedSettings.settings.defaultRuntimeMode ?? DEFAULT_RUNTIME_MODE;
     const createdAt = new Date().toISOString();
+    recordAssociation?.();
     setDispatchThreads((prev) => ({ ...prev, [dispatchKey]: threadId }));
     const result = await startTurn({
       environmentId,
@@ -971,13 +973,13 @@ export function BoardView({
     notes: string | null,
   ) => {
     const threadId = newThreadId();
-    recordDispatchAssociation(issue.id, threadId, mode);
     await runBoardDispatch({
       dispatchKey: issue.id,
       subject: issue.id,
       threadId,
       threadTitle: `todo ${issue.id}`,
       prompt: composeBoardDispatchPrompt(issue.id, mode, notes),
+      recordAssociation: () => recordDispatchAssociation(issue.id, threadId, mode),
     });
   };
 
