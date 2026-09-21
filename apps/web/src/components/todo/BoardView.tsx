@@ -424,7 +424,9 @@ function BoardIssueDrawer({
   issue,
   statusOptions,
   boardTags,
+  dispatchInFlight,
   onStatusChange,
+  onDispatch,
   onComment,
   onTagAdd,
   onTagRemove,
@@ -433,7 +435,9 @@ function BoardIssueDrawer({
   readonly issue: TodoIssue;
   readonly statusOptions: ReadonlyArray<string>;
   readonly boardTags: ReadonlyArray<string>;
+  readonly dispatchInFlight: boolean;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
+  readonly onDispatch: (issue: TodoIssue, mode: BoardDropActionMode) => void;
   readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
   readonly onTagAdd: (issue: TodoIssue, tag: string) => void;
   readonly onTagRemove: (issue: TodoIssue, tag: string) => void;
@@ -507,6 +511,26 @@ function BoardIssueDrawer({
                 </MenuRadioGroup>
               </MenuPopup>
             </Menu>
+            <Button
+              size="compact"
+              variant="outline"
+              disabled={dispatchInFlight}
+              aria-label={`Dispatch todo -read ${issue.id}`}
+              onClick={() => onDispatch(issue, "read")}
+            >
+              <ZapIcon className="size-3" />
+              Read
+            </Button>
+            <Button
+              size="compact"
+              variant="outline"
+              disabled={dispatchInFlight}
+              aria-label={`Dispatch todo -do ${issue.id}`}
+              onClick={() => onDispatch(issue, "doing")}
+            >
+              <ZapIcon className="size-3" />
+              Do
+            </Button>
             {issue.tags.map((tag) => (
               <span
                 key={tag}
@@ -1119,7 +1143,9 @@ export function BoardView({
           issue={selectedIssue}
           statusOptions={statusOptions}
           boardTags={model?.tags ?? []}
+          dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
           onStatusChange={(issue, status) => void changeStatus(issue, status)}
+          onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}
           onComment={addComment}
           onTagAdd={addTag}
           onTagRemove={removeTag}
