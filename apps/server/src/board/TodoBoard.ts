@@ -194,7 +194,7 @@ export const make = Effect.gen(function* () {
           if (!(yield* existsDirectory(pointer))) {
             return yield* toError(
               "pointer_dangling",
-              `Board pointer resolves to '${pointer}', which does not exist.`,
+              `Board pointer resolves to '${pointer}', which does not exist. The central board may have moved or been removed; re-register this repo or restore the board.`,
             );
           }
           return pointer;

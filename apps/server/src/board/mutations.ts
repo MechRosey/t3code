@@ -1,5 +1,11 @@
 import type { BoardIssue } from "./frontmatter.ts";
-import { canonicalStatus, isKnownStatus, LINK_TYPES, type BoardLinkType } from "./vocabulary.ts";
+import {
+  BOARD_STATUSES,
+  canonicalStatus,
+  isKnownStatus,
+  LINK_TYPES,
+  type BoardLinkType,
+} from "./vocabulary.ts";
 import { resolveLinkId } from "./issues.ts";
 
 export type BoardRuleFailure =
@@ -29,7 +35,10 @@ export const applyStatus = (
   now: string,
 ): BoardIssue => {
   if (!isKnownStatus(args.status)) {
-    throw new BoardRuleError("invalid_status", `Invalid status '${args.status}'.`);
+    throw new BoardRuleError(
+      "invalid_status",
+      `Invalid status '${args.status}'. Allowed: ${BOARD_STATUSES.join(", ")}.`,
+    );
   }
   const next = withUpdated(issue, now);
   next.fm.status = canonicalStatus(args.status);
