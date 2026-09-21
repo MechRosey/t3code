@@ -492,7 +492,11 @@ function BoardIssueDrawer({
                 <MenuSeparator />
                 <div
                   className="flex items-center gap-1 p-1"
-                  onKeyDown={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") {
+                      event.stopPropagation();
+                    }
+                  }}
                 >
                   <Input
                     size="compact"
