@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
 import { useCallback, useState } from "react";
 
 import { isBoardSortOrder, type BoardSortOrder } from "./boardView.logic";
@@ -6,14 +7,20 @@ import { isBoardSortOrder, type BoardSortOrder } from "./boardView.logic";
 export interface BoardUiState {
   readonly tag: string | null;
   readonly sort: BoardSortOrder;
+  readonly dropHintDismissed: boolean;
 }
 
-export const DEFAULT_BOARD_UI_STATE: BoardUiState = { tag: null, sort: "updated-desc" };
+export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
+  tag: null,
+  sort: "updated-desc",
+  dropHintDismissed: false,
+};
 
 const BoundedTag = Schema.String.check(Schema.isMaxLength(200));
 const BoardUiStateSchema = Schema.Struct({
   tag: Schema.NullOr(BoundedTag),
   sort: Schema.String,
+  dropHintDismissed: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 
 const decodeBoardUiState = Schema.decodeUnknownOption(BoardUiStateSchema);
@@ -38,9 +45,9 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort } = decoded.value;
+    const { tag, sort, dropHintDismissed } = decoded.value;
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
-    return { tag, sort };
+    return { tag, sort, dropHintDismissed };
   } catch {
     return DEFAULT_BOARD_UI_STATE;
   }
