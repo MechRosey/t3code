@@ -20,6 +20,10 @@ function loadMermaid() {
 export function MermaidView({ source }: { readonly source: string }) {
   const [state, setState] = useState<MermaidRenderState>({ kind: "pending" });
   useEffect(() => {
+    if (source.trim().length === 0) {
+      setState({ kind: "failed" });
+      return;
+    }
     let cancelled = false;
     setState({ kind: "pending" });
     void loadMermaid()

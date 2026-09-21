@@ -101,6 +101,27 @@ describe("splitMermaidFences", () => {
     ]);
   });
 
+  it("keeps an empty mermaid fence as a mermaid segment", () => {
+    const body = "before\n```mermaid\n```\nafter";
+    assert.deepEqual(splitMermaidFences(body), [
+      { kind: "markdown", text: "before\n" },
+      { kind: "mermaid", source: "" },
+      { kind: "markdown", text: "after" },
+    ]);
+  });
+
+  it("keeps a mermaid fence containing only blank lines as a mermaid segment", () => {
+    const body = "```mermaid\n\n```";
+    assert.deepEqual(splitMermaidFences(body), [{ kind: "mermaid", source: "" }]);
+  });
+
+  it("strips carriage returns from mermaid fence content", () => {
+    const body = "```mermaid\r\nflowchart TD\r\nA --> B\r\n```";
+    assert.deepEqual(splitMermaidFences(body), [
+      { kind: "mermaid", source: "flowchart TD\nA --> B" },
+    ]);
+  });
+
   it("does not close a long fence with a shorter one", () => {
     const body = "````mermaid\ngraph TD\n```\nmore\n````";
     assert.deepEqual(splitMermaidFences(body), [

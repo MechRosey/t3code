@@ -5,6 +5,10 @@ export type MermaidFenceSegment =
 const FENCE_OPEN_REGEX = /^ {0,3}(`{3,})\s*(\S*)/;
 const FENCE_CLOSE_REGEX = /^ {0,3}(`{3,})\s*$/;
 
+function joinMermaidSource(lines: ReadonlyArray<string>): string {
+  return lines.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line)).join("\n");
+}
+
 function segment(segments: MermaidFenceSegment[], kind: "markdown", text: string): void;
 function segment(segments: MermaidFenceSegment[], kind: "mermaid", source: string): void;
 function segment(
@@ -12,7 +16,7 @@ function segment(
   kind: "markdown" | "mermaid",
   value: string,
 ): void {
-  if (value.length === 0) return;
+  if (kind === "markdown" && value.length === 0) return;
   segments.push(kind === "markdown" ? { kind, text: value } : { kind, source: value });
 }
 
@@ -60,7 +64,7 @@ export function splitMermaidFences(body: string): ReadonlyArray<MermaidFenceSegm
     if (closeTicks !== undefined && closeTicks.length >= fence.openerLength) {
       if (fence.mermaid) {
         flushMarkdown();
-        segment(segments, "mermaid", fence.content.join("\n"));
+        segment(segments, "mermaid", joinMermaidSource(fence.content));
       } else {
         markdown.push(fence.openLine, ...fence.content, line);
       }
@@ -76,7 +80,7 @@ export function splitMermaidFences(body: string): ReadonlyArray<MermaidFenceSegm
   }
   if (fence.mermaid) {
     flushMarkdown();
-    segment(segments, "mermaid", fence.content.join("\n"));
+    segment(segments, "mermaid", joinMermaidSource(fence.content));
   } else {
     markdown.push(fence.openLine, ...fence.content);
     flushMarkdown();
