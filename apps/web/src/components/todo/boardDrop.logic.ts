@@ -25,6 +25,7 @@ export function resolveBoardDropAction(
   speed: BoardDropSpeed,
 ): BoardDropAction {
   if (sourceStatus === targetStatus) return { kind: "noop" };
+  if (targetStatus === "delegated") return { kind: "noop" };
   if (speed === "status-only") return { kind: "status", status: targetStatus };
   if (BOARD_DISPATCH_STATUSES.has(targetStatus)) {
     return { kind: "dispatch", mode: targetStatus as BoardDropActionMode };
