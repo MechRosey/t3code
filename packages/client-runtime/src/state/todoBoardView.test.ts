@@ -585,20 +585,20 @@ describe("board view-model golden", () => {
     const doing = model.columns.find((column) => column.status === "doing")!;
     assert.deepEqual(
       doing.cards.map((card) => card.issue.id),
-      ["child"],
+      ["child", "root"],
     );
     const childCard = doing.cards[0]!;
     assert.equal(childCard.glyph, "▶");
     assert.equal(childCard.badge, null);
     assert.deepEqual(childCard.parent, { id: "root", title: "epic one" });
+    const rootCard = doing.cards[1]!;
+    assert.equal(rootCard.badge, "human");
+    assert.equal(rootCard.isRoot, true);
     const delegated = model.columns.find((column) => column.status === "delegated")!;
     assert.deepEqual(
       delegated.cards.map((card) => card.issue.id),
-      ["root"],
+      [],
     );
-    const rootCard = delegated.cards[0]!;
-    assert.equal(rootCard.badge, "human");
-    assert.equal(rootCard.isRoot, true);
     const blockedCard = model.columns
       .find((column) => column.status === "blocked")!
       .cards.find((card) => card.issue.id === "blocked")!;

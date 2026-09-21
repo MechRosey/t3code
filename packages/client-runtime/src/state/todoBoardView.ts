@@ -33,7 +33,7 @@ const BOARD_COLUMN_LABELS: Record<string, string> = {
 const DELEGATED_CLOSED_CHILD_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 
 function isDelegatedIssue(issue: TodoIssue, childrenByParent: Map<string, Array<TodoIssue>>) {
-  if (issue.status !== "doing") return false;
+  if (issue.status !== "done") return false;
   const children = childrenByParent.get(issue.id);
   if (children === undefined) return false;
   return children.some((child) => !DELEGATED_CLOSED_CHILD_STATUSES.has(child.status));
