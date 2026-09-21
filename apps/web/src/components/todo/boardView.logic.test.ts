@@ -4,7 +4,6 @@ import { assert, describe, it } from "vite-plus/test";
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_GLYPHS,
-  boardArchiveBlockers,
   boardArchiveEligibleSubtrees,
   boardArchiveSweepCandidates,
   boardQuestionBadge,
@@ -314,7 +313,6 @@ describe("archive eligibility", () => {
       boardArchiveSweepCandidates([root, child, grandchild]).map((candidate) => candidate.id),
       ["root"],
     );
-    assert.deepEqual(boardArchiveBlockers([root, child, grandchild], "root"), []);
   });
 
   it("marks a root with one open child ineligible and names the blocker", () => {
@@ -328,12 +326,9 @@ describe("archive eligibility", () => {
     });
     assert.deepEqual(boardArchiveEligibleSubtrees([root, openChild]), []);
     assert.deepEqual(boardArchiveSweepCandidates([root, openChild]), []);
-    assert.deepEqual(boardArchiveBlockers([root, openChild], "root"), [
-      { id: "kid", status: "doing" },
-    ]);
   });
 
-  it("counts unknown statuses as open in eligibility and blockers", () => {
+  it("counts unknown statuses as open in eligibility", () => {
     const root = issue({ id: "root", title: "root", status: "done" });
     const weird = issue({
       id: "weird",
@@ -343,9 +338,6 @@ describe("archive eligibility", () => {
       status: "zebra",
     });
     assert.deepEqual(boardArchiveEligibleSubtrees([root, weird]), []);
-    assert.deepEqual(boardArchiveBlockers([root, weird], "root"), [
-      { id: "weird", status: "zebra" },
-    ]);
   });
 
   it("makes a nested closed subtree eligible for the flyout but not the sweep", () => {
@@ -365,16 +357,14 @@ describe("archive eligibility", () => {
     assert.deepEqual(boardArchiveSweepCandidates([epic, mid, leaf]), []);
   });
 
-  it("names the subtree root itself as its own blocker when it is open", () => {
+  it("counts an open subtree root as ineligible", () => {
     const open = issue({ id: "open", title: "open", status: "backlog" });
     assert.deepEqual(boardArchiveEligibleSubtrees([open]), []);
-    assert.deepEqual(boardArchiveBlockers([open], "open"), [{ id: "open", status: "backlog" }]);
   });
 
-  it("returns no blockers for an unknown id and treats a missing parent as its own subtree", () => {
+  it("treats a missing parent as its own subtree", () => {
     const orphan = issue({ id: "orphan", title: "orphan", parentId: "ghost", depth: 3 });
     const closed = issue({ id: "shut", title: "shut", status: "cancelled" });
-    assert.deepEqual(boardArchiveBlockers([orphan, closed], "nope"), []);
     assert.deepEqual(
       boardArchiveEligibleSubtrees([orphan, closed]).map((candidate) => candidate.id),
       ["shut"],

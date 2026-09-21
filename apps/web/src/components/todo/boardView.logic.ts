@@ -251,16 +251,4 @@ export function boardArchiveSweepCandidates(issues: ReadonlyArray<TodoIssue>): A
   return boardArchiveEligibleSubtrees(issues).filter((issue) => issue.depth === 0);
 }
 
-export function boardArchiveBlockers(
-  issues: ReadonlyArray<TodoIssue>,
-  id: string,
-): Array<{ readonly id: string; readonly status: string }> {
-  const root = issues.find((issue) => issue.id === id);
-  if (root === undefined) return [];
-  const childrenByParent = buildChildIssuesIndex(issues);
-  return subtreeOf(root, childrenByParent)
-    .filter((member) => !isArchiveClosedStatus(member.status))
-    .map((member) => ({ id: member.id, status: member.status }));
-}
-
 export { isBoardSortOrder };
