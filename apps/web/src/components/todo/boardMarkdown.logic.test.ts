@@ -44,9 +44,9 @@ describe("splitMermaidFences", () => {
     assert.deepEqual(splitMermaidFences(body), [
       { kind: "markdown", text: "a\n" },
       { kind: "mermaid", source: "graph TD" },
-      { kind: "markdown", text: "\nb\n" },
+      { kind: "markdown", text: "b\n" },
       { kind: "mermaid", source: "sequenceDiagram\nA->>B: hi" },
-      { kind: "markdown", text: "\nc" },
+      { kind: "markdown", text: "c" },
     ]);
   });
 
