@@ -2251,3 +2251,35 @@ code {
     transparent 1px 5px
   );
 }
+
+.board-map-node {
+  fill: var(--card);
+  stroke: var(--contrast-muted-foreground);
+  stroke-opacity: 0.35;
+}
+
+.board-map-node-root {
+  fill: hsl(var(--card-hue) 30% 95%);
+  stroke: hsl(var(--card-hue) 55% 48%);
+  stroke-opacity: 1;
+}
+
+.dark .board-map-node-root {
+  fill: hsl(var(--card-hue) 30% 17%);
+  stroke: hsl(var(--card-hue) 60% 62%);
+}
+
+.board-map-node-child {
+  fill: hsl(var(--card-hue) 16% 96%);
+  stroke: hsl(var(--card-hue) 50% 66%);
+  stroke-opacity: 1;
+}
+
+.dark .board-map-node-child {
+  fill: hsl(var(--card-hue) 16% 15%);
+  stroke: hsl(var(--card-hue) 52% 74%);
+}
+
+.board-map-node-blocked {
+  stroke-dasharray: 4 3;
+}

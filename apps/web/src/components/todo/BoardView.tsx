@@ -16,6 +16,7 @@ import {
   ArrowLeftIcon,
   Maximize2Icon,
   Minimize2Icon,
+  NetworkIcon,
   TagIcon,
   ZapIcon,
 } from "lucide-react";
@@ -84,7 +85,9 @@ import {
   type BoardCardViewModel,
   type BoardSortOrder,
 } from "./boardView.logic";
-import { useBoardUiState } from "./boardUiState";
+import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
+import { MapView } from "./MapView";
+import { buildMapView } from "./mapView.logic";
 
 export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
@@ -500,6 +503,10 @@ export function BoardView({
     () => (snapshotQuery.data === null ? null : buildBoardViewModel(snapshotQuery.data, uiState)),
     [snapshotQuery.data, uiState],
   );
+  const mapModel = useMemo(
+    () => (snapshotQuery.data === null ? null : buildMapView(snapshotQuery.data, uiState)),
+    [snapshotQuery.data, uiState],
+  );
   const issuesById = useMemo(
     () => new Map((snapshotQuery.data?.issues ?? []).map((issue) => [issue.id, issue] as const)),
     [snapshotQuery.data],
@@ -740,6 +747,13 @@ export function BoardView({
         {model !== null ? (
           <>
             <BoardMenuControl
+              label={uiState.view === "map" ? "Map" : "Columns"}
+              icon={<NetworkIcon className="size-3.5" />}
+              value={uiState.view}
+              options={BOARD_VIEW_OPTIONS}
+              onChange={(next) => updateUiState({ view: next as BoardViewKind })}
+            />
+            <BoardMenuControl
               label={uiState.tag ?? "All tags"}
               icon={<TagIcon className="size-3.5" />}
               value={uiState.tag ?? BOARD_TAG_ALL}
@@ -811,6 +825,14 @@ export function BoardView({
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">Loading board…</p>
         </div>
+      ) : uiState.view === "map" ? (
+        mapModel === null || mapModel.nodes.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+            <p className="text-xs text-muted-foreground">No active issues.</p>
+          </div>
+        ) : (
+          <MapView model={mapModel} onNodeOpen={setSelectedIssueId} />
+        )
       ) : model.columns.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">No active issues.</p>

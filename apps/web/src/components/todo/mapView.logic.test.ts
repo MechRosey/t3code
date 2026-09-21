@@ -58,7 +58,9 @@ describe("map view-model nodes", () => {
     assert.equal(root.hue, 210);
     assert.equal(root.tinted, true);
     assert.equal(root.badge, null);
+    assert.equal(root.isRoot, true);
     assert.equal(nodes.get("child")!.level, 1);
+    assert.equal(nodes.get("child")!.isRoot, false);
   });
 
   it("leaves hueless and blocked nodes untinted", () => {

@@ -25,6 +25,7 @@ export interface MapNodeViewModel {
   readonly colourClass: string;
   readonly hue: number | null;
   readonly tinted: boolean;
+  readonly isRoot: boolean;
   readonly badge: BoardQuestionBadge;
   readonly level: number;
   readonly x: number;
@@ -66,8 +67,9 @@ function levelsByIssueId(
     let current: TodoIssue | undefined = issue;
     while (current !== undefined) {
       chain.push(current);
-      const parentId = current.parentId;
-      const parent = parentId === null ? undefined : issuesById.get(parentId);
+      const parentId: string | null = current.parentId;
+      const parent: TodoIssue | undefined =
+        parentId === null ? undefined : issuesById.get(parentId);
       if (parent === undefined) {
         assignChainLevels(chain, levels, chain.length - 1);
         break;
@@ -134,7 +136,12 @@ function depthFirstOrder(
   return order;
 }
 
-function toNode(issue: TodoIssue, level: number, indexInLevel: number): MapNodeViewModel {
+function toNode(
+  issue: TodoIssue,
+  level: number,
+  indexInLevel: number,
+  isRoot: boolean,
+): MapNodeViewModel {
   return {
     id: issue.id,
     title: issue.title,
@@ -144,6 +151,7 @@ function toNode(issue: TodoIssue, level: number, indexInLevel: number): MapNodeV
     colourClass: boardStatusColourClass(issue.status),
     hue: issue.rootHue,
     tinted: issue.rootHue !== null && issue.status !== "blocked",
+    isRoot,
     badge: boardQuestionBadge(issue),
     level,
     x: indexInLevel * (MAP_NODE_WIDTH + MAP_LEVEL_GAP_X),
@@ -196,7 +204,7 @@ export function buildMapView(
     const level = levels.get(issue.id) ?? 0;
     const index = indexInLevel.get(level) ?? 0;
     indexInLevel.set(level, index + 1);
-    return toNode(issue, level, index);
+    return toNode(issue, level, index, issue.parentId === null || !issuesById.has(issue.parentId));
   });
   const countByLevel = [...indexInLevel.entries()];
   const width = countByLevel.reduce(
