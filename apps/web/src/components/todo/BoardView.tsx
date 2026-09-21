@@ -17,7 +17,9 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   NetworkIcon,
+  PlusIcon,
   TagIcon,
+  XIcon,
   ZapIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -45,7 +47,16 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "../ui/menu";
 import {
   Sheet,
   SheetClose,
@@ -75,6 +86,7 @@ import {
   type BoardDropActionMode,
   type BoardDropSpeed,
 } from "./boardDrop.logic";
+import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
@@ -358,20 +370,32 @@ function BoardMenuControl({
 function BoardIssueDrawer({
   issue,
   statusOptions,
+  boardTags,
   onStatusChange,
   onComment,
+  onTagAdd,
+  onTagRemove,
   onClose,
 }: {
   readonly issue: TodoIssue;
   readonly statusOptions: ReadonlyArray<string>;
+  readonly boardTags: ReadonlyArray<string>;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
   readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
+  readonly onTagAdd: (issue: TodoIssue, tag: string) => void;
+  readonly onTagRemove: (issue: TodoIssue, tag: string) => void;
   readonly onClose: () => void;
 }) {
   const [commentText, setCommentText] = useState("");
   const [commentActor, setCommentActor] = useState(DEFAULT_COMMENT_ACTOR);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [newTagText, setNewTagText] = useState("");
   const preparedComment = prepareCommentText(commentText);
+  const preparedTag = normalizeTagInput(newTagText, issue.tags);
+  const tagSuggestions = useMemo(
+    () => unusedBoardTags(boardTags, issue.tags),
+    [boardTags, issue.tags],
+  );
   const submitComment = async () => {
     const text = preparedComment;
     if (text === null || submittingComment) return;
@@ -379,6 +403,12 @@ function BoardIssueDrawer({
     const succeeded = await onComment(issue, text, prepareCommentActor(commentActor));
     setSubmittingComment(false);
     if (succeeded) setCommentText("");
+  };
+  const submitNewTag = () => {
+    const prepared = preparedTag;
+    if (prepared === null) return;
+    onTagAdd(issue, prepared.tag);
+    setNewTagText("");
   };
   return (
     <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
@@ -427,11 +457,63 @@ function BoardIssueDrawer({
             {issue.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[.6rem] text-muted-foreground"
+                className="flex items-center gap-0.5 rounded-sm bg-muted py-0.5 ps-1.5 pe-1 font-mono text-[.6rem] text-muted-foreground"
               >
                 {tag}
+                <button
+                  type="button"
+                  aria-label={`Remove tag ${tag}`}
+                  className="cursor-pointer rounded-sm text-muted-foreground/50 outline-none hover:text-foreground focus-visible:text-foreground"
+                  onClick={() => onTagRemove(issue, tag)}
+                >
+                  <XIcon className="size-2.5" />
+                </button>
               </span>
             ))}
+            <Menu>
+              <MenuTrigger
+                render={
+                  <Button size="compact" variant="ghost-muted" aria-label="Add a tag">
+                    <PlusIcon className="size-3" />
+                    <span>Add tag</span>
+                  </Button>
+                }
+              />
+              <MenuPopup align="start" className="min-w-40">
+                {tagSuggestions.length > 0 ? (
+                  tagSuggestions.map((tag) => (
+                    <MenuItem key={tag} onClick={() => onTagAdd(issue, tag)}>
+                      {tag}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuGroupLabel>No unused board tags</MenuGroupLabel>
+                )}
+                <MenuSeparator />
+                <div
+                  className="flex items-center gap-1 p-1"
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <Input
+                    size="compact"
+                    className="flex-1"
+                    placeholder="New tag"
+                    aria-label="New tag"
+                    value={newTagText}
+                    onChange={(event) => setNewTagText(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        submitNewTag();
+                      }
+                    }}
+                  />
+                  <Button size="compact" disabled={preparedTag === null} onClick={submitNewTag}>
+                    Add
+                  </Button>
+                </div>
+              </MenuPopup>
+            </Menu>
           </div>
           {issue.body.trim().length > 0 ? (
             <div className="text-xs whitespace-pre-wrap text-foreground/80">{issue.body}</div>
@@ -570,6 +652,33 @@ export function BoardView({
           : "The board rejected the comment.",
     });
     return false;
+  };
+
+  const mutateTag = async (issue: TodoIssue, tag: string, remove?: boolean) => {
+    const result = await mutate({
+      environmentId,
+      input: { action: "tag", cwd, id: issue.id, tag, remove },
+    });
+    if (result._tag !== "Failure") return;
+    const failure = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: `Could not ${remove ? "remove" : "add"} the tag on ${issue.id}`,
+      description:
+        failure instanceof Error && failure.message.length > 0
+          ? failure.message
+          : "The board rejected the tag change.",
+    });
+  };
+
+  const addTag = (issue: TodoIssue, rawTag: string) => {
+    const prepared = normalizeTagInput(rawTag, issue.tags);
+    if (prepared === null) return;
+    void mutateTag(issue, prepared.tag);
+  };
+
+  const removeTag = (issue: TodoIssue, tag: string) => {
+    void mutateTag(issue, tag, true);
   };
 
   const applyStatusDrop = async (issue: TodoIssue, status: string) => {
@@ -891,8 +1000,11 @@ export function BoardView({
         <BoardIssueDrawer
           issue={selectedIssue}
           statusOptions={statusOptions}
+          boardTags={model?.tags ?? []}
           onStatusChange={(issue, status) => void changeStatus(issue, status)}
           onComment={addComment}
+          onTagAdd={addTag}
+          onTagRemove={removeTag}
           onClose={() => setSelectedIssueId(null)}
         />
       ) : null}
