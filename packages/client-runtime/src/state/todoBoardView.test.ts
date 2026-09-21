@@ -221,8 +221,8 @@ describe("board grouping and filtering", () => {
 });
 
 describe("delegated fold", () => {
-  it("moves a doing issue with an open child out of Doing into Delegated", () => {
-    const parent = issue({ id: "parent", title: "parent", status: "doing" });
+  it("moves a done issue with an open child out of Done into Delegated", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "done" });
     const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, status: "read" });
     const model = buildBoardViewModel(snapshot([parent, child]), DEFAULT_BOARD_UI_STATE);
     const columnOf = (id: string) =>
@@ -231,19 +231,19 @@ describe("delegated fold", () => {
     assert.equal(columnOf("kid"), "read");
   });
 
-  it("keeps the doing presentation on a folded card", () => {
-    const parent = issue({ id: "parent", title: "parent", status: "doing" });
+  it("keeps the done presentation on a folded card", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "done" });
     const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, status: "doing" });
     const model = buildBoardViewModel(snapshot([parent, child]), DEFAULT_BOARD_UI_STATE);
     const card = model.columns
       .find((column) => column.status === "delegated")!
       .cards.find((entry) => entry.issue.id === "parent")!;
-    assert.equal(card.glyph, boardStatusGlyph("doing"));
-    assert.equal(card.colourClass, boardStatusColourClass("doing"));
+    assert.equal(card.glyph, boardStatusGlyph("done"));
+    assert.equal(card.colourClass, boardStatusColourClass("done"));
   });
 
   it("folds on an unknown child status, which counts as open", () => {
-    const parent = issue({ id: "parent", title: "parent", status: "doing" });
+    const parent = issue({ id: "parent", title: "parent", status: "done" });
     const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, status: "zebra" });
     const model = buildBoardViewModel(snapshot([parent, child]), DEFAULT_BOARD_UI_STATE);
     const delegated = model.columns.find((column) => column.status === "delegated")!;
@@ -253,8 +253,8 @@ describe("delegated fold", () => {
     );
   });
 
-  it("keeps a doing issue in Doing when every child is done or cancelled", () => {
-    const parent = issue({ id: "parent", title: "parent", status: "doing" });
+  it("keeps a done issue in Done when every child is done or cancelled", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "done" });
     const doneChild = issue({
       id: "donekid",
       title: "done kid",
@@ -273,6 +273,28 @@ describe("delegated fold", () => {
       snapshot([parent, doneChild, cancelledChild]),
       DEFAULT_BOARD_UI_STATE,
     );
+    const done = model.columns.find((column) => column.status === "done")!;
+    assert.deepEqual(
+      done.cards.map((card) => card.issue.id),
+      ["donekid", "parent"],
+    );
+    assert.equal(model.columns.find((column) => column.status === "delegated")!.cards.length, 0);
+  });
+
+  it("keeps a done issue without children in Done", () => {
+    const solo = issue({ id: "solo", title: "solo", status: "done" });
+    const model = buildBoardViewModel(snapshot([solo]), DEFAULT_BOARD_UI_STATE);
+    const done = model.columns.find((column) => column.status === "done")!;
+    assert.deepEqual(
+      done.cards.map((card) => card.issue.id),
+      ["solo"],
+    );
+  });
+
+  it("keeps a doing issue with an open child in Doing", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "doing" });
+    const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, status: "read" });
+    const model = buildBoardViewModel(snapshot([parent, child]), DEFAULT_BOARD_UI_STATE);
     const doing = model.columns.find((column) => column.status === "doing")!;
     assert.deepEqual(
       doing.cards.map((card) => card.issue.id),
@@ -281,14 +303,16 @@ describe("delegated fold", () => {
     assert.equal(model.columns.find((column) => column.status === "delegated")!.cards.length, 0);
   });
 
-  it("keeps a doing issue without children in Doing", () => {
-    const solo = issue({ id: "solo", title: "solo", status: "doing" });
-    const model = buildBoardViewModel(snapshot([solo]), DEFAULT_BOARD_UI_STATE);
-    const doing = model.columns.find((column) => column.status === "doing")!;
+  it("never folds a cancelled issue with an open child", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "cancelled" });
+    const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, status: "read" });
+    const model = buildBoardViewModel(snapshot([parent, child]), DEFAULT_BOARD_UI_STATE);
+    const cancelled = model.columns.find((column) => column.status === "cancelled")!;
     assert.deepEqual(
-      doing.cards.map((card) => card.issue.id),
-      ["solo"],
+      cancelled.cards.map((card) => card.issue.id),
+      ["parent"],
     );
+    assert.equal(model.columns.find((column) => column.status === "delegated")!.cards.length, 0);
   });
 
   it("never folds a child whose parent id resolves to nothing", () => {
@@ -301,8 +325,18 @@ describe("delegated fold", () => {
     );
   });
 
+  it("never folds a done child whose parent id resolves to nothing", () => {
+    const orphan = issue({ id: "orphan", title: "orphan", parentId: "ghost", status: "done" });
+    const model = buildBoardViewModel(snapshot([orphan]), DEFAULT_BOARD_UI_STATE);
+    const done = model.columns.find((column) => column.status === "done")!;
+    assert.deepEqual(
+      done.cards.map((card) => card.issue.id),
+      ["orphan"],
+    );
+  });
+
   it("folds on the full snapshot's child statuses, not the tag-filtered view", () => {
-    const parent = issue({ id: "parent", title: "parent", status: "doing", tags: ["ui"] });
+    const parent = issue({ id: "parent", title: "parent", status: "done", tags: ["ui"] });
     const child = issue({
       id: "kid",
       title: "kid",
