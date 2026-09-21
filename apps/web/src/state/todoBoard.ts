@@ -1,42 +1,14 @@
-import { WS_METHODS, type EnvironmentId, type TodoBoardMutateInput } from "@t3tools/contracts";
-import {
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcQueryAtomFamily,
-  createEnvironmentRpcSubscriptionAtomFamily,
-  type AtomCommandConcurrency,
-} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId } from "@t3tools/contracts";
+import { createTodoBoardAtoms } from "@t3tools/client-runtime/state/todo-board";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useEnvironmentQuery } from "./query";
 
-export const todoBoardRead = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
-  label: "environment-data:todo-board:read",
-  tag: WS_METHODS.todoBoardRead,
-  staleTimeMs: 30_000,
-  idleTtlMs: 5 * 60_000,
-});
+const todoBoardAtoms = createTodoBoardAtoms(connectionAtomRuntime);
 
-export const todoBoardSubscribe = createEnvironmentRpcSubscriptionAtomFamily(
-  connectionAtomRuntime,
-  {
-    label: "environment-data:todo-board:subscribe",
-    tag: WS_METHODS.todoBoardSubscribe,
-    idleTtlMs: 5 * 60_000,
-  },
-);
-
-export const todoBoardMutate = createEnvironmentRpcCommand(connectionAtomRuntime, {
-  label: "environment-data:todo-board:mutate",
-  tag: WS_METHODS.todoBoardMutate,
-  concurrency: {
-    mode: "serial",
-    key: ({ environmentId, input }: { environmentId: string; input: TodoBoardMutateInput }) =>
-      JSON.stringify([environmentId, input.cwd]),
-  } satisfies AtomCommandConcurrency<{
-    environmentId: string;
-    input: TodoBoardMutateInput;
-  }>,
-});
+export const todoBoardRead = todoBoardAtoms.read;
+export const todoBoardSubscribe = todoBoardAtoms.subscribe;
+export const todoBoardMutate = todoBoardAtoms.mutate;
 
 export function useTodoBoardAvailability(
   environmentId: EnvironmentId | null,

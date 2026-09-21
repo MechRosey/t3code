@@ -18,7 +18,10 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { toastManager } from "../ui/toast";
-import { boardArchiveEligibleSubtrees, boardArchiveSweepCandidates } from "./boardView.logic";
+import {
+  boardArchiveEligibleSubtrees,
+  boardArchiveSweepCandidates,
+} from "@t3tools/client-runtime/state/todo-board-view";
 
 const isTodoBoardError = Schema.is(TodoBoardError);
 

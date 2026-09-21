@@ -84,7 +84,7 @@ import {
   cardHueStyle,
   type BoardCardViewModel,
   type BoardSortOrder,
-} from "./boardView.logic";
+} from "@t3tools/client-runtime/state/todo-board-view";
 import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
 import { MapView } from "./MapView";
 import { buildMapView } from "./mapView.logic";

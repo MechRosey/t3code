@@ -7,7 +7,7 @@ import {
   boardStatusLabel,
   filterIssuesByTag,
   type BoardQuestionBadge,
-} from "./boardView.logic";
+} from "@t3tools/client-runtime/state/todo-board-view";
 
 export const MAP_NODE_WIDTH = 190;
 export const MAP_NODE_HEIGHT = 64;

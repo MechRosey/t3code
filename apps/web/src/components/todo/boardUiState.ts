@@ -2,7 +2,10 @@ import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import { useCallback, useState } from "react";
 
-import { isBoardSortOrder, type BoardSortOrder } from "./boardView.logic";
+import {
+  isBoardSortOrder,
+  type BoardSortOrder,
+} from "@t3tools/client-runtime/state/todo-board-view";
 
 export type BoardViewKind = "columns" | "map";
 

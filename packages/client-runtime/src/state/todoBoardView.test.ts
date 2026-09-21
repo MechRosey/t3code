@@ -16,8 +16,9 @@ import {
   cardHueStyle,
   filterIssuesByTag,
   sortBoardIssues,
-} from "./boardView.logic";
-import { DEFAULT_BOARD_UI_STATE, type BoardUiState } from "./boardUiState";
+} from "./todoBoardView.ts";
+
+const DEFAULT_BOARD_UI_STATE = { tag: null, sort: "updated-desc" } as const;
 
 function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">): TodoIssue {
   return {
@@ -415,12 +416,10 @@ describe("board view-model golden", () => {
         links: { blocks: ["blocked"], relates: [] },
       }),
     ];
-    const uiState: BoardUiState = {
+    const uiState = {
       tag: "ui",
       sort: "updated-desc",
-      dropHintDismissed: false,
-      view: "columns",
-    };
+    } as const;
     const model = buildBoardViewModel(snapshot(issues), uiState);
     assert.equal(model.root, "C:/repo/.todo");
     assert.equal(model.repoName, "repo");
