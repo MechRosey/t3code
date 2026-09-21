@@ -8,12 +8,14 @@ import {
   type TodoIssue,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
 import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
   ArrowLeftIcon,
+  GitCompareIcon,
   Maximize2Icon,
   Minimize2Icon,
   NetworkIcon,
@@ -23,11 +25,14 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { newMessageId, newThreadId } from "~/lib/utils";
 import { resolveAppModelSelectionState } from "~/modelSelection";
 import { NO_PROVIDER_MODEL_SELECTION } from "~/providerInstances";
+import { useRightPanelStore } from "../../rightPanelStore";
+import { buildThreadRouteParams } from "../../threadRoutes";
 import { useEnvironmentQuery } from "../../state/query";
 import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
@@ -90,6 +95,11 @@ import {
   type BoardDropSpeed,
 } from "./boardDrop.logic";
 import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
+import {
+  BOARD_DISPATCH_ACTOR,
+  composeThreadAssociationComment,
+  resolveThreadAssociation,
+} from "./threadAssociation.logic";
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
@@ -425,22 +435,26 @@ function BoardIssueDrawer({
   statusOptions,
   boardTags,
   dispatchInFlight,
+  viewDiff,
   onStatusChange,
   onDispatch,
   onComment,
   onTagAdd,
   onTagRemove,
+  onViewDiff,
   onClose,
 }: {
   readonly issue: TodoIssue;
   readonly statusOptions: ReadonlyArray<string>;
   readonly boardTags: ReadonlyArray<string>;
   readonly dispatchInFlight: boolean;
+  readonly viewDiff: { readonly threadMissing: boolean } | null;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
   readonly onDispatch: (issue: TodoIssue, mode: BoardDropActionMode) => void;
   readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
   readonly onTagAdd: (issue: TodoIssue, tag: string) => void;
   readonly onTagRemove: (issue: TodoIssue, tag: string) => void;
+  readonly onViewDiff: () => void;
   readonly onClose: () => void;
 }) {
   const [commentText, setCommentText] = useState("");
@@ -531,6 +545,27 @@ function BoardIssueDrawer({
               <ZapIcon className="size-3" />
               Do
             </Button>
+            {viewDiff !== null ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                  <Button
+                    size="compact"
+                    variant="outline"
+                    disabled={viewDiff.threadMissing}
+                    aria-label="View the diff of the thread recorded for this ticket"
+                    onClick={onViewDiff}
+                  >
+                    <GitCompareIcon className="size-3" />
+                    View diff
+                  </Button>
+                </TooltipTrigger>
+                <TooltipPopup>
+                  {viewDiff.threadMissing
+                    ? "The recorded thread is gone"
+                    : "Open the recorded thread's diff"}
+                </TooltipPopup>
+              </Tooltip>
+            ) : null}
             {issue.tags.map((tag) => (
               <span
                 key={tag}
@@ -646,6 +681,7 @@ export function BoardView({
 }: BoardViewProps) {
   const probe = useAtomValue(todoBoardRead({ environmentId, input: { cwd } }));
   const snapshotQuery = useEnvironmentQuery(todoBoardSubscribe({ environmentId, input: { cwd } }));
+  const navigate = useNavigate();
   const resolvedRoot = snapshotQuery.data?.root ?? null;
   const [uiState, updateUiState] = useBoardUiState(resolvedRoot);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -687,6 +723,13 @@ export function BoardView({
     () => new Map((threadSnapshot?.threads ?? []).map((thread) => [thread.id, thread] as const)),
     [threadSnapshot],
   );
+  const selectedIssueViewDiff = useMemo(() => {
+    if (selectedIssue === null) return null;
+    if (selectedIssue.status !== "done" && selectedIssue.status !== "cancelled") return null;
+    const association = resolveThreadAssociation(selectedIssue.body);
+    if (association === null) return null;
+    return { threadMissing: !shellsById.has(association.threadId) };
+  }, [selectedIssue, shellsById]);
   const progressByIssueId = useMemo(() => {
     const out: Record<string, BoardDispatchProgress> = {};
     for (const [issueId, threadId] of Object.entries(dispatchThreads)) {
@@ -809,10 +852,11 @@ export function BoardView({
   const runBoardDispatch = async (params: {
     readonly dispatchKey: string;
     readonly subject: string;
+    readonly threadId: ThreadId;
     readonly threadTitle: string;
     readonly prompt: string;
   }) => {
-    const { dispatchKey, subject, threadTitle, prompt } = params;
+    const { dispatchKey, subject, threadId, threadTitle, prompt } = params;
     if (dispatchInFlight.has(dispatchKey)) {
       toastManager.add({
         type: "info",
@@ -846,7 +890,6 @@ export function BoardView({
       return;
     }
     const runtimeMode = resolvedSettings.settings.defaultRuntimeMode ?? DEFAULT_RUNTIME_MODE;
-    const threadId = newThreadId();
     const createdAt = new Date().toISOString();
     setDispatchThreads((prev) => ({ ...prev, [dispatchKey]: threadId }));
     const result = await startTurn({
@@ -893,14 +936,46 @@ export function BoardView({
     });
   };
 
+  const recordDispatchAssociation = (
+    issueId: string,
+    threadId: ThreadId,
+    mode: BoardDropActionMode,
+  ) => {
+    void (async () => {
+      const result = await mutate({
+        environmentId,
+        input: {
+          action: "comment",
+          cwd,
+          id: issueId,
+          text: composeThreadAssociationComment(threadId, mode),
+          by: BOARD_DISPATCH_ACTOR,
+        },
+      });
+      if (result._tag !== "Failure") return;
+      const failure = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: `Dispatched ${issueId} but the diff association was not recorded`,
+        description:
+          failure instanceof Error && failure.message.length > 0
+            ? failure.message
+            : "The board rejected the comment.",
+      });
+    })();
+  };
+
   const dispatchBoardAction = async (
     issue: TodoIssue,
     mode: BoardDropActionMode,
     notes: string | null,
   ) => {
+    const threadId = newThreadId();
+    recordDispatchAssociation(issue.id, threadId, mode);
     await runBoardDispatch({
       dispatchKey: issue.id,
       subject: issue.id,
+      threadId,
       threadTitle: `todo ${issue.id}`,
       prompt: composeBoardDispatchPrompt(issue.id, mode, notes),
     });
@@ -912,8 +987,28 @@ export function BoardView({
     void runBoardDispatch({
       dispatchKey: BOARD_NEW_TASK_DISPATCH_KEY,
       subject: "the new task",
+      threadId: newThreadId(),
       threadTitle: composeBoardNewTaskTitle(ideaText),
       prompt,
+    });
+  };
+
+  const openRecordedDiff = (issue: TodoIssue) => {
+    const association = resolveThreadAssociation(issue.body);
+    if (association === null) return;
+    if (!shellsById.has(association.threadId)) {
+      toastManager.add({
+        type: "error",
+        title: `The thread recorded for ${issue.id} is gone`,
+        description: "It was deleted, so its diff is no longer reachable.",
+      });
+      return;
+    }
+    const threadRef = scopeThreadRef(environmentId, association.threadId);
+    useRightPanelStore.getState().open(threadRef, "diff");
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
     });
   };
 
@@ -1151,11 +1246,16 @@ export function BoardView({
           statusOptions={statusOptions}
           boardTags={model?.tags ?? []}
           dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
+          viewDiff={selectedIssueViewDiff}
           onStatusChange={(issue, status) => void changeStatus(issue, status)}
           onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}
           onComment={addComment}
           onTagAdd={addTag}
           onTagRemove={removeTag}
+          onViewDiff={() => {
+            if (selectedIssue === null) return;
+            openRecordedDiff(selectedIssue);
+          }}
           onClose={() => setSelectedIssueId(null)}
         />
       ) : null}
