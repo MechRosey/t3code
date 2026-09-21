@@ -139,6 +139,10 @@ const BOARD_TAG_ALL = "\u0000all";
 
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
+const BOARD_CARD_BLOCKER_CAP = 4;
+
+const shortBoardId = (id: string) => id.slice(0, 5);
+
 function BoardCard({
   card,
   onOpen,
@@ -159,64 +163,84 @@ function BoardCard({
         card.issue.status === "blocked" && "board-card-blocked",
       )}
     >
-      <div className="flex items-start gap-1.5">
-        <span className="min-w-0 flex-1 text-xs font-medium break-words text-foreground/90">
-          {card.issue.title}
-        </span>
-        {card.badge !== null ? (
-          <span
-            title={card.badge === "human" ? "Open question for a human" : "Open question"}
-            className={cn(
-              "shrink-0 rounded-full px-1 text-[.6rem] leading-4 font-bold",
-              card.badge === "human" ? "bg-error text-white" : "bg-warning text-warning-foreground",
-            )}
-          >
-            ?
-          </span>
-        ) : null}
-        <span
-          aria-label={card.statusLabel}
-          title={card.statusLabel}
-          className={cn("shrink-0 text-xs leading-4", card.colourClass)}
-        >
-          {card.glyph}
-        </span>
-      </div>
-      {progress !== null ? (
-        <div className="mt-1 flex items-center gap-1 text-[.55rem] text-primary">
-          <Spinner className="size-3" />
-          {progress === "starting" ? "dispatching" : "agent running"}
-        </div>
-      ) : null}
+      <span className="block text-xs font-medium break-words text-foreground/90">
+        {card.issue.title}
+      </span>
       {card.parent !== null ? (
         <div className="mt-1 flex min-w-0">
-          <span className="max-w-full truncate rounded-sm bg-muted px-1 text-[.55rem] text-muted-foreground">
-            {card.parent.title}
+          <span
+            title={card.parent.title}
+            className="truncate text-[.625rem] leading-4 text-muted-foreground/70"
+          >
+            {shortBoardId(card.parent.id)}
           </span>
         </div>
       ) : null}
       {card.blockedBy.length > 0 ? (
         <div className="mt-1 flex min-w-0 flex-col gap-0.5">
-          {card.blockedBy.map((blocker) => (
+          {card.blockedBy.slice(0, BOARD_CARD_BLOCKER_CAP).map((blocker) => (
             <span
               key={blocker.id}
-              className="min-w-0 truncate text-[.55rem] text-error/90"
-              title={`Blocked by ${blocker.id}`}
+              className="min-w-0 truncate text-[.625rem] leading-4 text-error/90"
+              title={`Blocked by ${blocker.id} ${blocker.title}`}
             >
-              blocked by {blocker.id} {blocker.title}
+              {"\u276f"} {shortBoardId(blocker.id)}
             </span>
           ))}
+          {card.blockedBy.length > BOARD_CARD_BLOCKER_CAP ? (
+            <span className="text-[.625rem] leading-4 text-error/90">
+              +{card.blockedBy.length - BOARD_CARD_BLOCKER_CAP}
+            </span>
+          ) : null}
         </div>
       ) : null}
-      <div className="mt-1 flex items-baseline gap-1.5">
-        <span className="shrink-0 font-mono text-[.55rem] text-muted-foreground/60">
-          {card.issue.id}
+      {progress !== null ? (
+        <div className="mt-1 flex items-center gap-1 text-[.625rem] leading-4 text-primary">
+          <Spinner className="size-3" />
+          {progress === "starting" ? "dispatching" : "agent running"}
+        </div>
+      ) : null}
+      <div className="mt-1.5 flex items-center gap-1">
+        <span
+          title={card.issue.id}
+          className="shrink-0 font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
+        >
+          {shortBoardId(card.issue.id)}
         </span>
         {card.issue.tags.length > 0 ? (
-          <span className="min-w-0 truncate font-mono text-[.55rem] text-muted-foreground/50">
-            {card.issue.tags.join(", ")}
-          </span>
+          <div className="flex min-w-0 flex-wrap gap-1">
+            {card.issue.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-sm bg-muted px-1 text-[.625rem] leading-4 text-muted-foreground/70"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         ) : null}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {card.badge !== null ? (
+            <span
+              title={card.badge === "human" ? "Open question for a human" : "Open question"}
+              className={cn(
+                "rounded-full px-1 text-[.625rem] leading-4 font-bold",
+                card.badge === "human"
+                  ? "bg-error text-white"
+                  : "bg-warning text-warning-foreground",
+              )}
+            >
+              ?
+            </span>
+          ) : null}
+          <span
+            aria-label={card.statusLabel}
+            title={card.statusLabel}
+            className={cn("shrink-0 text-xs leading-4", card.colourClass)}
+          >
+            {card.glyph}
+          </span>
+        </span>
       </div>
     </button>
   );
