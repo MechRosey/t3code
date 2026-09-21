@@ -29,6 +29,7 @@ import {
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
+import { BoardOverflowMenu } from "./BoardOverflowMenu";
 import {
   DEFAULT_COMMENT_ACTOR,
   prepareCommentActor,
@@ -393,6 +394,13 @@ export function BoardView({
               }))}
               onChange={(next) => updateUiState({ sort: next as BoardSortOrder })}
             />
+            {snapshotQuery.data === null ? null : (
+              <BoardOverflowMenu
+                environmentId={environmentId}
+                cwd={cwd}
+                issues={snapshotQuery.data.issues}
+              />
+            )}
           </>
         ) : null}
         {onOpenFullPage ? (
