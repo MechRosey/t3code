@@ -3,8 +3,11 @@ import { assert, describe, it } from "vite-plus/test";
 import {
   boardDispatchProgress,
   boardStatusRollup,
+  BOARD_NEW_TASK_DISPATCH_KEY,
   BOARD_PIPELINE_STEPS,
   composeBoardDispatchPrompt,
+  composeBoardNewTaskPrompt,
+  composeBoardNewTaskTitle,
   resolveBoardDropAction,
   type BoardDropAction,
 } from "./boardDrop.logic";
@@ -107,6 +110,79 @@ describe("dispatch prompt composition", () => {
     const prompt = composeBoardDispatchPrompt("5d03e", "doing", "keep it minimal");
     assert.ok(!prompt.toLowerCase().includes("claude"));
     assert.ok(!prompt.toLowerCase().includes("agent tool"));
+  });
+});
+
+describe("new task prompt composition", () => {
+  it("composes a bare /todo new prompt carrying the idea", () => {
+    assert.equal(
+      composeBoardNewTaskPrompt("Add a retry button to the login form"),
+      "/todo new\n\nAdd a retry button to the login form",
+    );
+  });
+
+  it("trims surrounding whitespace from the idea", () => {
+    assert.equal(
+      composeBoardNewTaskPrompt("  fix the flaky map test  "),
+      "/todo new\n\nfix the flaky map test",
+    );
+  });
+
+  it("rides optional placement hints as plain trailing lines", () => {
+    assert.equal(
+      composeBoardNewTaskPrompt("Add a retry button", { column: "doing", tag: "api" }),
+      "/todo new\n\nAdd a retry button\n\ncolumn: doing\ntag: api",
+    );
+  });
+
+  it("composes hints independently when only one is set", () => {
+    assert.equal(
+      composeBoardNewTaskPrompt("Add a retry button", { column: null, tag: "api" }),
+      "/todo new\n\nAdd a retry button\n\ntag: api",
+    );
+    assert.equal(
+      composeBoardNewTaskPrompt("Add a retry button", { column: "read" }),
+      "/todo new\n\nAdd a retry button\n\ncolumn: read",
+    );
+  });
+
+  it("rejects an empty or whitespace-only idea", () => {
+    assert.equal(composeBoardNewTaskPrompt(""), null);
+    assert.equal(composeBoardNewTaskPrompt("   \n\t  "), null);
+  });
+
+  it("ignores blank hint values", () => {
+    assert.equal(
+      composeBoardNewTaskPrompt("Add a retry button", { column: "   ", tag: "" }),
+      "/todo new\n\nAdd a retry button",
+    );
+  });
+
+  it("stays provider-agnostic user text with no harness framing", () => {
+    const prompt = composeBoardNewTaskPrompt("Add a retry button", { column: "doing" });
+    assert.ok(!prompt!.toLowerCase().includes("claude"));
+    assert.ok(!prompt!.toLowerCase().includes("agent tool"));
+  });
+
+  it("exposes the synthetic dispatch key used while the ticket does not exist", () => {
+    assert.equal(BOARD_NEW_TASK_DISPATCH_KEY, "__new__");
+  });
+});
+
+describe("new task thread title composition", () => {
+  it("titles the thread from the idea text", () => {
+    assert.equal(composeBoardNewTaskTitle("  Add a retry button  "), "Add a retry button");
+  });
+
+  it("truncates a long idea to a bounded title", () => {
+    const idea = "a".repeat(100);
+    const title = composeBoardNewTaskTitle(idea);
+    assert.ok(title.length <= 60);
+    assert.equal(title, "a".repeat(60));
+  });
+
+  it("falls back to a fixed title for a blank idea", () => {
+    assert.equal(composeBoardNewTaskTitle("   "), "todo new");
   });
 });
 
