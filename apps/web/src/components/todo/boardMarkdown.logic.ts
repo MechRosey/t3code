@@ -35,28 +35,29 @@ export function splitMermaidFences(body: string): ReadonlyArray<MermaidFenceSegm
 
   for (const line of lines) {
     if (fence === null) {
-      const open = line.match(FENCE_OPEN_REGEX);
-      if (open === null) {
+      const open = FENCE_OPEN_REGEX.exec(line);
+      const openTicks = open?.[1];
+      if (openTicks === undefined) {
         markdown.push(line);
         continue;
       }
-      const [, ticks, info] = open;
-      const mermaid = info.toLowerCase() === "mermaid";
+      const mermaid = (open?.[2] ?? "").toLowerCase() === "mermaid";
       if (mermaid) {
         const last = markdown[markdown.length - 1];
         if (markdown.length > 0 && last !== "") markdown.push("");
         flushMarkdown();
       }
       fence = {
-        openerLength: ticks.length,
+        openerLength: openTicks.length,
         mermaid,
         openLine: line,
         content: [],
       };
       continue;
     }
-    const close = line.match(FENCE_CLOSE_REGEX);
-    if (close !== null && close[1].length >= fence.openerLength) {
+    const close = FENCE_CLOSE_REGEX.exec(line);
+    const closeTicks = close?.[1];
+    if (closeTicks !== undefined && closeTicks.length >= fence.openerLength) {
       if (fence.mermaid) {
         flushMarkdown();
         segment(segments, "mermaid", fence.content.join("\n"));

@@ -76,6 +76,7 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
+import { BoardMarkdown } from "./BoardMarkdown";
 import {
   DEFAULT_COMMENT_ACTOR,
   prepareCommentActor,
@@ -631,9 +632,7 @@ function BoardIssueDrawer({
               </MenuPopup>
             </Menu>
           </div>
-          {issue.body.trim().length > 0 ? (
-            <div className="text-xs whitespace-pre-wrap text-foreground/80">{issue.body}</div>
-          ) : null}
+          {issue.body.trim().length > 0 ? <BoardMarkdown body={issue.body} /> : null}
           <div className="flex flex-col gap-2">
             <Textarea
               size="sm"
