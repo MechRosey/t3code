@@ -701,13 +701,35 @@ export function BoardView({
   );
   const newTaskProgress = progressByIssueId[BOARD_NEW_TASK_DISPATCH_KEY] ?? null;
 
+  const rollupAfterStatus = async (issue: TodoIssue, status: string) => {
+    const rollup = boardStatusRollup(issue, status);
+    if (rollup === null) return;
+    const rollupResult = await mutate({
+      environmentId,
+      input: { action: "rollup", cwd, id: issue.id, status: rollup.status, text: rollup.text },
+    });
+    if (rollupResult._tag !== "Failure") return;
+    const rollupFailure = squashAtomCommandFailure(rollupResult);
+    toastManager.add({
+      type: "error",
+      title: `Moved ${issue.id} but the rollup failed`,
+      description:
+        rollupFailure instanceof Error && rollupFailure.message.length > 0
+          ? rollupFailure.message
+          : "The board rejected the rollup.",
+    });
+  };
+
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
     const result = await mutate({
       environmentId,
       input: { action: "status", cwd, id: issue.id, status },
     });
-    if (result._tag !== "Failure") return;
+    if (result._tag !== "Failure") {
+      await rollupAfterStatus(issue, status);
+      return;
+    }
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
@@ -770,22 +792,7 @@ export function BoardView({
       input: { action: "status", cwd, id: issue.id, status },
     });
     if (result._tag !== "Failure") {
-      const rollup = boardStatusRollup(issue, status);
-      if (rollup === null) return;
-      const rollupResult = await mutate({
-        environmentId,
-        input: { action: "rollup", cwd, id: issue.id, status: rollup.status, text: rollup.text },
-      });
-      if (rollupResult._tag !== "Failure") return;
-      const rollupFailure = squashAtomCommandFailure(rollupResult);
-      toastManager.add({
-        type: "error",
-        title: `Moved ${issue.id} but the rollup failed`,
-        description:
-          rollupFailure instanceof Error && rollupFailure.message.length > 0
-            ? rollupFailure.message
-            : "The board rejected the rollup.",
-      });
+      await rollupAfterStatus(issue, status);
       return;
     }
     const failure = squashAtomCommandFailure(result);
