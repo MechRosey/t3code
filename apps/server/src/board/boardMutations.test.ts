@@ -4,7 +4,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 
-import { parseIssue, serializeIssue } from "./frontmatter.ts";
+import { parseIssue, serializeIssue, type BoardIssue } from "./frontmatter.ts";
 import {
   applyComment,
   applyLink,
@@ -156,6 +156,28 @@ it.layer(NodeServices.layer)((it) => {
           { id: "df3cf-archive-child", status: "cancelled" },
         ]),
       ).not.toThrow();
+    });
+
+    it("lists the canonical allowed statuses like the skill's status refusal", () => {
+      const issue: BoardIssue = {
+        fm: {
+          id: "e20d1-status-target",
+          title: "Status target",
+          status: "backlog",
+          created: "2026-09-20 12:00",
+          updated: "2026-09-20 12:00",
+          colour: undefined,
+          epic: undefined,
+          tags: [],
+          links: { blocks: [], relates: [] },
+        },
+        body: "",
+      };
+      const refusal = () => applyStatus(issue, { status: "sideways" }, NOW);
+      expect(refusal).toThrow(BoardRuleError);
+      expect(refusal).toThrow(
+        "Invalid status 'sideways'. Allowed: backlog, doing, read, blocked, done, cancelled.",
+      );
     });
 
     it("names open direct children with their statuses like the skill's status refusal", () => {

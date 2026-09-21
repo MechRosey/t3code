@@ -167,6 +167,9 @@ describe("TodoBoard service", () => {
         const board = yield* TodoBoard.TodoBoard;
         const error = yield* board.read({ cwd }).pipe(Effect.flip);
         expect(error.failure).toBe("pointer_dangling");
+        expect(error.message).toBe(
+          `Board pointer resolves to '${path.join(target, "missing", ".todo")}', which does not exist. The central board may have moved or been removed; re-register this repo or restore the board.`,
+        );
       }),
     );
 
