@@ -43,6 +43,36 @@ export function composeBoardDispatchPrompt(
   return trimmedNotes.length > 0 ? `${base}\n\n${trimmedNotes}` : base;
 }
 
+export type BoardNewTaskHints = {
+  readonly column?: string | null | undefined;
+  readonly tag?: string | null | undefined;
+};
+
+export const BOARD_NEW_TASK_DISPATCH_KEY = "__new__";
+
+const BOARD_NEW_TASK_TITLE_LIMIT = 60;
+
+export function composeBoardNewTaskPrompt(
+  ideaText: string,
+  hints?: BoardNewTaskHints,
+): string | null {
+  const idea = ideaText.trim();
+  if (idea.length === 0) return null;
+  const hintLines: string[] = [];
+  const column = hints?.column?.trim() ?? "";
+  const tag = hints?.tag?.trim() ?? "";
+  if (column.length > 0) hintLines.push(`column: ${column}`);
+  if (tag.length > 0) hintLines.push(`tag: ${tag}`);
+  const hintBlock = hintLines.length > 0 ? `\n\n${hintLines.join("\n")}` : "";
+  return `/todo new\n\n${idea}${hintBlock}`;
+}
+
+export function composeBoardNewTaskTitle(ideaText: string): string {
+  const idea = ideaText.trim();
+  if (idea.length === 0) return "todo new";
+  return idea.slice(0, BOARD_NEW_TASK_TITLE_LIMIT);
+}
+
 export function boardStatusRollup(
   issue: { readonly id: string; readonly parentId: string | null },
   status: string,
