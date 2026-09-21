@@ -15,6 +15,7 @@ import { todoBoardMutate, todoBoardRead, todoBoardSubscribe } from "../../state/
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import {
   Sheet,
@@ -27,6 +28,12 @@ import {
 } from "../ui/sheet";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { Textarea } from "../ui/textarea";
+import {
+  DEFAULT_COMMENT_ACTOR,
+  prepareCommentActor,
+  prepareCommentText,
+} from "./commentForm.logic";
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
@@ -168,13 +175,27 @@ function BoardIssueDrawer({
   issue,
   statusOptions,
   onStatusChange,
+  onComment,
   onClose,
 }: {
   readonly issue: TodoIssue;
   readonly statusOptions: ReadonlyArray<string>;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
+  readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
   readonly onClose: () => void;
 }) {
+  const [commentText, setCommentText] = useState("");
+  const [commentActor, setCommentActor] = useState(DEFAULT_COMMENT_ACTOR);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const preparedComment = prepareCommentText(commentText);
+  const submitComment = async () => {
+    const text = preparedComment;
+    if (text === null || submittingComment) return;
+    setSubmittingComment(true);
+    const succeeded = await onComment(issue, text, prepareCommentActor(commentActor));
+    setSubmittingComment(false);
+    if (succeeded) setCommentText("");
+  };
   return (
     <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
       <SheetPopup side="right" className="max-w-md">
@@ -231,6 +252,33 @@ function BoardIssueDrawer({
           {issue.body.trim().length > 0 ? (
             <div className="text-xs whitespace-pre-wrap text-foreground/80">{issue.body}</div>
           ) : null}
+          <div className="flex flex-col gap-2">
+            <Textarea
+              size="sm"
+              placeholder="Add a comment to the ticket log"
+              aria-label="Comment text"
+              value={commentText}
+              onChange={(event) => setCommentText(event.currentTarget.value)}
+            />
+            <div className="flex items-center gap-2">
+              <Input
+                size="compact"
+                className="flex-1"
+                placeholder="Commenting as"
+                aria-label="Commenting as"
+                value={commentActor}
+                onChange={(event) => setCommentActor(event.currentTarget.value)}
+              />
+              <Button
+                size="compact"
+                variant="outline"
+                disabled={preparedComment === null || submittingComment}
+                onClick={() => void submitComment()}
+              >
+                Comment
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-col gap-1 text-[.65rem] text-muted-foreground">
             <span>created {issue.created}</span>
             <span>updated {issue.updated}</span>
@@ -289,6 +337,24 @@ export function BoardView({
           ? failure.message
           : "The board rejected the change.",
     });
+  };
+
+  const addComment = async (issue: TodoIssue, text: string, by: string | undefined) => {
+    const result = await mutate({
+      environmentId,
+      input: { action: "comment", cwd, id: issue.id, text, by },
+    });
+    if (result._tag !== "Failure") return true;
+    const failure = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: `Could not add the comment to ${issue.id}`,
+      description:
+        failure instanceof Error && failure.message.length > 0
+          ? failure.message
+          : "The board rejected the comment.",
+    });
+    return false;
   };
 
   const showMissing =
@@ -404,6 +470,7 @@ export function BoardView({
           issue={selectedIssue}
           statusOptions={statusOptions}
           onStatusChange={(issue, status) => void changeStatus(issue, status)}
+          onComment={addComment}
           onClose={() => setSelectedIssueId(null)}
         />
       ) : null}
