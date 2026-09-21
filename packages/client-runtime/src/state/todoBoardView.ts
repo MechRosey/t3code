@@ -10,6 +10,35 @@ export const BOARD_STATUS_ORDER = [
 ] as const;
 export type BoardStatus = (typeof BOARD_STATUS_ORDER)[number];
 
+export const BOARD_COLUMN_ORDER = [
+  "backlog",
+  "read",
+  "doing",
+  "delegated",
+  "blocked",
+  "done",
+  "cancelled",
+] as const;
+
+const BOARD_COLUMN_LABELS: Record<string, string> = {
+  backlog: "Backlog",
+  read: "Read",
+  doing: "Doing",
+  delegated: "Delegated",
+  blocked: "Blocked",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+
+const DELEGATED_CLOSED_CHILD_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
+
+function isDelegatedIssue(issue: TodoIssue, childrenByParent: Map<string, Array<TodoIssue>>) {
+  if (issue.status !== "doing") return false;
+  const children = childrenByParent.get(issue.id);
+  if (children === undefined) return false;
+  return children.some((child) => !DELEGATED_CLOSED_CHILD_STATUSES.has(child.status));
+}
+
 const BOARD_STATUS_LABELS: Record<BoardStatus, string> = {
   backlog: "Backlog",
   doing: "Doing",
@@ -181,19 +210,21 @@ export function buildBoardViewModel(
 ): BoardViewModel {
   const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue] as const));
   const blockedByIndex = buildBlockedByIndex(snapshot.issues);
+  const childrenByParent = buildChildIssuesIndex(snapshot.issues);
   const visible = sortBoardIssues(filterIssuesByTag(snapshot.issues, uiState.tag), uiState.sort);
   const grouped = new Map<string, Array<TodoIssue>>();
   for (const issue of visible) {
-    const column = grouped.get(issue.status);
-    if (column === undefined) {
-      grouped.set(issue.status, [issue]);
+    const column = isDelegatedIssue(issue, childrenByParent) ? "delegated" : issue.status;
+    const cards = grouped.get(column);
+    if (cards === undefined) {
+      grouped.set(column, [issue]);
     } else {
-      column.push(issue);
+      cards.push(issue);
     }
   }
-  const known: ReadonlyArray<string> = BOARD_STATUS_ORDER;
+  const known: ReadonlyArray<string> = BOARD_COLUMN_ORDER;
   const extra = [...grouped.keys()]
-    .filter((status) => !isBoardStatus(status))
+    .filter((status) => !isBoardStatus(status) && status !== "delegated")
     .sort((left, right) => left.localeCompare(right));
   return {
     root: snapshot.root,
@@ -201,7 +232,7 @@ export function buildBoardViewModel(
     tags: boardTags(snapshot.issues),
     columns: [...known, ...extra].map((status) => ({
       status,
-      label: boardStatusLabel(status),
+      label: BOARD_COLUMN_LABELS[status] ?? status,
       cards: (grouped.get(status) ?? []).map((issue) => toCard(issue, issuesById, blockedByIndex)),
     })),
   };
