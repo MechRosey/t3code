@@ -18,6 +18,7 @@ import { AppText as Text } from "./components/AppText";
 import { getCompactBrandHeaderOptions } from "./components/CompactBrandTitle";
 import { ArchivedThreadsRouteScreen } from "./features/archive/ArchivedThreadsRouteScreen";
 import { useAgentNotificationNavigation } from "./features/agent-awareness/notificationNavigation";
+import { BoardRouteScreen } from "./features/board/BoardRouteScreen";
 import { ConnectOnboardingRouteScreen } from "./features/cloud/ConnectOnboardingRouteScreen";
 import { useConnectOnboardingNavigation } from "./features/cloud/connectOnboardingNavigation";
 import { AttachmentFileScreen } from "./features/files/AttachmentFileScreen";
@@ -589,6 +590,18 @@ export const RootStack = createNativeStackNavigator({
       screen: ThreadRouteScreen,
       linking: THREAD_LINKING_PREFIX,
       options: GLASS_HEADER_OPTIONS,
+    }),
+    Board: createNativeStackScreen({
+      screen: BoardRouteScreen,
+      linking: "board",
+      options: {
+        // Android pushes the board as a regular full page with an in-screen
+        // back header; iOS uses the solid header with the resolved root as
+        // the subtitle (set dynamically in BoardRouteScreen).
+        ...(Platform.OS === "android"
+          ? { presentation: "card" as const, headerShown: false }
+          : SOLID_HEADER_OPTIONS),
+      },
     }),
     ThreadTerminal: createNativeStackScreen({
       screen: ThreadTerminalRouteScreen,

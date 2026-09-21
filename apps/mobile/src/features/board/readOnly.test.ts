@@ -1,13 +1,16 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import * as NodeFS from "node:fs";
+import * as NodeURL from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
-const featureDir = fileURLToPath(new URL(".", import.meta.url));
+const featureDir = NodeURL.fileURLToPath(new URL(".", import.meta.url));
 
 function featureSources(): ReadonlyArray<{ readonly name: string; readonly source: string }> {
-  return readdirSync(featureDir)
-    .filter((name) => (/\.tsx?$/.test(name) || /\.ts$/.test(name)) && !/\.test\./.test(name))
-    .map((name) => ({ name, source: readFileSync(`${featureDir}${name}`, "utf8") }));
+  return NodeFS.readdirSync(featureDir)
+    .filter((name) => (name.endsWith(".ts") || name.endsWith(".tsx")) && !name.includes(".test."))
+    .map((name) => ({
+      name,
+      source: NodeFS.readFileSync(`${featureDir}${name}`, "utf8"),
+    }));
 }
 
 describe("board feature read-only invariant", () => {
