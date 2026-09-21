@@ -1,20 +1,49 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import {
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  type EnvironmentId,
+  type ServerProvider,
+  type ThreadId,
+  type TodoBoardSnapshot,
+  type TodoIssue,
+} from "@t3tools/contracts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
+import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
   ArrowLeftIcon,
   Maximize2Icon,
   Minimize2Icon,
   TagIcon,
+  ZapIcon,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 
+import { useEnvironmentSettings } from "~/hooks/useSettings";
+import { newMessageId, newThreadId } from "~/lib/utils";
+import { resolveAppModelSelectionState } from "~/modelSelection";
+import { NO_PROVIDER_MODEL_SELECTION } from "~/providerInstances";
 import { useEnvironmentQuery } from "../../state/query";
+import { useProjects } from "../../state/entities";
+import { serverEnvironment } from "../../state/server";
 import { todoBoardMutate, todoBoardRead, todoBoardSubscribe } from "../../state/todoBoard";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
+import { SidebarPointerSensor } from "../Sidebar.pointer";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import {
@@ -26,6 +55,7 @@ import {
   SheetPopup,
   SheetTitle,
 } from "../ui/sheet";
+import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
@@ -35,6 +65,16 @@ import {
   prepareCommentActor,
   prepareCommentText,
 } from "./commentForm.logic";
+import {
+  boardDispatchProgress,
+  BOARD_PIPELINE_STEPS,
+  boardStatusRollup,
+  composeBoardDispatchPrompt,
+  resolveBoardDropAction,
+  type BoardDispatchProgress,
+  type BoardDropActionMode,
+  type BoardDropSpeed,
+} from "./boardDrop.logic";
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
@@ -61,12 +101,16 @@ const BOARD_SORT_LABELS = new Map(
 
 const BOARD_TAG_ALL = "\u0000all";
 
+const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
+
 function BoardCard({
   card,
   onOpen,
+  progress,
 }: {
   readonly card: BoardCardViewModel;
   readonly onOpen: () => void;
+  readonly progress: BoardDispatchProgress | null;
 }) {
   return (
     <button
@@ -102,6 +146,12 @@ function BoardCard({
           {card.glyph}
         </span>
       </div>
+      {progress !== null ? (
+        <div className="mt-1 flex items-center gap-1 text-[.55rem] text-primary">
+          <Spinner className="size-3" />
+          {progress === "starting" ? "dispatching" : "agent running"}
+        </div>
+      ) : null}
       {card.parent !== null ? (
         <div className="mt-1 flex min-w-0">
           <span className="max-w-full truncate rounded-sm bg-muted px-1 text-[.55rem] text-muted-foreground">
@@ -133,6 +183,137 @@ function BoardCard({
         ) : null}
       </div>
     </button>
+  );
+}
+
+function BoardDraggableCard({
+  card,
+  onOpen,
+  progress,
+}: {
+  readonly card: BoardCardViewModel;
+  readonly onOpen: () => void;
+  readonly progress: BoardDispatchProgress | null;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `card:${card.issue.id}`,
+  });
+  return (
+    <div ref={setNodeRef} {...listeners} {...attributes} className={cn(isDragging && "opacity-40")}>
+      <BoardCard card={card} onOpen={onOpen} progress={progress} />
+    </div>
+  );
+}
+
+function BoardColumnCards({
+  status,
+  children,
+}: {
+  readonly status: string;
+  readonly children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `column:${status}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md pb-2",
+        isOver && "bg-muted/40",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BoardActionNowTarget({ status }: { readonly status: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `dispatch:${status}` });
+  return (
+    <span
+      ref={setNodeRef}
+      title="Drop a card here to action it right away"
+      className={cn(
+        "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[.55rem] font-normal normal-case tracking-normal",
+        isOver ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+      )}
+    >
+      <ZapIcon className="size-2.5" />
+      Action now
+    </span>
+  );
+}
+
+function BoardDispatchDialog({
+  issue,
+  mode,
+  hintDismissed,
+  onDismissHint,
+  onConfirm,
+  onFlipStatus,
+  onClose,
+}: {
+  readonly issue: TodoIssue;
+  readonly mode: BoardDropActionMode;
+  readonly hintDismissed: boolean;
+  readonly onDismissHint: () => void;
+  readonly onConfirm: (notes: string | null) => void;
+  readonly onFlipStatus: () => void;
+  readonly onClose: () => void;
+}) {
+  const [notes, setNotes] = useState("");
+  const verb = mode === "doing" ? "do" : "read";
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogPopup className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">
+            Run /todo -{verb} {issue.id}?
+          </DialogTitle>
+          <DialogDescription>
+            Runs the full todo pipeline in its own session on this board's project.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel className="flex flex-col gap-3">
+          {issue.body.trim().length > 0 ? (
+            <div className="max-h-40 overflow-y-auto text-xs whitespace-pre-wrap text-foreground/80">
+              {issue.body}
+            </div>
+          ) : null}
+          <div className="text-xs text-muted-foreground">
+            Pipeline: {BOARD_PIPELINE_STEPS.join(" -> ")}
+          </div>
+          {!hintDismissed ? (
+            <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 p-2 text-[.65rem] text-muted-foreground">
+              <span className="min-w-0 flex-1">
+                Dropping a card on Read or Doing actions the ticket, not just its column. Use "Just
+                flip status" to move it without running anything.
+              </span>
+              <Button size="compact" variant="ghost-muted" onClick={onDismissHint}>
+                Don't show this hint again
+              </Button>
+            </div>
+          ) : null}
+          <Textarea
+            size="sm"
+            placeholder="Extra direction for the agent (optional)"
+            aria-label="Dispatch notes"
+            value={notes}
+            onChange={(event) => setNotes(event.currentTarget.value)}
+          />
+        </DialogPanel>
+        <DialogFooter>
+          <Button size="compact" variant="ghost-muted" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="compact" variant="outline" onClick={onFlipStatus}>
+            Just flip status
+          </Button>
+          <Button size="compact" onClick={() => onConfirm(notes.trim().length > 0 ? notes : null)}>
+            Run now
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 }
 
@@ -303,7 +484,18 @@ export function BoardView({
   const resolvedRoot = snapshotQuery.data?.root ?? null;
   const [uiState, updateUiState] = useBoardUiState(resolvedRoot);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [confirmDispatch, setConfirmDispatch] = useState<{
+    readonly issue: TodoIssue;
+    readonly mode: BoardDropActionMode;
+  } | null>(null);
+  const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
+  const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const settings = useEnvironmentSettings(environmentId);
+  const projects = useProjects();
+  const providers =
+    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_BOARD_PROVIDERS;
+  const threadSnapshot = useAtomValue(threadEnvironment.snapshotAtom(environmentId));
 
   const model = useMemo(
     () => (snapshotQuery.data === null ? null : buildBoardViewModel(snapshotQuery.data, uiState)),
@@ -321,6 +513,22 @@ export function BoardView({
     }
     return statuses;
   }, [selectedIssue]);
+  const shellsById = useMemo(
+    () => new Map((threadSnapshot?.threads ?? []).map((thread) => [thread.id, thread] as const)),
+    [threadSnapshot],
+  );
+  const progressByIssueId = useMemo(() => {
+    const out: Record<string, BoardDispatchProgress> = {};
+    for (const [issueId, threadId] of Object.entries(dispatchThreads)) {
+      const progress = boardDispatchProgress(shellsById.get(threadId));
+      if (progress !== "settled") out[issueId] = progress;
+    }
+    return out;
+  }, [dispatchThreads, shellsById]);
+  const dispatchInFlight = useMemo(
+    () => new Set(Object.keys(progressByIssueId)),
+    [progressByIssueId],
+  );
 
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
@@ -357,6 +565,164 @@ export function BoardView({
     });
     return false;
   };
+
+  const applyStatusDrop = async (issue: TodoIssue, status: string) => {
+    const result = await mutate({
+      environmentId,
+      input: { action: "status", cwd, id: issue.id, status },
+    });
+    if (result._tag !== "Failure") {
+      const rollup = boardStatusRollup(issue, status);
+      if (rollup === null) return;
+      const rollupResult = await mutate({
+        environmentId,
+        input: { action: "rollup", cwd, id: issue.id, status: rollup.status, text: rollup.text },
+      });
+      if (rollupResult._tag !== "Failure") return;
+      const rollupFailure = squashAtomCommandFailure(rollupResult);
+      toastManager.add({
+        type: "error",
+        title: `Moved ${issue.id} but the rollup failed`,
+        description:
+          rollupFailure instanceof Error && rollupFailure.message.length > 0
+            ? rollupFailure.message
+            : "The board rejected the rollup.",
+      });
+      return;
+    }
+    const failure = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: `Could not move ${issue.id} to ${status}`,
+      description:
+        failure instanceof Error && failure.message.length > 0
+          ? failure.message
+          : "The board rejected the change.",
+    });
+  };
+
+  const dispatchBoardAction = async (
+    issue: TodoIssue,
+    mode: BoardDropActionMode,
+    notes: string | null,
+  ) => {
+    if (dispatchInFlight.has(issue.id)) {
+      toastManager.add({
+        type: "info",
+        title: `${issue.id} is already running`,
+        description: "Wait for the current dispatch to settle before running it again.",
+      });
+      return;
+    }
+    const project =
+      projects.find(
+        (candidate) => candidate.environmentId === environmentId && candidate.workspaceRoot === cwd,
+      ) ?? null;
+    if (project === null) {
+      toastManager.add({
+        type: "error",
+        title: `Could not dispatch ${issue.id}`,
+        description: "No project matches the board's folder.",
+      });
+      return;
+    }
+    const resolvedSettings = resolveProjectSettings(settings, project.id, project);
+    const modelSelection =
+      resolvedSettings.settings.defaultModelSelection ??
+      resolveAppModelSelectionState(settings, providers);
+    if (modelSelection.model.length === 0 || modelSelection === NO_PROVIDER_MODEL_SELECTION) {
+      toastManager.add({
+        type: "error",
+        title: `Could not dispatch ${issue.id}`,
+        description: "No provider is available to run the session.",
+      });
+      return;
+    }
+    const runtimeMode = resolvedSettings.settings.defaultRuntimeMode ?? DEFAULT_RUNTIME_MODE;
+    const threadId = newThreadId();
+    const createdAt = new Date().toISOString();
+    setDispatchThreads((prev) => ({ ...prev, [issue.id]: threadId }));
+    const result = await startTurn({
+      environmentId,
+      input: {
+        threadId,
+        message: {
+          messageId: newMessageId(),
+          role: "user",
+          text: composeBoardDispatchPrompt(issue.id, mode, notes),
+          attachments: [],
+        },
+        runtimeMode,
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        bootstrap: {
+          createThread: {
+            projectId: project.id,
+            title: `todo ${issue.id}`,
+            modelSelection,
+            runtimeMode,
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            branch: null,
+            worktreePath: null,
+            createdAt,
+          },
+        },
+        createdAt,
+      },
+    });
+    if (result._tag !== "Failure") return;
+    setDispatchThreads((prev) => {
+      const next = { ...prev };
+      delete next[issue.id];
+      return next;
+    });
+    const failure = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: `Could not dispatch ${issue.id}`,
+      description:
+        failure instanceof Error && failure.message.length > 0
+          ? failure.message
+          : "The session did not start.",
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over === null) return;
+    const issue = issuesById.get(String(active.id).slice("card:".length));
+    if (issue === undefined) return;
+    const overId = String(over.id);
+    let target: string | null = null;
+    let speed: BoardDropSpeed = "confirm";
+    if (overId.startsWith("column:")) {
+      target = overId.slice("column:".length);
+    } else if (overId.startsWith("dispatch:")) {
+      target = overId.slice("dispatch:".length);
+      speed = "now";
+    }
+    if (target === null) return;
+    const action = resolveBoardDropAction(issue.status, target, speed);
+    if (action.kind === "noop") return;
+    if (action.kind === "status") {
+      void applyStatusDrop(issue, action.status);
+      return;
+    }
+    if (speed === "now") {
+      void dispatchBoardAction(issue, action.mode, null);
+      return;
+    }
+    setConfirmDispatch({ issue, mode: action.mode });
+  };
+
+  const attachDragSensor = useCallback(() => {}, []);
+  const finishCardDrag = useCallback(() => {}, []);
+  const dndSensors = useSensors(
+    useSensor(SidebarPointerSensor, {
+      distance: 6,
+      onAttach: attachDragSensor,
+      onFinish: finishCardDrag,
+    }),
+  );
 
   const showMissing =
     snapshotQuery.error !== null || (probe._tag === "Failure" && snapshotQuery.data === null);
@@ -451,28 +817,55 @@ export function BoardView({
           <p className="text-xs text-muted-foreground">No active issues.</p>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
-          {model.columns.map((column) => (
-            <div key={column.status} className="flex w-56 shrink-0 flex-col">
-              <div className="px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
-                {column.label}
-                <span className="ml-1 font-normal text-muted-foreground/50">
-                  {column.cards.length}
-                </span>
+        <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
+          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
+            {model.columns.map((column) => (
+              <div key={column.status} className="flex w-56 shrink-0 flex-col">
+                <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
+                  <span className="min-w-0 truncate">
+                    {column.label}
+                    <span className="ml-1 font-normal text-muted-foreground/50">
+                      {column.cards.length}
+                    </span>
+                  </span>
+                  {column.status === "read" || column.status === "doing" ? (
+                    <BoardActionNowTarget status={column.status} />
+                  ) : null}
+                </div>
+                <BoardColumnCards status={column.status}>
+                  {column.cards.map((card) => (
+                    <BoardDraggableCard
+                      key={card.issue.id}
+                      card={card}
+                      progress={progressByIssueId[card.issue.id] ?? null}
+                      onOpen={() => setSelectedIssueId(card.issue.id)}
+                    />
+                  ))}
+                </BoardColumnCards>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
-                {column.cards.map((card) => (
-                  <BoardCard
-                    key={card.issue.id}
-                    card={card}
-                    onOpen={() => setSelectedIssueId(card.issue.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </DndContext>
       )}
+      {confirmDispatch !== null ? (
+        <BoardDispatchDialog
+          issue={confirmDispatch.issue}
+          mode={confirmDispatch.mode}
+          hintDismissed={uiState.dropHintDismissed}
+          onDismissHint={() => updateUiState({ dropHintDismissed: true })}
+          onConfirm={(notes) => {
+            const target = confirmDispatch;
+            setConfirmDispatch(null);
+            void dispatchBoardAction(target.issue, target.mode, notes);
+          }}
+          onFlipStatus={() => {
+            const target = confirmDispatch;
+            setConfirmDispatch(null);
+            void changeStatus(target.issue, target.mode);
+          }}
+          onClose={() => setConfirmDispatch(null)}
+        />
+      ) : null}
       {selectedIssue !== null ? (
         <BoardIssueDrawer
           issue={selectedIssue}

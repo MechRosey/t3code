@@ -415,7 +415,11 @@ describe("board view-model golden", () => {
         links: { blocks: ["blocked"], relates: [] },
       }),
     ];
-    const uiState: BoardUiState = { tag: "ui", sort: "updated-desc" };
+    const uiState: BoardUiState = {
+      tag: "ui",
+      sort: "updated-desc",
+      dropHintDismissed: false,
+    };
     const model = buildBoardViewModel(snapshot(issues), uiState);
     assert.equal(model.root, "C:/repo/.todo");
     assert.equal(model.repoName, "repo");
