@@ -5,7 +5,6 @@ import {
   type EnvironmentId,
   type ServerProvider,
   type ThreadId,
-  type TodoBoardSnapshot,
   type TodoIssue,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -231,7 +230,7 @@ function BoardActionNowTarget({ status }: { readonly status: string }) {
   return (
     <span
       ref={setNodeRef}
-      title="Drop a card here to action it right away"
+      aria-label="Drop a card here to action it right away"
       className={cn(
         "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[.55rem] font-normal normal-case tracking-normal",
         isOver ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",

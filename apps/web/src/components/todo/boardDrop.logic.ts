@@ -15,9 +15,9 @@ export const BOARD_PIPELINE_STEPS = [
   "honesty",
 ] as const;
 
-const BOARD_DISPATCH_STATUSES: ReadonlyArray<BoardDropActionMode> = ["read", "doing"];
+const BOARD_DISPATCH_STATUSES: ReadonlySet<string> = new Set(["read", "doing"]);
 
-const BOARD_ROLLUP_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
+const BOARD_ROLLUP_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 
 export function resolveBoardDropAction(
   sourceStatus: string,
@@ -26,7 +26,7 @@ export function resolveBoardDropAction(
 ): BoardDropAction {
   if (sourceStatus === targetStatus) return { kind: "noop" };
   if (speed === "status-only") return { kind: "status", status: targetStatus };
-  if ((BOARD_DISPATCH_STATUSES as readonly string[]).includes(targetStatus)) {
+  if (BOARD_DISPATCH_STATUSES.has(targetStatus)) {
     return { kind: "dispatch", mode: targetStatus as BoardDropActionMode };
   }
   return { kind: "status", status: targetStatus };
@@ -48,7 +48,7 @@ export function boardStatusRollup(
   status: string,
 ): { readonly status: string; readonly text: string } | null {
   if (issue.parentId === null) return null;
-  if (!BOARD_ROLLUP_STATUSES.includes(status)) return null;
+  if (!BOARD_ROLLUP_STATUSES.has(status)) return null;
   return { status, text: `Dropped to ${status} from the board` };
 }
 
