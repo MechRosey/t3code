@@ -68,7 +68,7 @@ export function composeBoardNewTaskPrompt(
 }
 
 export function composeBoardNewTaskTitle(ideaText: string): string {
-  const idea = ideaText.trim();
+  const idea = ideaText.replace(/\s+/g, " ").trim();
   if (idea.length === 0) return "todo new";
   return idea.slice(0, BOARD_NEW_TASK_TITLE_LIMIT);
 }

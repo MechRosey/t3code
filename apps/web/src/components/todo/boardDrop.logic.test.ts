@@ -181,6 +181,11 @@ describe("new task thread title composition", () => {
     assert.equal(title, "a".repeat(60));
   });
 
+  it("flattens a multi-line idea to a single-line title", () => {
+    const idea = "Add a\n\nretry\tbutton\nwith tests";
+    assert.equal(composeBoardNewTaskTitle(idea), "Add a retry button with tests");
+  });
+
   it("falls back to a fixed title for a blank idea", () => {
     assert.equal(composeBoardNewTaskTitle("   "), "todo new");
   });
