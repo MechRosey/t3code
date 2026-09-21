@@ -70,8 +70,8 @@ function sanitizePlanFileSegment(input: string): string {
   return sanitized.length > 0 ? sanitized : "plan";
 }
 
-/** Prefix of the message the app sends when the user approves a plan. */
-export const PLAN_IMPLEMENTATION_PROMPT_PREFIX = "PLEASE IMPLEMENT THIS PLAN:\n";
+export { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/shared/composerPromptHistory";
+import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/shared/composerPromptHistory";
 
 export function buildPlanImplementationPrompt(planMarkdown: string): string {
   return `${PLAN_IMPLEMENTATION_PROMPT_PREFIX}${planMarkdown.trim()}`;

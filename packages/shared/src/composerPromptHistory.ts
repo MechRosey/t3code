@@ -1,5 +1,4 @@
 import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "../../proposedPlan";
 
 /**
  * Terminal-style prompt recall for the composer. ArrowUp on an empty
@@ -9,6 +8,9 @@ import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "../../proposedPlan";
  * History is per thread and text only. It is derived from the thread's user
  * messages on every keypress, so there is no store to persist or sync.
  */
+
+/** Prefix of the message the app sends when the user approves a plan. */
+export const PLAN_IMPLEMENTATION_PROMPT_PREFIX = "PLEASE IMPLEMENT THIS PLAN:\n";
 
 const CLAUDE_ULTRATHINK_PREFIX = "Ultrathink:\n";
 const REVIEW_COMMENT_BLOCK_PATTERN = /<review_comment\b[^>]*>[\s\S]*?<\/review_comment>/g;
