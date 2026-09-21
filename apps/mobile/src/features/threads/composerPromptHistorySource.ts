@@ -16,12 +16,6 @@ export interface ComposerPromptHistoryButtonState {
   readonly canRecallNewer: boolean;
 }
 
-/**
- * Acknowledged thread messages first, queued outbox texts after: a
- * just-sent prompt sits only in the outbox until the server acks, and it
- * must stay recallable across that window. Queued creations never reach
- * here; the caller filters them out.
- */
 export function mergeComposerPromptHistoryMessages(input: {
   readonly messages: ReadonlyArray<ComposerPromptHistoryDetailMessage>;
   readonly queuedMessages: ReadonlyArray<ComposerPromptHistoryQueuedText>;

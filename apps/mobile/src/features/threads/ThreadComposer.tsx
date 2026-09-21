@@ -128,7 +128,6 @@ export const COMPOSER_EXPANDED_CHROME = 156;
 export interface ThreadComposerProps {
   readonly draftMessage: string;
   readonly draftAttachments: ReadonlyArray<DraftComposerAttachment>;
-  /** Sent prompts for Up/Down recall: acknowledged messages plus queued outbox texts. */
   readonly promptHistoryMessages: ReadonlyArray<ComposerPromptHistoryMessage>;
   readonly placeholder: string;
   readonly contentMaxWidth?: number;
