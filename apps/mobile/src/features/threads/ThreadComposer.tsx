@@ -73,6 +73,7 @@ import { fileRoutePathSegments } from "../files/filePath";
 import {
   ComposerActionButton,
   ComposerInlineControl,
+  ComposerToolbarButton,
   ComposerToolbarRow,
 } from "../../components/ComposerToolbar";
 import { ProviderIcon } from "../../components/ProviderIcon";
@@ -91,6 +92,8 @@ import type { RemoteClientConnectionState } from "../../lib/connection";
 import { resolveProviderOptionDescriptors } from "../../lib/providerOptions";
 import { ComposerCommandPopover } from "./ComposerCommandPopover";
 import { useComposerCommandMenu } from "./use-composer-command-menu";
+import { useComposerPromptHistory } from "./use-composer-prompt-history";
+import type { ComposerPromptHistoryMessage } from "@t3tools/shared/composerPromptHistory";
 import {
   ComposerDictationCancelAction,
   ComposerDictationDraftContent,
@@ -125,6 +128,8 @@ export const COMPOSER_EXPANDED_CHROME = 156;
 export interface ThreadComposerProps {
   readonly draftMessage: string;
   readonly draftAttachments: ReadonlyArray<DraftComposerAttachment>;
+  /** Sent prompts for Up/Down recall: acknowledged messages plus queued outbox texts. */
+  readonly promptHistoryMessages: ReadonlyArray<ComposerPromptHistoryMessage>;
   readonly placeholder: string;
   readonly contentMaxWidth?: number;
   readonly bottomInset?: number;
@@ -418,6 +423,27 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     states: uploadStates,
   });
   const contextImports = useAtomValue(composerContextImportsAtom);
+  const recallPromptFromHistory = useCallback(
+    (prompt: string) => {
+      props.onChangeDraftMessage(prompt);
+      composerMenu.onSelectionChange({ start: prompt.length, end: prompt.length });
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelection({ start: prompt.length, end: prompt.length });
+      });
+    },
+    [composerMenu.onSelectionChange, inputRef, props.onChangeDraftMessage],
+  );
+  const promptHistory = useComposerPromptHistory({
+    ownerKey: composerOwnerKey,
+    messages: props.promptHistoryMessages,
+    draftMessage: props.draftMessage,
+    voiceBusy: voiceInput.isBusy,
+    freezesEditor: voiceInput.freezesEditor,
+    attachmentCount: props.draftAttachments.length,
+    hasContextImports: Boolean(contextImports[composerOwnerKey]),
+    onRecall: recallPromptFromHistory,
+  });
   const sendBlockedReason =
     props.sendBlockedReason ??
     (pendingPastedTextAttachmentCount > 0 ? "Attaching pasted text" : null) ??
@@ -496,6 +522,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       if (messageId === null) {
         return;
       }
+      promptHistory.reset();
       // Sending a prompt starts agent work: arm the lock-screen card while the
       // app is foregrounded and the activity token can be registered. Armed
       // after the send so its preference read and native Activity start don't
@@ -513,6 +540,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     props.draftAttachments.length,
     onChangeDraftMessage,
     openUsageLimits,
+    promptHistory.reset,
     usageLimitsOffered,
     onSendMessage,
     props.environmentId,
@@ -937,13 +965,29 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   />
                 ) : (
                   <View className="min-w-0 flex-1 flex-row items-center justify-between">
-                    <ComposerAttachmentButton
-                      supportsFiles={Boolean(
-                        props.serverConfig?.environment.capabilities.fileAttachments,
-                      )}
-                      onPickMedia={props.onPickDraftMedia}
-                      onPickFiles={props.onPickDraftFiles}
-                    />
+                    <View className="flex-row items-center gap-1">
+                      <ComposerAttachmentButton
+                        supportsFiles={Boolean(
+                          props.serverConfig?.environment.capabilities.fileAttachments,
+                        )}
+                        onPickMedia={props.onPickDraftMedia}
+                        onPickFiles={props.onPickDraftFiles}
+                      />
+                      <ComposerToolbarButton
+                        accessibilityLabel="Previous sent message"
+                        icon="chevron.up"
+                        showChevron={false}
+                        disabled={!promptHistory.canRecallOlder}
+                        onPress={promptHistory.recallOlder}
+                      />
+                      <ComposerToolbarButton
+                        accessibilityLabel="Next sent message"
+                        icon="chevron.down"
+                        showChevron={false}
+                        disabled={!promptHistory.canRecallNewer}
+                        onPress={promptHistory.recallNewer}
+                      />
+                    </View>
                     <View className="min-w-0 shrink">
                       <ComposerInlineControl
                         accessibilityLabel="Model and reasoning settings"

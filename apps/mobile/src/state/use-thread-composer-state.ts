@@ -25,6 +25,7 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import { deriveActiveWorkStartedAt } from "@t3tools/shared/orchestrationTiming";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
+import { mergeComposerPromptHistoryMessages } from "../features/threads/composerPromptHistorySource";
 import { composerContextSendBlockReason, reidentifyComposerContext } from "../lib/composerContext";
 import { uuidv4 } from "../lib/uuid";
 
@@ -192,6 +193,21 @@ export function useThreadComposerState() {
   );
   const selectedThreadMessages = selectedThreadDetail?.messages;
   const selectedThreadActivities = selectedThreadDetail?.activities;
+  const promptHistoryMessages = useMemo(
+    () =>
+      mergeComposerPromptHistoryMessages({
+        messages: (selectedThreadMessages ?? []).map((message) => ({
+          id: message.id,
+          role: message.role,
+          text: message.text,
+        })),
+        queuedMessages: selectedThreadQueuedMessages.map((message) => ({
+          messageId: message.messageId,
+          text: message.text,
+        })),
+      }),
+    [selectedThreadMessages, selectedThreadQueuedMessages],
+  );
   // A thread whose creation has not delivered its turn yet: the prompt only
   // exists in the outbox, so it is appended to whatever the server has. The
   // detail is usually present but empty during a worktree checkout, so this
@@ -801,6 +817,7 @@ export function useThreadComposerState() {
     selectedThreadFeed,
     selectedThreadQueueCount,
     selectedThreadQueuedMessages,
+    promptHistoryMessages,
     dispatchingQueuedMessageId,
     activeWorkStartedAt,
     isCompacting,

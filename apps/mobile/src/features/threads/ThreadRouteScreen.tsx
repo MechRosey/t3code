@@ -1031,6 +1031,7 @@ function ThreadRouteContent(
           respondingUserInputId={requests.respondingUserInputId}
           draftMessage={composer.draftMessage}
           draftAttachments={composer.draftAttachments}
+          promptHistoryMessages={composer.promptHistoryMessages}
           connectionStateLabel={routeConnectionState}
           threadSyncStatus={selectedThreadDetailState.status}
           loadEarlier={loadEarlierTurns}

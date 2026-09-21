@@ -66,6 +66,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWorkspaceContentWidth } from "../layout/workspace-content-width";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { collectProviderUsageLimits } from "@t3tools/shared/usageLimits";
+import type { ComposerPromptHistoryMessage } from "@t3tools/shared/composerPromptHistory";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
@@ -136,6 +137,7 @@ export interface ThreadDetailScreenProps {
   readonly respondingUserInputId: ApprovalRequestId | null;
   readonly draftMessage: string;
   readonly draftAttachments: ReadonlyArray<DraftComposerAttachment>;
+  readonly promptHistoryMessages: ReadonlyArray<ComposerPromptHistoryMessage>;
   readonly connectionStateLabel: EnvironmentConnectionPhase;
   /** Message sync status for the selected thread (drives the composer status pill). */
   readonly threadSyncStatus?: EnvironmentThreadStatus;
@@ -1031,6 +1033,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                   editorRef={composerEditorRef}
                   draftMessage={props.draftMessage}
                   draftAttachments={props.draftAttachments}
+                  promptHistoryMessages={props.promptHistoryMessages}
                   placeholder="Ask the repo agent, or run a command…"
                   contentMaxWidth={contentMaxWidth}
                   connectionState={props.connectionStateLabel}
