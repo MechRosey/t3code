@@ -100,7 +100,6 @@ export const ThreadListGroupHeader = memo(function ThreadListGroupHeader(props: 
   /** Project a quick new thread should target; null hides the button. */
   readonly newThreadTarget?: EnvironmentProject | null;
   readonly onNewThread?: (project: EnvironmentProject) => void;
-  /** Opens the project's read-only .todo board; absent hides the button. */
   readonly onOpenBoard?: (project: EnvironmentProject) => void;
 }) {
   const { groupKey, onGroupAction, onNewThread, onOpenBoard } = props;

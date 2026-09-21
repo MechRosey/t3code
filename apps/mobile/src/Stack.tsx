@@ -595,9 +595,6 @@ export const RootStack = createNativeStackNavigator({
       screen: BoardRouteScreen,
       linking: "board",
       options: {
-        // Android pushes the board as a regular full page with an in-screen
-        // back header; iOS uses the solid header with the resolved root as
-        // the subtitle (set dynamically in BoardRouteScreen).
         ...(Platform.OS === "android"
           ? { presentation: "card" as const, headerShown: false }
           : SOLID_HEADER_OPTIONS),
