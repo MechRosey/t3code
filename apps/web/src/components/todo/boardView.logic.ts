@@ -207,4 +207,60 @@ export function buildBoardViewModel(
   };
 }
 
+const ARCHIVE_CLOSED_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
+
+const isArchiveClosedStatus = (status: string): boolean => ARCHIVE_CLOSED_STATUSES.includes(status);
+
+function buildChildIssuesIndex(issues: ReadonlyArray<TodoIssue>): Map<string, Array<TodoIssue>> {
+  const childrenByParent = new Map<string, Array<TodoIssue>>();
+  for (const issue of issues) {
+    if (issue.parentId === null) continue;
+    const siblings = childrenByParent.get(issue.parentId);
+    if (siblings === undefined) {
+      childrenByParent.set(issue.parentId, [issue]);
+    } else {
+      siblings.push(issue);
+    }
+  }
+  return childrenByParent;
+}
+
+function subtreeOf(
+  root: TodoIssue,
+  childrenByParent: Map<string, Array<TodoIssue>>,
+): Array<TodoIssue> {
+  const members: Array<TodoIssue> = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    members.push(current);
+    const children = childrenByParent.get(current.id);
+    if (children !== undefined) stack.push(...children);
+  }
+  return members;
+}
+
+export function boardArchiveEligibleSubtrees(issues: ReadonlyArray<TodoIssue>): Array<TodoIssue> {
+  const childrenByParent = buildChildIssuesIndex(issues);
+  return issues.filter((issue) =>
+    subtreeOf(issue, childrenByParent).every((member) => isArchiveClosedStatus(member.status)),
+  );
+}
+
+export function boardArchiveSweepCandidates(issues: ReadonlyArray<TodoIssue>): Array<TodoIssue> {
+  return boardArchiveEligibleSubtrees(issues).filter((issue) => issue.depth === 0);
+}
+
+export function boardArchiveBlockers(
+  issues: ReadonlyArray<TodoIssue>,
+  id: string,
+): Array<{ readonly id: string; readonly status: string }> {
+  const root = issues.find((issue) => issue.id === id);
+  if (root === undefined) return [];
+  const childrenByParent = buildChildIssuesIndex(issues);
+  return subtreeOf(root, childrenByParent)
+    .filter((member) => !isArchiveClosedStatus(member.status))
+    .map((member) => ({ id: member.id, status: member.status }));
+}
+
 export { isBoardSortOrder };
