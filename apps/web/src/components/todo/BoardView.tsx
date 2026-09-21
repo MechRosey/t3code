@@ -78,9 +78,12 @@ import {
 } from "./commentForm.logic";
 import {
   boardDispatchProgress,
+  BOARD_NEW_TASK_DISPATCH_KEY,
   BOARD_PIPELINE_STEPS,
   boardStatusRollup,
   composeBoardDispatchPrompt,
+  composeBoardNewTaskPrompt,
+  composeBoardNewTaskTitle,
   resolveBoardDropAction,
   type BoardDispatchProgress,
   type BoardDropActionMode,
@@ -324,6 +327,56 @@ function BoardDispatchDialog({
           </Button>
           <Button size="compact" onClick={() => onConfirm(notes.trim().length > 0 ? notes : null)}>
             Run now
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function BoardAddTaskDialog({
+  pending,
+  onConfirm,
+  onClose,
+}: {
+  readonly pending: boolean;
+  readonly onConfirm: (idea: string) => void;
+  readonly onClose: () => void;
+}) {
+  const [idea, setIdea] = useState("");
+  const prompt = composeBoardNewTaskPrompt(idea);
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogPopup className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">Add a task</DialogTitle>
+          <DialogDescription>
+            Dispatches an agent to compose and record the ticket on this board.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel className="flex flex-col gap-3">
+          <Textarea
+            size="sm"
+            autoFocus
+            placeholder="Describe the task in a sentence or two"
+            aria-label="New task idea"
+            value={idea}
+            onChange={(event) => setIdea(event.currentTarget.value)}
+          />
+        </DialogPanel>
+        <DialogFooter>
+          <Button size="compact" variant="ghost-muted" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            size="compact"
+            disabled={prompt === null || pending}
+            onClick={() => {
+              if (prompt === null) return;
+              onConfirm(idea);
+            }}
+          >
+            Dispatch
           </Button>
         </DialogFooter>
       </DialogPopup>
@@ -577,6 +630,7 @@ export function BoardView({
     readonly mode: BoardDropActionMode;
   } | null>(null);
   const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
+  const [addTaskOpen, setAddTaskOpen] = useState(false);
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
   const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
   const settings = useEnvironmentSettings(environmentId);
@@ -621,6 +675,7 @@ export function BoardView({
     () => new Set(Object.keys(progressByIssueId)),
     [progressByIssueId],
   );
+  const newTaskProgress = progressByIssueId[BOARD_NEW_TASK_DISPATCH_KEY] ?? null;
 
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
@@ -720,15 +775,17 @@ export function BoardView({
     });
   };
 
-  const dispatchBoardAction = async (
-    issue: TodoIssue,
-    mode: BoardDropActionMode,
-    notes: string | null,
-  ) => {
-    if (dispatchInFlight.has(issue.id)) {
+  const runBoardDispatch = async (params: {
+    readonly dispatchKey: string;
+    readonly subject: string;
+    readonly threadTitle: string;
+    readonly prompt: string;
+  }) => {
+    const { dispatchKey, subject, threadTitle, prompt } = params;
+    if (dispatchInFlight.has(dispatchKey)) {
       toastManager.add({
         type: "info",
-        title: `${issue.id} is already running`,
+        title: `${subject} is already running`,
         description: "Wait for the current dispatch to settle before running it again.",
       });
       return;
@@ -740,7 +797,7 @@ export function BoardView({
     if (project === null) {
       toastManager.add({
         type: "error",
-        title: `Could not dispatch ${issue.id}`,
+        title: `Could not dispatch ${subject}`,
         description: "No project matches the board's folder.",
       });
       return;
@@ -752,7 +809,7 @@ export function BoardView({
     if (modelSelection.model.length === 0 || modelSelection === NO_PROVIDER_MODEL_SELECTION) {
       toastManager.add({
         type: "error",
-        title: `Could not dispatch ${issue.id}`,
+        title: `Could not dispatch ${subject}`,
         description: "No provider is available to run the session.",
       });
       return;
@@ -760,7 +817,7 @@ export function BoardView({
     const runtimeMode = resolvedSettings.settings.defaultRuntimeMode ?? DEFAULT_RUNTIME_MODE;
     const threadId = newThreadId();
     const createdAt = new Date().toISOString();
-    setDispatchThreads((prev) => ({ ...prev, [issue.id]: threadId }));
+    setDispatchThreads((prev) => ({ ...prev, [dispatchKey]: threadId }));
     const result = await startTurn({
       environmentId,
       input: {
@@ -768,7 +825,7 @@ export function BoardView({
         message: {
           messageId: newMessageId(),
           role: "user",
-          text: composeBoardDispatchPrompt(issue.id, mode, notes),
+          text: prompt,
           attachments: [],
         },
         runtimeMode,
@@ -776,7 +833,7 @@ export function BoardView({
         bootstrap: {
           createThread: {
             projectId: project.id,
-            title: `todo ${issue.id}`,
+            title: threadTitle,
             modelSelection,
             runtimeMode,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -791,17 +848,41 @@ export function BoardView({
     if (result._tag !== "Failure") return;
     setDispatchThreads((prev) => {
       const next = { ...prev };
-      delete next[issue.id];
+      delete next[dispatchKey];
       return next;
     });
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: `Could not dispatch ${issue.id}`,
+      title: `Could not dispatch ${subject}`,
       description:
         failure instanceof Error && failure.message.length > 0
           ? failure.message
           : "The session did not start.",
+    });
+  };
+
+  const dispatchBoardAction = async (
+    issue: TodoIssue,
+    mode: BoardDropActionMode,
+    notes: string | null,
+  ) => {
+    await runBoardDispatch({
+      dispatchKey: issue.id,
+      subject: issue.id,
+      threadTitle: `todo ${issue.id}`,
+      prompt: composeBoardDispatchPrompt(issue.id, mode, notes),
+    });
+  };
+
+  const dispatchNewTask = (ideaText: string) => {
+    const prompt = composeBoardNewTaskPrompt(ideaText);
+    if (prompt === null) return;
+    void runBoardDispatch({
+      dispatchKey: BOARD_NEW_TASK_DISPATCH_KEY,
+      subject: "the new task",
+      threadTitle: composeBoardNewTaskTitle(ideaText),
+      prompt,
     });
   };
 
@@ -886,6 +967,29 @@ export function BoardView({
               }))}
               onChange={(next) => updateUiState({ sort: next as BoardSortOrder })}
             />
+            {snapshotQuery.data === null ? null : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="icon-sm"
+                      variant="ghost-muted"
+                      aria-label="Add a task"
+                      onClick={() => setAddTaskOpen(true)}
+                    >
+                      <PlusIcon className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipPopup side="top">Add task</TooltipPopup>
+              </Tooltip>
+            )}
+            {newTaskProgress !== null ? (
+              <span className="flex items-center gap-1 text-[.6rem] text-primary">
+                <Spinner className="size-3" />
+                {newTaskProgress === "starting" ? "dispatching" : "agent running"}
+              </span>
+            ) : null}
             {snapshotQuery.data === null ? null : (
               <BoardOverflowMenu
                 environmentId={environmentId}
@@ -981,6 +1085,16 @@ export function BoardView({
           </div>
         </DndContext>
       )}
+      {addTaskOpen ? (
+        <BoardAddTaskDialog
+          pending={newTaskProgress !== null}
+          onConfirm={(idea) => {
+            setAddTaskOpen(false);
+            dispatchNewTask(idea);
+          }}
+          onClose={() => setAddTaskOpen(false)}
+        />
+      ) : null}
       {confirmDispatch !== null ? (
         <BoardDispatchDialog
           issue={confirmDispatch.issue}
