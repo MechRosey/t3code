@@ -58,6 +58,7 @@ describe("board UI state persistence", () => {
       tag: "ui",
       sort: "created-asc",
       dropHintDismissed: true,
+      view: "columns",
     });
   });
 
@@ -164,6 +165,7 @@ describe("board drop hint persistence", () => {
       tag: null,
       sort: "id-asc",
       dropHintDismissed: false,
+      view: "columns",
     });
   });
 

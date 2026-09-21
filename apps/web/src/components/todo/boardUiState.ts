@@ -4,16 +4,33 @@ import { useCallback, useState } from "react";
 
 import { isBoardSortOrder, type BoardSortOrder } from "./boardView.logic";
 
+export type BoardViewKind = "columns" | "map";
+
+export const BOARD_VIEW_OPTIONS: ReadonlyArray<{
+  readonly value: BoardViewKind;
+  readonly label: string;
+}> = [
+  { value: "columns", label: "Columns" },
+  { value: "map", label: "Map" },
+];
+
+export const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
+
+const isBoardViewKind = (value: string): value is BoardViewKind =>
+  BOARD_VIEW_OPTIONS.some((option) => option.value === value);
+
 export interface BoardUiState {
   readonly tag: string | null;
   readonly sort: BoardSortOrder;
   readonly dropHintDismissed: boolean;
+  readonly view: BoardViewKind;
 }
 
 export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
   tag: null,
   sort: "updated-desc",
   dropHintDismissed: false,
+  view: DEFAULT_BOARD_VIEW,
 };
 
 const BoundedTag = Schema.String.check(Schema.isMaxLength(200));
@@ -21,6 +38,7 @@ const BoardUiStateSchema = Schema.Struct({
   tag: Schema.NullOr(BoundedTag),
   sort: Schema.String,
   dropHintDismissed: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  view: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_BOARD_VIEW))),
 });
 
 const decodeBoardUiState = Schema.decodeUnknownOption(BoardUiStateSchema);
@@ -45,9 +63,10 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort, dropHintDismissed } = decoded.value;
+    const { tag, sort, dropHintDismissed, view } = decoded.value;
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
-    return { tag, sort, dropHintDismissed };
+    if (!isBoardViewKind(view)) return DEFAULT_BOARD_UI_STATE;
+    return { tag, sort, dropHintDismissed, view };
   } catch {
     return DEFAULT_BOARD_UI_STATE;
   }

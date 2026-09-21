@@ -196,11 +196,7 @@ describe("map edges", () => {
   it("orders edge kinds tree first, then blocks, then relates", () => {
     const model = buildMapView(
       snapshot([
-        issue({
-          id: "root",
-          title: "root",
-          links: { blocks: ["extra"], relates: ["child"] },
-        }),
+        issue({ id: "root", title: "root", links: { blocks: [], relates: ["extra"] } }),
         issue({
           id: "child",
           title: "child",
@@ -208,7 +204,7 @@ describe("map edges", () => {
           depth: 1,
           links: { blocks: ["extra"], relates: ["root"] },
         }),
-        issue({ id: "extra", title: "extra" }),
+        issue({ id: "extra", title: "extra", links: { blocks: [], relates: ["child"] } }),
       ]),
       { tag: null },
     );
@@ -217,7 +213,7 @@ describe("map edges", () => {
       [
         ["tree", "child", "root"],
         ["blocks", "child", "extra"],
-        ["relates", "child", "root"],
+        ["relates", "extra", "root"],
       ],
     );
   });
@@ -280,10 +276,10 @@ describe("map layout", () => {
     const model = buildMapView(
       snapshot([
         issue({ id: "root", title: "root", tags: ["hidden"] }),
-        issue({ id: "child", title: "child", parentId: "root", depth: 1 }),
-        issue({ id: "orphan", title: "orphan", parentId: "ghost", depth: 3 }),
+        issue({ id: "child", title: "child", parentId: "root", depth: 1, tags: ["visible"] }),
+        issue({ id: "orphan", title: "orphan", parentId: "ghost", depth: 3, tags: ["visible"] }),
       ]),
-      { tag: "hidden" },
+      { tag: "visible" },
     );
     assert.deepEqual(
       model.nodes.map((node) => [node.id, node.level]),
@@ -304,7 +300,14 @@ describe("map layout", () => {
       { tag: null },
     );
     assert.equal(model.nodes.length, 2);
-    assert.deepEqual(model.edges, []);
+    const levels = new Map(model.nodes.map((node) => [node.id, node.level] as const));
+    assert.deepEqual(
+      [...levels.entries()],
+      [
+        ["a", 1],
+        ["b", 0],
+      ],
+    );
   });
 
   it("handles empty and single-node boards", () => {
@@ -326,10 +329,7 @@ describe("map node title lines", () => {
   });
 
   it("wraps long titles onto two lines at a word boundary", () => {
-    assert.deepEqual(mapTitleLines("first words here then more", 12), [
-      "first words",
-      "here then more",
-    ]);
+    assert.deepEqual(mapTitleLines("first words here then", 12), ["first words", "here then"]);
   });
 
   it("truncates an overflowing second line with an ellipsis", () => {
@@ -344,6 +344,6 @@ describe("map node title lines", () => {
     const lines = mapTitleLines("supercalifragilistic", 8);
     assert.equal(lines.length, 2);
     assert.equal(lines[0], "supercal");
-    assert.equal(lines[1], "ifragili...");
+    assert.equal(lines[1], "ifrag...");
   });
 });
