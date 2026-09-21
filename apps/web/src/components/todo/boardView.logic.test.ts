@@ -419,6 +419,7 @@ describe("board view-model golden", () => {
       tag: "ui",
       sort: "updated-desc",
       dropHintDismissed: false,
+      view: "columns",
     };
     const model = buildBoardViewModel(snapshot(issues), uiState);
     assert.equal(model.root, "C:/repo/.todo");

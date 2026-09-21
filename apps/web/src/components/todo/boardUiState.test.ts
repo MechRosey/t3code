@@ -35,7 +35,12 @@ describe("board UI state storage key", () => {
 describe("board UI state persistence", () => {
   it("round-trips filter and sort state per resolved root", () => {
     const storage = memoryStorage();
-    const state: BoardUiState = { tag: "ui", sort: "created-asc", dropHintDismissed: false };
+    const state: BoardUiState = {
+      tag: "ui",
+      sort: "created-asc",
+      dropHintDismissed: false,
+      view: "columns",
+    };
     writeBoardUiState(storage, ROOT_A, state);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), state);
   });
@@ -46,6 +51,7 @@ describe("board UI state persistence", () => {
       tag: "ui",
       sort: "created-asc",
       dropHintDismissed: true,
+      view: "columns",
     });
     assert.deepEqual(readBoardUiState(storage, ROOT_B), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), {
@@ -75,8 +81,60 @@ describe("board UI state persistence", () => {
 
   it("treats an empty resolved root as no state rather than a shared bucket", () => {
     const storage = memoryStorage();
-    writeBoardUiState(storage, "", { tag: "ui", sort: "created-asc", dropHintDismissed: true });
+    writeBoardUiState(storage, "", {
+      tag: "ui",
+      sort: "created-asc",
+      dropHintDismissed: true,
+      view: "map",
+    });
     assert.deepEqual(readBoardUiState(storage, ""), DEFAULT_BOARD_UI_STATE);
+  });
+});
+
+describe("board view toggle persistence", () => {
+  it("defaults the view to the column arrangement", () => {
+    assert.equal(DEFAULT_BOARD_UI_STATE.view, "columns");
+    assert.equal(readBoardUiState(memoryStorage(), ROOT_A).view, "columns");
+  });
+
+  it("round-trips a map view choice per resolved root", () => {
+    const storage = memoryStorage();
+    writeBoardUiState(storage, ROOT_A, {
+      tag: null,
+      sort: "id-asc",
+      dropHintDismissed: false,
+      view: "map",
+    });
+    assert.equal(readBoardUiState(storage, ROOT_A).view, "map");
+    assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
+  });
+
+  it("resets persisted JSON written before the view field existed to columns", () => {
+    const legacy = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: null,
+        sort: "id-asc",
+        dropHintDismissed: true,
+      }),
+    });
+    assert.deepEqual(readBoardUiState(legacy, ROOT_A), {
+      tag: null,
+      sort: "id-asc",
+      dropHintDismissed: true,
+      view: "columns",
+    });
+  });
+
+  it("falls back to defaults on an unknown view kind", () => {
+    const wrongKind = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: null,
+        sort: "id-asc",
+        dropHintDismissed: false,
+        view: "diagram",
+      }),
+    });
+    assert.deepEqual(readBoardUiState(wrongKind, ROOT_A), DEFAULT_BOARD_UI_STATE);
   });
 });
 
@@ -92,6 +150,7 @@ describe("board drop hint persistence", () => {
       tag: null,
       sort: "updated-desc",
       dropHintDismissed: true,
+      view: "columns",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).dropHintDismissed, true);
     assert.equal(readBoardUiState(storage, ROOT_B).dropHintDismissed, false);
