@@ -220,6 +220,20 @@ function BoardCard({
           </div>
         ) : null}
         <span className="ml-auto flex shrink-0 items-center gap-1">
+          {card.badges.map((badge) => (
+            <span
+              key={badge.label}
+              title={badge.title}
+              className={cn(
+                "rounded-sm px-0.5 font-mono text-[.625rem] leading-4",
+                badge.state === "filled" && "bg-muted text-foreground",
+                badge.state === "hollow" && "border border-foreground/60 text-muted-foreground/40",
+                badge.state === "ghost" && "text-muted-foreground/40",
+              )}
+            >
+              {badge.label}
+            </span>
+          ))}
           {card.badge !== null ? (
             <span
               title={card.badge === "human" ? "Open question for a human" : "Open question"}
