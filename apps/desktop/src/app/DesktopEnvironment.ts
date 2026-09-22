@@ -18,7 +18,7 @@ import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePat
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import type { OtlpProtocol } from "@t3tools/shared/observability";
 
-export const packagedAppUserModelId = "com.t3tools.t3code";
+export const packagedAppUserModelId = "com.t3tools.t3todo";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -238,7 +238,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
       isDevelopment ? "com.t3tools.t3code.dev" : packagedAppUserModelId,
     ),
     linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    linuxWmClass: isDevelopment ? "t3todo-dev" : "t3todo",
     linuxApplicationsDir,
     appImagePath: config.appImagePath,
     userDataDirName,
