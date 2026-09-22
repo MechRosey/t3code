@@ -33,6 +33,7 @@ import {
   InvalidMacPasskeyPublishableKeyError,
   InvalidMockUpdateServerPortError,
   UnsupportedDesktopBuildArchitectureError,
+  isDesktopPreviewVersion,
   isMacPasskeySigningConfigurationError,
   LinuxIconResizeError,
   LinuxDesktopBuildPrerequisitesMissingError,
@@ -53,6 +54,8 @@ import {
   resolveDesktopBuildIconAssets,
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
+  resolveForkBuildVersion,
+  resolveForkBuildVersionMetadata,
   resolveDesktopWebAssetBrand,
   resolveResourceMonitorRustTargets,
   resolveWindowsServerAsarIgnoreGlobs,
@@ -93,6 +96,7 @@ import {
 import { packagedAppUserModelId } from "../apps/desktop/src/app/DesktopEnvironment.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
 // A minimal stand-in for the Linux CLI release archive: one top-level
@@ -276,6 +280,60 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it("switches the bundled splash and favicon branding for nightly versions", () => {
     assert.equal(resolveDesktopWebAssetBrand("0.0.17"), "production");
     assert.equal(resolveDesktopWebAssetBrand("0.0.17-nightly.20260413.42"), "nightly");
+  });
+
+  it("stamps fork builds with a semver-valid version derived from the base and commit count", () => {
+    assert.equal(resolveForkBuildVersion("0.0.42", 105, undefined), "0.0.42-fork.105");
+    assert.equal(resolveForkBuildVersion("0.0.42", 122, undefined), "0.0.42-fork.122");
+
+    const parsed = parseSemver(resolveForkBuildVersion("0.0.42", 105, undefined));
+    assert.isNotNull(parsed);
+    if (parsed !== null) {
+      assert.equal(parsed.major, 0);
+      assert.equal(parsed.minor, 0);
+      assert.equal(parsed.patch, 42);
+      assert.deepStrictEqual(parsed.prerelease, ["fork", "105"]);
+    }
+  });
+
+  it("orders fork builds of the same base by commit count", () => {
+    const earlier = resolveForkBuildVersion("0.0.42", 105, undefined);
+    const later = resolveForkBuildVersion("0.0.42", 106, undefined);
+    assert.isTrue(compareSemverVersions(earlier, later) < 0);
+    assert.isTrue(compareSemverVersions(later, earlier) > 0);
+    assert.equal(compareSemverVersions(earlier, earlier), 0);
+  });
+
+  it("keeps fork versions off the nightly and preview channels", () => {
+    const version = resolveForkBuildVersion("0.0.42", 105, undefined);
+    assert.equal(resolveDesktopUpdateChannel(version), "latest");
+    assert.isFalse(isDesktopPreviewVersion(version));
+  });
+
+  it("passes an explicit build version through unchanged", () => {
+    assert.equal(resolveForkBuildVersion("0.0.42", 105, "9.9.9-rc.1"), "9.9.9-rc.1");
+    assert.equal(resolveForkBuildVersion("0.0.42", undefined, "9.9.9-rc.1"), "9.9.9-rc.1");
+  });
+
+  it("falls back to the plain base version when the fork commit count is unavailable", () => {
+    assert.equal(resolveForkBuildVersion("0.0.42", undefined, undefined), "0.0.42");
+    const parsed = parseSemver(resolveForkBuildVersion("0.0.42", undefined, undefined));
+    assert.isNotNull(parsed);
+  });
+
+  it("derives Windows build metadata with a numeric fourth component", () => {
+    assert.deepStrictEqual(resolveForkBuildVersionMetadata("0.0.42", 105, undefined), {
+      buildVersion: "0.0.42.105",
+      buildNumber: "105",
+    });
+    assert.deepStrictEqual(resolveForkBuildVersionMetadata("0.0.42", undefined, undefined), {
+      buildVersion: "0.0.42",
+      buildNumber: undefined,
+    });
+    assert.deepStrictEqual(resolveForkBuildVersionMetadata("0.0.42", 105, "9.9.9-rc.1"), {
+      buildVersion: "9.9.9-rc.1",
+      buildNumber: undefined,
+    });
   });
 
   it.effect("resolves GitHub desktop publish config from Effect config", () =>
