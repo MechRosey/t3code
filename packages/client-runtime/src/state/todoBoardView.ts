@@ -110,8 +110,26 @@ export interface BoardSectionBadge {
   readonly title: string;
 }
 
+function boardSectionBadge(label: string, content: boolean, marker: boolean): BoardSectionBadge {
+  const state: BoardSectionBadgeState = content ? "filled" : marker ? "hollow" : "ghost";
+  const stateText = content
+    ? marker
+      ? "done and recorded"
+      : "written"
+    : marker
+      ? "marked complete, no content"
+      : "not started";
+  return { label, state, title: `${label}: ${stateText}` };
+}
+
 export function boardSectionBadges(issue: TodoIssue): ReadonlyArray<BoardSectionBadge> {
-  throw new Error("not implemented");
+  const { sections } = issue;
+  return [
+    boardSectionBadge("B", sections.brief.content, false),
+    boardSectionBadge("R", sections.reading.content, sections.reading.marker),
+    boardSectionBadge("D", sections.doing.content, sections.doing.marker),
+    boardSectionBadge("Log", sections.log.content, false),
+  ];
 }
 
 export function boardTags(issues: ReadonlyArray<TodoIssue>): Array<string> {
@@ -171,6 +189,7 @@ export interface BoardCardViewModel {
   readonly statusLabel: string;
   readonly colourClass: string;
   readonly badge: BoardQuestionBadge;
+  readonly badges: ReadonlyArray<BoardSectionBadge>;
   readonly parent: { readonly id: string; readonly title: string } | null;
   readonly blockedBy: ReadonlyArray<{ readonly id: string; readonly title: string }>;
 }
@@ -208,6 +227,7 @@ function toCard(
     statusLabel: boardStatusLabel(issue.status),
     colourClass: boardStatusColourClass(issue.status),
     badge: boardQuestionBadge(issue),
+    badges: boardSectionBadges(issue),
     parent: parent === null ? null : { id: parent.id, title: parent.title },
     blockedBy: blockerIds.flatMap((id) => {
       const blocker = issuesById.get(id);
