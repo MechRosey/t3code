@@ -846,6 +846,43 @@ const resolveGitCommitHash = Effect.fn("resolveGitCommitHash")(function* (repoRo
   return hash.toLowerCase();
 });
 
+const resolveForkCommitCount = Effect.fn("resolveForkCommitCount")(function* (repoRoot: string) {
+  const mergeBaseResult = yield* spawnAndCollectOutput(
+    ChildProcess.make("git", ["merge-base", "HEAD", "upstream/main"], {
+      cwd: repoRoot,
+    }),
+  ).pipe(
+    Effect.orElseSucceed(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    })),
+  );
+
+  const mergeBase = mergeBaseResult.exitCode === 0 ? mergeBaseResult.stdout.trim() : "";
+  if (!/^[0-9a-f]{7,40}$/i.test(mergeBase)) {
+    return undefined;
+  }
+
+  const countResult = yield* spawnAndCollectOutput(
+    ChildProcess.make("git", ["rev-list", "--count", `${mergeBase}..HEAD`], {
+      cwd: repoRoot,
+    }),
+  ).pipe(
+    Effect.orElseSucceed(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    })),
+  );
+
+  const count = countResult.exitCode === 0 ? countResult.stdout.trim() : "";
+  if (!/^\d+$/.test(count)) {
+    return undefined;
+  }
+  return Number.parseInt(count, 10);
+});
+
 const resolvePythonForNodeGyp = Effect.fn("resolvePythonForNodeGyp")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -925,6 +962,7 @@ interface StagePackageJson {
   readonly name: string;
   readonly version: string;
   readonly buildVersion: string;
+  readonly buildNumber: string | undefined;
   readonly t3codeCommitHash: string;
   readonly private: true;
   readonly packageManager: string;
@@ -2575,6 +2613,37 @@ export function isDesktopPreviewVersion(version: string): boolean {
   return /-pr\./.test(version) || /-preview\.\d{8}\.\d+$/.test(version);
 }
 
+export function isDesktopForkVersion(version: string): boolean {
+  return /-fork\.\d+$/.test(version);
+}
+
+export function resolveForkBuildVersion(
+  base: string,
+  commitCount: number | undefined,
+  explicit: string | undefined,
+): string {
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  return commitCount === undefined ? base : `${base}-fork.${commitCount}`;
+}
+
+export interface DesktopForkBuildVersionMetadata {
+  readonly buildVersion: string;
+  readonly buildNumber: string | undefined;
+}
+
+export function resolveForkBuildVersionMetadata(
+  base: string,
+  commitCount: number | undefined,
+  explicit: string | undefined,
+): DesktopForkBuildVersionMetadata {
+  if (explicit !== undefined || commitCount === undefined) {
+    return { buildVersion: explicit ?? base, buildNumber: undefined };
+  }
+  return { buildVersion: `${base}.${commitCount}`, buildNumber: String(commitCount) };
+}
+
 export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
@@ -2668,6 +2737,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
+  if (isDesktopForkVersion(version)) {
+    buildConfig.detectUpdateChannel = false;
+  }
   if (!isDesktopPreviewVersion(version)) {
     const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
     if (publishConfig) {
@@ -3395,7 +3467,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       }),
   });
 
-  const appVersion = options.version ?? serverPackageJson.version;
+  const baseVersion = serverPackageJson.version;
+  const forkCommitCount = yield* resolveForkCommitCount(repoRoot);
+  const appVersion = resolveForkBuildVersion(baseVersion, forkCommitCount, options.version);
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
@@ -3419,7 +3493,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         cwd: repoRoot,
         shell: spawnCommand.shell,
-      }),
+      }).pipe(ChildProcess.setEnv({ APP_VERSION: appVersion })),
       { label: "vp run build:desktop", verbose: options.verbose },
     );
   }
@@ -3634,10 +3708,16 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     options.platform === "win"
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
+  const forkBuildVersionMetadata = resolveForkBuildVersionMetadata(
+    baseVersion,
+    forkCommitCount,
+    options.version,
+  );
   const stagePackageJson: StagePackageJson = {
     name: "t3todo",
     version: appVersion,
-    buildVersion: appVersion,
+    buildVersion: forkBuildVersionMetadata.buildVersion,
+    buildNumber: forkBuildVersionMetadata.buildNumber,
     t3codeCommitHash: commitHash,
     private: true,
     packageManager: rootPackageJson.packageManager,
