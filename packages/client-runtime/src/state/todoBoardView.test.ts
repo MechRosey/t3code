@@ -5,6 +5,7 @@ import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_GLYPHS,
   boardArchiveEligibleSubtrees,
+  boardSectionBadges,
   boardArchiveSweepCandidates,
   boardQuestionBadge,
   boardStatusColourClass,
@@ -41,6 +42,17 @@ function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">):
     },
     body: "",
     links: { blocks: [], relates: [] },
+    ...overrides,
+  };
+}
+
+function sections(overrides: Partial<TodoIssue["sections"]> = {}): TodoIssue["sections"] {
+  return {
+    brief: { content: false, text: "" },
+    reading: { content: false, marker: false },
+    doing: { content: false, marker: false },
+    log: { content: false },
+    openQuestions: { content: false, hasOpen: false, hasHumanOpen: false },
     ...overrides,
   };
 }
@@ -107,6 +119,112 @@ describe("board status furniture", () => {
       "open",
     );
     assert.equal(boardQuestionBadge(issue({ id: "c", title: "c" })), null);
+  });
+});
+
+describe("card section badges", () => {
+  it("emits B, R, D, Log in order as ghosts when nothing is written", () => {
+    const badges = boardSectionBadges(issue({ id: "a", title: "a" }));
+    assert.deepEqual(
+      badges.map((badge) => [badge.label, badge.state, badge.title]),
+      [
+        ["B", "ghost", "B: not started"],
+        ["R", "ghost", "R: not started"],
+        ["D", "ghost", "D: not started"],
+        ["Log", "ghost", "Log: not started"],
+      ],
+    );
+  });
+
+  it("fills B and Log from content alone and never marks them hollow", () => {
+    const badges = boardSectionBadges(
+      issue({
+        id: "b",
+        title: "b",
+        sections: sections({
+          brief: { content: true, text: "brief" },
+          log: { content: true },
+        }),
+      }),
+    );
+    assert.deepEqual(
+      badges.map((badge) => [badge.label, badge.state, badge.title]),
+      [
+        ["B", "filled", "B: written"],
+        ["R", "ghost", "R: not started"],
+        ["D", "ghost", "D: not started"],
+        ["Log", "filled", "Log: written"],
+      ],
+    );
+  });
+
+  it("fills R and D on content, naming the done-and-recorded marker state", () => {
+    const badges = boardSectionBadges(
+      issue({
+        id: "c",
+        title: "c",
+        sections: sections({
+          reading: { content: true, marker: true },
+          doing: { content: true, marker: false },
+        }),
+      }),
+    );
+    assert.deepEqual(
+      badges.map((badge) => [badge.label, badge.state, badge.title]),
+      [
+        ["B", "ghost", "B: not started"],
+        ["R", "filled", "R: done and recorded"],
+        ["D", "filled", "D: written"],
+        ["Log", "ghost", "Log: not started"],
+      ],
+    );
+  });
+
+  it("marks marker-without-content R and D hollow as the hollow-claim edge", () => {
+    const badges = boardSectionBadges(
+      issue({
+        id: "d",
+        title: "d",
+        sections: sections({
+          reading: { content: false, marker: true },
+          doing: { content: false, marker: true },
+        }),
+      }),
+    );
+    assert.deepEqual(
+      badges.map((badge) => [badge.label, badge.state, badge.title]),
+      [
+        ["B", "ghost", "B: not started"],
+        ["R", "hollow", "R: marked complete, no content"],
+        ["D", "hollow", "D: marked complete, no content"],
+        ["Log", "ghost", "Log: not started"],
+      ],
+    );
+  });
+
+  it("carries the badge row on every board card", () => {
+    const written = issue({
+      id: "written",
+      title: "written",
+      status: "doing",
+      sections: sections({
+        brief: { content: true, text: "brief" },
+        doing: { content: false, marker: true },
+      }),
+    });
+    const model = buildBoardViewModel(snapshot([written]), DEFAULT_BOARD_UI_STATE);
+    const card = model.columns
+      .find((column) => column.status === "doing")!
+      .cards.find((entry) => entry.issue.id === "written")!;
+    assert.deepEqual(
+      card.badges.map((badge) => [badge.label, badge.state]),
+      [
+        ["B", "filled"],
+        ["R", "ghost"],
+        ["D", "hollow"],
+        ["Log", "ghost"],
+      ],
+    );
   });
 });
 

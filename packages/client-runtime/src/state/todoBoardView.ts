@@ -102,6 +102,18 @@ export function boardQuestionBadge(issue: TodoIssue): BoardQuestionBadge {
   return null;
 }
 
+export type BoardSectionBadgeState = "filled" | "hollow" | "ghost";
+
+export interface BoardSectionBadge {
+  readonly label: string;
+  readonly state: BoardSectionBadgeState;
+  readonly title: string;
+}
+
+export function boardSectionBadges(issue: TodoIssue): ReadonlyArray<BoardSectionBadge> {
+  throw new Error("not implemented");
+}
+
 export function boardTags(issues: ReadonlyArray<TodoIssue>): Array<string> {
   const tags = new Set<string>();
   for (const issue of issues) {
