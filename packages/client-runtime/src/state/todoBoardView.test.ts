@@ -61,6 +61,14 @@ function snapshot(issues: TodoIssue[]): TodoBoardSnapshot {
   return { root: "C:/repo/.todo", repoName: "repo", issues };
 }
 
+function columnOf(model: ReturnType<typeof buildBoardViewModel>, id: string): string {
+  return model.columns.find((column) => column.cards.some((card) => card.issue.id === id))!.status;
+}
+
+function visibleIds(model: ReturnType<typeof buildBoardViewModel>): Array<string> {
+  return model.columns.flatMap((column) => column.cards.map((card) => card.issue.id));
+}
+
 describe("board status furniture", () => {
   it("labels every canonical status and falls back to the raw status", () => {
     assert.equal(boardStatusLabel("doing"), "Doing");
@@ -642,6 +650,157 @@ describe("archive eligibility", () => {
       boardArchiveEligibleSubtrees([orphan, closed]).map((candidate) => candidate.id),
       ["shut"],
     );
+  });
+});
+
+describe("tag-filter ancestor expansion", () => {
+  it("pulls a tagged child's untagged parent into the filtered board", () => {
+    const parent = issue({ id: "parent", title: "parent" });
+    const child = issue({
+      id: "child",
+      title: "child",
+      parentId: "parent",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const model = buildBoardViewModel(snapshot([parent, child]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["child", "parent"]);
+    assert.equal(columnOf(model, "parent"), "backlog");
+    assert.equal(columnOf(model, "child"), "backlog");
+  });
+
+  it("walks a tagged leaf's ancestor chain transitively to the root", () => {
+    const root = issue({ id: "root", title: "root" });
+    const mid = issue({ id: "mid", title: "mid", parentId: "root", depth: 1 });
+    const leaf = issue({ id: "leaf", title: "leaf", parentId: "mid", depth: 2, tags: ["ui"] });
+    const model = buildBoardViewModel(snapshot([root, mid, leaf]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["leaf", "mid", "root"]);
+  });
+
+  it("terminates on a direct parent cycle and still shows both members", () => {
+    const a = issue({ id: "a", title: "a", parentId: "b", tags: ["ui"] });
+    const b = issue({ id: "b", title: "b", parentId: "a", depth: 1 });
+    const model = buildBoardViewModel(snapshot([a, b]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["a", "b"]);
+  });
+
+  it("terminates when a matched issue's chain enters a cycle from outside", () => {
+    const anchor = issue({
+      id: "anchor",
+      title: "anchor",
+      parentId: "c1",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const c1 = issue({ id: "c1", title: "c1", parentId: "c2", depth: 2 });
+    const c2 = issue({ id: "c2", title: "c2", parentId: "c1", depth: 3 });
+    const model = buildBoardViewModel(snapshot([anchor, c1, c2]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["anchor", "c1", "c2"]);
+  });
+
+  it("terminates on a self-parent and shows the issue exactly once", () => {
+    const loopy = issue({ id: "loopy", title: "loopy", parentId: "loopy", tags: ["ui"] });
+    const model = buildBoardViewModel(snapshot([loopy]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["loopy"]);
+  });
+
+  it("keeps a tagged child whose parent id resolves to nothing, without throwing", () => {
+    const child = issue({ id: "child", title: "child", parentId: "ghost", tags: ["ui"] });
+    const model = buildBoardViewModel(snapshot([child]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["child"]);
+  });
+
+  it("shows a matched issue that is also another match's ancestor exactly once", () => {
+    const parent = issue({ id: "parent", title: "parent", tags: ["ui"] });
+    const child = issue({
+      id: "child",
+      title: "child",
+      parentId: "parent",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const model = buildBoardViewModel(snapshot([parent, child]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["child", "parent"]);
+  });
+
+  it("leaves the unfiltered board unchanged when no tag filter is active", () => {
+    const root = issue({ id: "root", title: "root" });
+    const mid = issue({ id: "mid", title: "mid", parentId: "root", depth: 1, tags: ["ui"] });
+    const other = issue({ id: "other", title: "other" });
+    const model = buildBoardViewModel(snapshot([root, mid, other]), { tag: null, sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["mid", "other", "root"]);
+  });
+
+  it("hides untagged issues unrelated to any match", () => {
+    const parent = issue({ id: "parent", title: "parent" });
+    const tagged = issue({
+      id: "tagged",
+      title: "tagged",
+      parentId: "parent",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const stranger = issue({ id: "stranger", title: "stranger" });
+    const model = buildBoardViewModel(snapshot([parent, tagged, stranger]), {
+      tag: "ui",
+      sort: "id-asc",
+    });
+    assert.deepEqual(visibleIds(model), ["parent", "tagged"]);
+  });
+
+  it("lands a pulled-in done parent in Delegated, folded on the full snapshot", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "done" });
+    const child = issue({
+      id: "kid",
+      title: "kid",
+      parentId: "parent",
+      depth: 1,
+      status: "read",
+      tags: ["ui"],
+    });
+    const model = buildBoardViewModel(snapshot([parent, child]), { tag: "ui", sort: "id-asc" });
+    assert.equal(columnOf(model, "parent"), "delegated");
+    assert.equal(columnOf(model, "kid"), "read");
+  });
+
+  it("renders a pulled-in blocked parent in Blocked", () => {
+    const parent = issue({ id: "parent", title: "parent", status: "blocked" });
+    const child = issue({ id: "kid", title: "kid", parentId: "parent", depth: 1, tags: ["ui"] });
+    const model = buildBoardViewModel(snapshot([parent, child]), { tag: "ui", sort: "id-asc" });
+    assert.equal(columnOf(model, "parent"), "blocked");
+    assert.equal(columnOf(model, "kid"), "backlog");
+  });
+
+  it("pulls both roots when two independent subtrees match", () => {
+    const rootA = issue({ id: "roota", title: "a" });
+    const kidA = issue({
+      id: "kida",
+      title: "ka",
+      parentId: "roota",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const rootB = issue({ id: "rootb", title: "b" });
+    const kidB = issue({
+      id: "kidb",
+      title: "kb",
+      parentId: "rootb",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const model = buildBoardViewModel(snapshot([rootA, kidA, rootB, kidB]), {
+      tag: "ui",
+      sort: "id-asc",
+    });
+    assert.deepEqual(visibleIds(model), ["kida", "kidb", "roota", "rootb"]);
+  });
+
+  it("orders the expanded view by the sort, not the ancestor walk", () => {
+    const leaf = issue({ id: "zzz", title: "z", parentId: "aaa", depth: 1, tags: ["ui"] });
+    const mid = issue({ id: "mmm", title: "m", tags: ["ui"] });
+    const root = issue({ id: "aaa", title: "a" });
+    const model = buildBoardViewModel(snapshot([leaf, mid, root]), { tag: "ui", sort: "id-asc" });
+    assert.deepEqual(visibleIds(model), ["aaa", "mmm", "zzz"]);
   });
 });
 
