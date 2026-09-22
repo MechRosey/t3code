@@ -148,6 +148,30 @@ export function filterIssuesByTag(
   return issues.filter((issue) => issue.tags.includes(tag));
 }
 
+export function expandTagFilterAncestors(
+  matched: ReadonlyArray<TodoIssue>,
+  issuesById: Map<string, TodoIssue>,
+): Array<TodoIssue> {
+  const seen = new Set<string>();
+  const expanded: Array<TodoIssue> = [];
+  const addOnce = (issue: TodoIssue) => {
+    if (seen.has(issue.id)) return;
+    seen.add(issue.id);
+    expanded.push(issue);
+  };
+  for (const issue of matched) addOnce(issue);
+  for (const issue of matched) {
+    let current = issue;
+    while (current.parentId !== null) {
+      const parent = issuesById.get(current.parentId);
+      if (parent === undefined || seen.has(parent.id)) break;
+      addOnce(parent);
+      current = parent;
+    }
+  }
+  return expanded;
+}
+
 export function sortBoardIssues(
   issues: ReadonlyArray<TodoIssue>,
   order: BoardSortOrder,
@@ -243,7 +267,10 @@ export function buildBoardViewModel(
   const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue] as const));
   const blockedByIndex = buildBlockedByIndex(snapshot.issues);
   const childrenByParent = buildChildIssuesIndex(snapshot.issues);
-  const visible = sortBoardIssues(filterIssuesByTag(snapshot.issues, uiState.tag), uiState.sort);
+  const visible = sortBoardIssues(
+    expandTagFilterAncestors(filterIssuesByTag(snapshot.issues, uiState.tag), issuesById),
+    uiState.sort,
+  );
   const grouped = new Map<string, Array<TodoIssue>>();
   for (const issue of visible) {
     const column = isDelegatedIssue(issue, childrenByParent) ? "delegated" : issue.status;
