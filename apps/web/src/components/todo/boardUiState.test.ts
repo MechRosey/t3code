@@ -217,8 +217,6 @@ describe("board filter spec and query persistence", () => {
       dropHintDismissed: false,
       view: "columns",
       drawerMode: "normal",
-      tagSpec: "",
-      query: "",
       tagSpec: "ui,board",
       query: "10eb",
     });
