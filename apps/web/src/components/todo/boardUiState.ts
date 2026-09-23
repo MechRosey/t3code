@@ -35,6 +35,8 @@ export interface BoardUiState {
   readonly dropHintDismissed: boolean;
   readonly view: BoardViewKind;
   readonly drawerMode: BoardDrawerMode;
+  readonly tagSpec: string;
+  readonly query: string;
 }
 
 export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
@@ -43,6 +45,8 @@ export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
   dropHintDismissed: false,
   view: DEFAULT_BOARD_VIEW,
   drawerMode: DEFAULT_BOARD_DRAWER_MODE,
+  tagSpec: "",
+  query: "",
 };
 
 const BoundedTag = Schema.String.check(Schema.isMaxLength(200));
@@ -54,6 +58,8 @@ const BoardUiStateSchema = Schema.Struct({
   drawerMode: Schema.String.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BOARD_DRAWER_MODE)),
   ),
+  tagSpec: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  query: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 
 const decodeBoardUiState = Schema.decodeUnknownOption(BoardUiStateSchema);
@@ -78,11 +84,11 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort, dropHintDismissed, view, drawerMode } = decoded.value;
+    const { tag, sort, dropHintDismissed, view, drawerMode, tagSpec, query } = decoded.value;
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardViewKind(view)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardDrawerMode(drawerMode)) return DEFAULT_BOARD_UI_STATE;
-    return { tag, sort, dropHintDismissed, view, drawerMode };
+    return { tag, sort, dropHintDismissed, view, drawerMode, tagSpec, query };
   } catch {
     return DEFAULT_BOARD_UI_STATE;
   }

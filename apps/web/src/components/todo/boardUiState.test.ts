@@ -41,6 +41,8 @@ describe("board UI state persistence", () => {
       dropHintDismissed: false,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     };
     writeBoardUiState(storage, ROOT_A, state);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), state);
@@ -54,6 +56,8 @@ describe("board UI state persistence", () => {
       dropHintDismissed: true,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
     assert.deepEqual(readBoardUiState(storage, ROOT_B), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), {
@@ -62,6 +66,8 @@ describe("board UI state persistence", () => {
       dropHintDismissed: true,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
   });
 
@@ -91,6 +97,8 @@ describe("board UI state persistence", () => {
       dropHintDismissed: true,
       view: "map",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
     assert.deepEqual(readBoardUiState(storage, ""), DEFAULT_BOARD_UI_STATE);
   });
@@ -110,6 +118,8 @@ describe("board view toggle persistence", () => {
       dropHintDismissed: false,
       view: "map",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).view, "map");
     assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
@@ -129,6 +139,8 @@ describe("board view toggle persistence", () => {
       dropHintDismissed: true,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
   });
 
@@ -159,6 +171,8 @@ describe("board drawer mode persistence", () => {
       dropHintDismissed: false,
       view: "columns",
       drawerMode: "full",
+      tagSpec: "",
+      query: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).drawerMode, "full");
     assert.equal(readBoardUiState(storage, ROOT_B).drawerMode, "normal");
@@ -179,6 +193,8 @@ describe("board drawer mode persistence", () => {
         dropHintDismissed: false,
         view: "columns",
         drawerMode: "collapsed",
+        tagSpec: "",
+        query: "",
       }),
     });
     assert.equal(readBoardUiState(wrongKind, ROOT_A).drawerMode, "normal");
@@ -201,6 +217,8 @@ describe("board filter spec and query persistence", () => {
       dropHintDismissed: false,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
       tagSpec: "ui,board",
       query: "10eb",
     });
@@ -245,6 +263,8 @@ describe("board drop hint persistence", () => {
       dropHintDismissed: true,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).dropHintDismissed, true);
     assert.equal(readBoardUiState(storage, ROOT_B).dropHintDismissed, false);
@@ -260,6 +280,8 @@ describe("board drop hint persistence", () => {
       dropHintDismissed: false,
       view: "columns",
       drawerMode: "normal",
+      tagSpec: "",
+      query: "",
     });
   });
 
