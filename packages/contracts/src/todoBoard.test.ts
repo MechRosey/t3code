@@ -2,6 +2,8 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  TodoArchiveReadInput,
+  TodoArchiveReadResult,
   TodoBoardMutateInput,
   TodoBoardRegenerateInput,
   TodoBoardRegenerateResult,
@@ -12,6 +14,8 @@ const decodeMutate = Schema.decodeUnknownSync(TodoBoardMutateInput);
 const decodeIssue = Schema.decodeUnknownSync(TodoIssue);
 const decodeRegenerate = Schema.decodeUnknownSync(TodoBoardRegenerateInput);
 const decodeRegenerateResult = Schema.decodeUnknownSync(TodoBoardRegenerateResult);
+const decodeArchiveRead = Schema.decodeUnknownSync(TodoArchiveReadInput);
+const decodeArchiveReadResult = Schema.decodeUnknownSync(TodoArchiveReadResult);
 
 describe("TodoBoardMutateInput", () => {
   it("accepts every consumed verb as a discriminated member", () => {
@@ -56,6 +60,90 @@ describe("TodoBoardMutateInput", () => {
         id: "abc12-x",
         type: "mentions",
         target: "def13-y",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("TodoArchiveReadInput", () => {
+  it("accepts a cwd and rejects a missing or empty one", () => {
+    expect(decodeArchiveRead({ cwd: "C:\\proj" })).toEqual({ cwd: "C:\\proj" });
+    expect(() => decodeArchiveRead({})).toThrow();
+    expect(() => decodeArchiveRead({ cwd: "" })).toThrow();
+  });
+});
+
+describe("TodoArchiveReadResult", () => {
+  const issue = {
+    id: "e0ae5-archive-target",
+    title: "Archive target",
+    status: "done",
+    created: "2026-09-20 12:00",
+    updated: "2026-09-20 12:00",
+    tags: [],
+    epic: null,
+    parentId: null,
+    depth: 0,
+    rootHue: 270,
+    markerPath: "C:/board/.todo/archive/e0ae5-archive-target/e0ae5-archive-target.md",
+    archived: true,
+    sections: {
+      brief: { content: false, text: "" },
+      reading: { content: false, marker: false },
+      doing: { content: false, marker: false },
+      log: { content: false },
+      openQuestions: { content: false, hasOpen: false, hasHumanOpen: false },
+    },
+    body: "",
+    links: { blocks: [], relates: [] },
+  };
+
+  it("decodes archive groups keyed by directory name with a nullable root issue", () => {
+    const result = decodeArchiveReadResult({
+      boardRoot: "C:/board/.todo",
+      repoName: "board",
+      groups: [
+        {
+          dirName: "e0ae5-archive-target",
+          rootIssue: issue,
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [issue] },
+        },
+        {
+          dirName: "e0ae5-archive-target-2",
+          rootIssue: null,
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [] },
+        },
+      ],
+    });
+    expect(result.groups.map((group) => group.dirName)).toEqual([
+      "e0ae5-archive-target",
+      "e0ae5-archive-target-2",
+    ]);
+    expect(result.groups[0]?.rootIssue?.archived).toBe(true);
+    expect(result.groups[1]?.rootIssue).toBeNull();
+  });
+
+  it("rejects a group without a directory name, snapshot, or a non-issue root", () => {
+    const base = {
+      boardRoot: "C:/board/.todo",
+      repoName: "board",
+      groups: [
+        { dirName: "g", rootIssue: null, snapshot: { root: "r", repoName: "b", issues: [] } },
+      ],
+    };
+    expect(() =>
+      decodeArchiveReadResult({
+        ...base,
+        groups: [{ rootIssue: null, snapshot: base.groups[0]?.snapshot }],
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeArchiveReadResult({ ...base, groups: [{ dirName: "g", rootIssue: null }] }),
+    ).toThrow();
+    expect(() =>
+      decodeArchiveReadResult({
+        ...base,
+        groups: [{ dirName: "g", rootIssue: { id: 7 }, snapshot: base.groups[0]?.snapshot }],
       }),
     ).toThrow();
   });
