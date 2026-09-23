@@ -140,6 +140,7 @@ import {
 } from "./boardUiState";
 import { MapView } from "./MapView";
 import { buildMapView } from "./mapView.logic";
+import { ArchiveView } from "./ArchiveView";
 
 export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
@@ -1292,7 +1293,10 @@ export function BoardView({
         {model !== null ? (
           <>
             <BoardMenuControl
-              label={uiState.view === "map" ? "Map" : "Columns"}
+              label={
+                BOARD_VIEW_OPTIONS.find((option) => option.value === uiState.view)?.label ??
+                "Columns"
+              }
               icon={<NetworkIcon className="size-3.5" />}
               value={uiState.view}
               options={BOARD_VIEW_OPTIONS}
@@ -1440,6 +1444,8 @@ export function BoardView({
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">No .todo board resolves here.</p>
         </div>
+      ) : uiState.view === "archive" ? (
+        <ArchiveView environmentId={environmentId} cwd={cwd} />
       ) : model === null ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">Loading board…</p>
