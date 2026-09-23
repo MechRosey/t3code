@@ -9,6 +9,8 @@ import {
 
 export type BoardViewKind = "columns" | "map";
 
+export type BoardDrawerMode = "normal" | "full";
+
 export const BOARD_VIEW_OPTIONS: ReadonlyArray<{
   readonly value: BoardViewKind;
   readonly label: string;
@@ -22,11 +24,17 @@ export const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
 const isBoardViewKind = (value: string): value is BoardViewKind =>
   BOARD_VIEW_OPTIONS.some((option) => option.value === value);
 
+export const DEFAULT_BOARD_DRAWER_MODE: BoardDrawerMode = "normal";
+
+const isBoardDrawerMode = (value: string): value is BoardDrawerMode =>
+  value === "normal" || value === "full";
+
 export interface BoardUiState {
   readonly tag: string | null;
   readonly sort: BoardSortOrder;
   readonly dropHintDismissed: boolean;
   readonly view: BoardViewKind;
+  readonly drawerMode: BoardDrawerMode;
 }
 
 export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
@@ -34,6 +42,7 @@ export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
   sort: "updated-desc",
   dropHintDismissed: false,
   view: DEFAULT_BOARD_VIEW,
+  drawerMode: DEFAULT_BOARD_DRAWER_MODE,
 };
 
 const BoundedTag = Schema.String.check(Schema.isMaxLength(200));
@@ -42,6 +51,9 @@ const BoardUiStateSchema = Schema.Struct({
   sort: Schema.String,
   dropHintDismissed: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   view: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_BOARD_VIEW))),
+  drawerMode: Schema.String.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BOARD_DRAWER_MODE)),
+  ),
 });
 
 const decodeBoardUiState = Schema.decodeUnknownOption(BoardUiStateSchema);
@@ -66,10 +78,11 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort, dropHintDismissed, view } = decoded.value;
+    const { tag, sort, dropHintDismissed, view, drawerMode } = decoded.value;
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardViewKind(view)) return DEFAULT_BOARD_UI_STATE;
-    return { tag, sort, dropHintDismissed, view };
+    if (!isBoardDrawerMode(drawerMode)) return DEFAULT_BOARD_UI_STATE;
+    return { tag, sort, dropHintDismissed, view, drawerMode };
   } catch {
     return DEFAULT_BOARD_UI_STATE;
   }

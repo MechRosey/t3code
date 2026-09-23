@@ -40,6 +40,7 @@ describe("board UI state persistence", () => {
       sort: "created-asc",
       dropHintDismissed: false,
       view: "columns",
+      drawerMode: "normal",
     };
     writeBoardUiState(storage, ROOT_A, state);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), state);
@@ -52,6 +53,7 @@ describe("board UI state persistence", () => {
       sort: "created-asc",
       dropHintDismissed: true,
       view: "columns",
+      drawerMode: "normal",
     });
     assert.deepEqual(readBoardUiState(storage, ROOT_B), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), {
@@ -59,6 +61,7 @@ describe("board UI state persistence", () => {
       sort: "created-asc",
       dropHintDismissed: true,
       view: "columns",
+      drawerMode: "normal",
     });
   });
 
@@ -123,6 +126,7 @@ describe("board view toggle persistence", () => {
       sort: "id-asc",
       dropHintDismissed: true,
       view: "columns",
+      drawerMode: "normal",
     });
   });
 
@@ -206,6 +210,7 @@ describe("board drop hint persistence", () => {
       sort: "id-asc",
       dropHintDismissed: false,
       view: "columns",
+      drawerMode: "normal",
     });
   });
 
