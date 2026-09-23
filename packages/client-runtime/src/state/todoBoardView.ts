@@ -148,6 +148,88 @@ export function filterIssuesByTag(
   return issues.filter((issue) => issue.tags.includes(tag));
 }
 
+const EPIC_MARKER_TAG = "epic";
+const COMMON_TAG_QUICK_FILTER_CAP = 8;
+const COMMON_TAG_RECENCY_HALF_LIFE_DAYS = 14;
+const BOARD_SHORT_ID_LENGTH = 5;
+
+export function parseTagSpec(spec: string): Array<string> {
+  return spec
+    .split(",")
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
+}
+
+export function matchesTagSpec(tags: ReadonlyArray<string>, terms: ReadonlyArray<string>): boolean {
+  if (terms.length === 0) return true;
+  const lowered = tags.map((tag) => tag.toLowerCase());
+  return terms.some((term) => lowered.includes(term.toLowerCase()));
+}
+
+export function matchesIssueFreeText(issue: TodoIssue, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return true;
+  if (issue.tags.some((tag) => tag.toLowerCase().includes(needle))) return true;
+  return issue.id.slice(0, BOARD_SHORT_ID_LENGTH).toLowerCase().includes(needle);
+}
+
+export function isQuickFilterActive(
+  label: string,
+  uiState: { readonly tagSpec?: string | null; readonly query?: string },
+): boolean {
+  const needle = label.toLowerCase();
+  if (parseTagSpec(uiState.tagSpec ?? "").some((term) => term.toLowerCase() === needle)) {
+    return true;
+  }
+  const query = (uiState.query ?? "").trim().toLowerCase();
+  return query.length > 0 && needle.includes(query);
+}
+
+export interface BoardEpicQuickFilter {
+  readonly epic: string;
+  readonly hue: number | null;
+}
+
+export function boardEpicQuickFilters(
+  issues: ReadonlyArray<TodoIssue>,
+): Array<BoardEpicQuickFilter> {
+  const byEpic = new Map<string, BoardEpicQuickFilter>();
+  for (const issue of issues) {
+    if (!issue.tags.some((tag) => tag.toLowerCase() === EPIC_MARKER_TAG)) continue;
+    if (issue.epic === null || issue.epic.length === 0) continue;
+    if (byEpic.has(issue.epic)) continue;
+    byEpic.set(issue.epic, { epic: issue.epic, hue: issue.rootHue });
+  }
+  return [...byEpic.values()];
+}
+
+export function boardCommonTagQuickFilters(issues: ReadonlyArray<TodoIssue>): Array<string> {
+  const excluded = new Set<string>([EPIC_MARKER_TAG]);
+  for (const epic of boardEpicQuickFilters(issues)) excluded.add(epic.epic.toLowerCase());
+  const reference = issues.reduce((max, issue) => (issue.updated > max ? issue.updated : max), "");
+  const referenceMs = Date.parse(reference);
+  const scores = new Map<string, number>();
+  for (const issue of issues) {
+    const updatedMs = Date.parse(issue.updated);
+    const ageDays =
+      Number.isNaN(updatedMs) || Number.isNaN(referenceMs)
+        ? null
+        : Math.max(0, (referenceMs - updatedMs) / 86_400_000);
+    const weight = 1 + (ageDays === null ? 0 : 2 ** (-ageDays / COMMON_TAG_RECENCY_HALF_LIFE_DAYS));
+    for (const tag of issue.tags) {
+      if (excluded.has(tag.toLowerCase())) continue;
+      scores.set(tag, (scores.get(tag) ?? 0) + weight);
+    }
+  }
+  return [...scores.entries()]
+    .sort(
+      ([leftTag, leftScore], [rightTag, rightScore]) =>
+        rightScore - leftScore || leftTag.localeCompare(rightTag),
+    )
+    .slice(0, COMMON_TAG_QUICK_FILTER_CAP)
+    .map(([tag]) => tag);
+}
+
 export function expandTagFilterAncestors(
   matched: ReadonlyArray<TodoIssue>,
   issuesById: Map<string, TodoIssue>,
@@ -228,6 +310,8 @@ export interface BoardViewModel {
   readonly root: string;
   readonly repoName: string;
   readonly tags: ReadonlyArray<string>;
+  readonly epics: ReadonlyArray<BoardEpicQuickFilter>;
+  readonly commonTags: ReadonlyArray<string>;
   readonly columns: ReadonlyArray<BoardColumnViewModel>;
 }
 
@@ -260,15 +344,28 @@ function toCard(
   };
 }
 
+export interface BoardFilterUiState {
+  readonly tag?: string | null;
+  readonly tagSpec?: string | null;
+  readonly query?: string;
+}
+
 export function buildBoardViewModel(
   snapshot: TodoBoardSnapshot,
-  uiState: { readonly tag: string | null; readonly sort: BoardSortOrder },
+  uiState: { readonly tag: string | null; readonly sort: BoardSortOrder } & BoardFilterUiState,
 ): BoardViewModel {
   const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue] as const));
   const blockedByIndex = buildBlockedByIndex(snapshot.issues);
   const childrenByParent = buildChildIssuesIndex(snapshot.issues);
+  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
   const visible = sortBoardIssues(
-    expandTagFilterAncestors(filterIssuesByTag(snapshot.issues, uiState.tag), issuesById),
+    expandTagFilterAncestors(
+      filterIssuesByTag(snapshot.issues, uiState.tag).filter(
+        (issue) =>
+          matchesTagSpec(issue.tags, specTerms) && matchesIssueFreeText(issue, uiState.query ?? ""),
+      ),
+      issuesById,
+    ),
     uiState.sort,
   );
   const grouped = new Map<string, Array<TodoIssue>>();
@@ -289,6 +386,8 @@ export function buildBoardViewModel(
     root: snapshot.root,
     repoName: snapshot.repoName,
     tags: boardTags(snapshot.issues),
+    epics: boardEpicQuickFilters(snapshot.issues),
+    commonTags: boardCommonTagQuickFilters(snapshot.issues),
     columns: [...known, ...extra].map((status) => ({
       status,
       label: BOARD_COLUMN_LABELS[status] ?? status,

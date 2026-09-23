@@ -162,6 +162,17 @@ describe("common-tag recency ranking", () => {
     assert.deepEqual(boardCommonTagQuickFilters([issue({ id: "a", title: "a" })]), []);
     assert.deepEqual(boardCommonTagQuickFilters([]), []);
   });
+
+  it("never ranks the Epic marker tag or an epic id among the common tags", () => {
+    const epicRoot = issue({
+      id: "root",
+      title: "root",
+      tags: ["Epic", "found", "ui"],
+      epic: "found",
+      updated: "2026-09-20T00:00:00.000Z",
+    });
+    assert.deepEqual(boardCommonTagQuickFilters([epicRoot]), ["ui"]);
+  });
 });
 
 describe("tag-spec comma-OR matching", () => {
@@ -1069,7 +1080,7 @@ describe("spec and free-text filters through the pipeline", () => {
     const model = buildBoardViewModel(snapshot([epicRoot, child]), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(model.epics, [{ epic: "found", hue: 210 }]);
     assert.deepEqual(model.commonTags, ["ui", "board"]);
-    assert.deepEqual(model.tags, ["Epic", "board", "ui"]);
+    assert.deepEqual(model.tags, ["board", "Epic", "ui"]);
   });
 });
 
