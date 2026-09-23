@@ -11,12 +11,20 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Markdown } from "react-native-nitro-markdown";
+
 import { AppText as Text } from "../../components/AppText";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { cn } from "../../lib/cn";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
+import {
+  hasNativeSelectableMarkdownText,
+  SelectableMarkdownText,
+} from "../../native/SelectableMarkdownText";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
+import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { todoBoard } from "../../state/todoBoard";
 import { boardFailureMessage, classifyBoardFailure } from "./boardStatus";
 
@@ -243,6 +251,10 @@ function BoardDetail(props: {
   readonly bottomInset: number;
 }) {
   const { card } = props;
+  const styles = useMarkdownPreviewStyles();
+  const onLinkPress = useCallback((href: string) => {
+    void tryOpenExternalUrl(href, "markdown-link");
+  }, []);
   return (
     <View
       className="max-h-[45%] border-t border-border bg-card"
@@ -277,9 +289,22 @@ function BoardDetail(props: {
           </Text>
         ))}
         {card.issue.body.length > 0 ? (
-          <Text selectable className="text-sm leading-normal text-foreground">
-            {card.issue.body}
-          </Text>
+          hasNativeSelectableMarkdownText() ? (
+            <SelectableMarkdownText
+              markdown={card.issue.body}
+              textStyle={styles.nativeTextStyle}
+              onLinkPress={onLinkPress}
+            />
+          ) : (
+            <Markdown
+              options={{ gfm: true }}
+              renderers={styles.renderers}
+              styles={styles.styles}
+              theme={styles.theme}
+            >
+              {card.issue.body}
+            </Markdown>
+          )
         ) : null}
       </ScrollView>
     </View>
