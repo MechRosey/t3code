@@ -35,6 +35,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
+import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { newMessageId, newThreadId } from "~/lib/utils";
 import { resolveAppModelSelectionState } from "~/modelSelection";
 import { NO_PROVIDER_MODEL_SELECTION } from "~/providerInstances";
@@ -103,6 +104,7 @@ import {
   type BoardDropSpeed,
 } from "./boardDrop.logic";
 import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
+import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
 import {
   BOARD_DISPATCH_ACTOR,
   composeThreadAssociationComment,
@@ -145,6 +147,35 @@ const BOARD_TAG_ALL = "\u0000all";
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
 const BOARD_CARD_BLOCKER_CAP = 4;
+
+const BOARD_ISSUE_DRAWER_WIDTH_STORAGE_KEY = "t3code:board-issue-drawer-width";
+const BOARD_ISSUE_DRAWER_MIN_WIDTH = 320;
+const BOARD_ISSUE_DRAWER_DEFAULT_WIDTH = 448;
+const BOARD_ISSUE_DRAWER_BACKDROP_MARGIN = 48;
+const BOARD_ISSUE_DRAWER_FALLBACK_VIEWPORT_WIDTH = 1280;
+
+function useDrawerViewportMaxWidth(minWidth: number): number {
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? BOARD_ISSUE_DRAWER_FALLBACK_VIEWPORT_WIDTH : window.innerWidth,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let frame = 0;
+    const onResize = () => {
+      if (frame !== 0) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        setViewportWidth(window.innerWidth);
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+  return Math.max(minWidth, viewportWidth - BOARD_ISSUE_DRAWER_BACKDROP_MARGIN);
+}
 
 const shortBoardId = (id: string) => id.slice(0, 5);
 
@@ -553,6 +584,14 @@ function BoardIssueDrawer({
     () => unusedBoardTags(boardTags, issue.tags),
     [boardTags, issue.tags],
   );
+  const drawerMaxWidth = useDrawerViewportMaxWidth(BOARD_ISSUE_DRAWER_MIN_WIDTH);
+  const { width: drawerWidth, handlers: drawerResizeHandlers } = useResizableWidth({
+    storageKey: BOARD_ISSUE_DRAWER_WIDTH_STORAGE_KEY,
+    defaultWidth: BOARD_ISSUE_DRAWER_DEFAULT_WIDTH,
+    minWidth: BOARD_ISSUE_DRAWER_MIN_WIDTH,
+    maxWidth: drawerMaxWidth,
+    edge: "left",
+  });
   const submitComment = async () => {
     const text = preparedComment;
     if (text === null || submittingComment) return;
@@ -571,9 +610,12 @@ function BoardIssueDrawer({
     <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
       <SheetPopup
         side="right"
-        className={drawerMode === "full" ? "max-w-none" : undefined}
-        style={{ width: drawerMode === "full" ? "100%" : undefined }}
+        className="max-w-none"
+        style={{ width: drawerMode === "full" ? "100%" : `${drawerWidth}px` }}
       >
+        {drawerMode === "normal" ? (
+          <RightPanelResizeHandle handlers={drawerResizeHandlers} />
+        ) : null}
         <SheetHeader>
           <div className="flex items-center gap-2">
             <SheetClose
