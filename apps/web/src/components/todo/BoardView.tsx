@@ -10,6 +10,7 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
 import {
   DndContext,
   DragOverlay,
@@ -51,7 +52,7 @@ import { buildThreadRouteParams } from "../../threadRoutes";
 import { useEnvironmentQuery } from "../../state/query";
 import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
-import { todoBoardMutate, todoBoardRead, todoBoardSubscribe } from "../../state/todoBoard";
+import { todoBoardMutate, todoBoardSubscribe } from "../../state/todoBoard";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
@@ -124,6 +125,7 @@ import {
   boardStatusLabel,
   buildBoardViewModel,
   cardHueStyle,
+  EMPTY_BOARD_SNAPSHOT,
   isQuickFilterActive,
   parseTagSpec,
   type BoardCardViewModel,
@@ -872,8 +874,12 @@ export function BoardView({
   onOpenInPanel,
   className,
 }: BoardViewProps) {
-  const probe = useAtomValue(todoBoardRead({ environmentId, input: { cwd } }));
-  const snapshotQuery = useEnvironmentQuery(todoBoardSubscribe({ environmentId, input: { cwd } }));
+  const snapshotAtom = todoBoardSubscribe({ environmentId, input: { cwd } });
+  const snapshotQuery = useEnvironmentQuery(snapshotAtom);
+  const snapshotResult = useAtomValue(snapshotAtom);
+  const boardLoadState =
+    snapshotResult._tag === "Failure" ? classifyTodoBoardFailure(snapshotResult.cause) : null;
+  const boardBootstrap = cwd.length > 0 && boardLoadState === "bootstrap";
   const navigate = useNavigate();
   const resolvedRoot = snapshotQuery.data?.root ?? null;
   const [uiState, updateUiState] = useBoardUiState(resolvedRoot);
@@ -892,10 +898,11 @@ export function BoardView({
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_BOARD_PROVIDERS;
   const threadSnapshot = useAtomValue(threadEnvironment.snapshotAtom(environmentId));
 
-  const model = useMemo(
-    () => (snapshotQuery.data === null ? null : buildBoardViewModel(snapshotQuery.data, uiState)),
-    [snapshotQuery.data, uiState],
-  );
+  const model = useMemo(() => {
+    if (snapshotQuery.data !== null) return buildBoardViewModel(snapshotQuery.data, uiState);
+    if (boardBootstrap) return buildBoardViewModel(EMPTY_BOARD_SNAPSHOT, uiState);
+    return null;
+  }, [snapshotQuery.data, boardBootstrap, uiState]);
   const mapModel = useMemo(
     () => (snapshotQuery.data === null ? null : buildMapView(snapshotQuery.data, uiState)),
     [snapshotQuery.data, uiState],
@@ -1260,14 +1267,22 @@ export function BoardView({
     }),
   );
 
-  const showMissing =
-    snapshotQuery.error !== null || (probe._tag === "Failure" && snapshotQuery.data === null);
+  const showMissing = boardLoadState === "unavailable";
+
+  useEffect(() => {
+    if (boardBootstrap) setAddTaskOpen(true);
+  }, [boardBootstrap]);
+  useEffect(() => {
+    if (snapshotQuery.data !== null) setAddTaskOpen(false);
+  }, [snapshotQuery.data]);
 
   return (
     <div className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden", className)}>
       <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-medium">{model?.repoName ?? "Board"}</div>
+          <div className="truncate text-xs font-medium">
+            {model !== null && model.repoName.length > 0 ? model.repoName : "Board"}
+          </div>
           {resolvedRoot !== null ? (
             <div className="truncate font-mono text-[.6rem] text-muted-foreground/60">
               {resolvedRoot}
@@ -1303,7 +1318,7 @@ export function BoardView({
               }))}
               onChange={(next) => updateUiState({ sort: next as BoardSortOrder })}
             />
-            {snapshotQuery.data === null ? null : (
+            {snapshotQuery.data === null && !boardBootstrap ? null : (
               <Tooltip>
                 <TooltipTrigger
                   render={
