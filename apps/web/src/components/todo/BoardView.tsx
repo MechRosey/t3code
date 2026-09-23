@@ -31,7 +31,14 @@ import {
   XIcon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
@@ -117,6 +124,8 @@ import {
   boardStatusLabel,
   buildBoardViewModel,
   cardHueStyle,
+  isQuickFilterActive,
+  parseTagSpec,
   type BoardCardViewModel,
   type BoardSortOrder,
   type BoardViewModel,
@@ -543,6 +552,46 @@ function BoardMenuControl({
   );
 }
 
+function BoardFilterChip({
+  label,
+  hue,
+  active,
+  onClick,
+}: {
+  readonly label: string;
+  readonly hue: number | null;
+  readonly active: boolean;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={label}
+      onClick={onClick}
+      style={hue === null ? undefined : ({ "--card-hue": String(hue) } as CSSProperties)}
+      className={cn(
+        "cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-[.625rem] leading-4 transition-colors",
+        hue === null ? "border-border bg-muted text-muted-foreground" : "board-filter-chip-hued",
+        active && "outline-[1.5px] outline-solid outline-foreground/60 -outline-offset-1",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BoardFilteredEmpty({ onClearFilters }: { readonly onClearFilters: () => void }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
+      <p className="text-xs text-muted-foreground">No issues match the active filters.</p>
+      <Button size="compact" variant="outline" onClick={onClearFilters}>
+        Clear filters
+      </Button>
+    </div>
+  );
+}
+
 function BoardIssueDrawer({
   issue,
   statusOptions,
@@ -887,6 +936,21 @@ export function BoardView({
     [progressByIssueId],
   );
   const newTaskProgress = progressByIssueId[BOARD_NEW_TASK_DISPATCH_KEY] ?? null;
+
+  const totalCards = model?.columns.reduce((count, column) => count + column.cards.length, 0) ?? 0;
+  const filterActive =
+    uiState.tag !== null ||
+    parseTagSpec(uiState.tagSpec).length > 0 ||
+    uiState.query.trim().length > 0;
+  const toggleTagSpecTerm = (term: string) => {
+    const terms = parseTagSpec(uiState.tagSpec);
+    const lowered = term.toLowerCase();
+    const next = terms.some((entry) => entry.toLowerCase() === lowered)
+      ? terms.filter((entry) => entry.toLowerCase() !== lowered)
+      : [...terms, term];
+    updateUiState({ tagSpec: next.join(",") });
+  };
+  const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "" });
 
   const rollupAfterStatus = async (issue: TodoIssue, status: string) => {
     const rollup = boardStatusRollup(issue, status);
@@ -1306,6 +1370,57 @@ export function BoardView({
           </Tooltip>
         ) : null}
       </div>
+      {model !== null ? (
+        <div className="flex shrink-0 flex-col gap-1.5 border-b border-border/50 px-3 py-2">
+          <div className="flex items-center gap-1">
+            <Input
+              size="compact"
+              className="max-w-64 flex-1"
+              placeholder="Filter by tag or short id"
+              aria-label="Filter issues by text"
+              value={uiState.query}
+              onChange={(event) => updateUiState({ query: event.currentTarget.value })}
+            />
+            {filterActive ? (
+              <Button
+                size="compact"
+                variant="ghost-muted"
+                aria-label="Clear all board filters"
+                onClick={clearFilters}
+              >
+                <XIcon className="size-3.5" />
+                Clear
+              </Button>
+            ) : null}
+          </div>
+          {model.epics.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {model.epics.map((epicFilter) => (
+                <BoardFilterChip
+                  key={epicFilter.epic}
+                  label={epicFilter.epic}
+                  hue={epicFilter.hue}
+                  active={isQuickFilterActive(epicFilter.epic, uiState)}
+                  onClick={() => toggleTagSpecTerm(epicFilter.epic)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {model.commonTags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {model.commonTags.map((tag) => (
+                <BoardFilterChip
+                  key={tag}
+                  label={tag}
+                  hue={null}
+                  active={isQuickFilterActive(tag, uiState)}
+                  onClick={() => toggleTagSpecTerm(tag)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {showMissing ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">No .todo board resolves here.</p>
@@ -1316,16 +1431,18 @@ export function BoardView({
         </div>
       ) : uiState.view === "map" ? (
         mapModel === null || mapModel.nodes.length === 0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-            <p className="text-xs text-muted-foreground">No active issues.</p>
-          </div>
+          filterActive ? (
+            <BoardFilteredEmpty onClearFilters={clearFilters} />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+              <p className="text-xs text-muted-foreground">No active issues.</p>
+            </div>
+          )
         ) : (
           <MapView model={mapModel} onNodeOpen={setSelectedIssueId} />
         )
-      ) : model.columns.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-          <p className="text-xs text-muted-foreground">No active issues.</p>
-        </div>
+      ) : totalCards === 0 && filterActive ? (
+        <BoardFilteredEmpty onClearFilters={clearFilters} />
       ) : (
         <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
           <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">

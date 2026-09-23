@@ -2252,6 +2252,16 @@ code {
   );
 }
 
+.board-filter-chip-hued {
+  border-color: hsl(var(--card-hue) 55% 48%);
+  background-color: hsl(var(--card-hue) 16% 94%);
+}
+
+.dark .board-filter-chip-hued {
+  border-color: hsl(var(--card-hue) 60% 62%);
+  background-color: hsl(var(--card-hue) 16% 17%);
+}
+
 .board-map-node {
   fill: var(--card);
   stroke: var(--contrast-muted-foreground);
