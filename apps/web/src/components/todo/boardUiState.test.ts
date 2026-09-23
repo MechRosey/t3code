@@ -139,6 +139,46 @@ describe("board view toggle persistence", () => {
   });
 });
 
+describe("board drawer mode persistence", () => {
+  it("defaults the drawer mode to normal", () => {
+    assert.equal(DEFAULT_BOARD_UI_STATE.drawerMode, "normal");
+    assert.equal(readBoardUiState(memoryStorage(), ROOT_A).drawerMode, "normal");
+  });
+
+  it("round-trips a full drawer mode per resolved root", () => {
+    const storage = memoryStorage();
+    writeBoardUiState(storage, ROOT_A, {
+      tag: null,
+      sort: "updated-desc",
+      dropHintDismissed: false,
+      view: "columns",
+      drawerMode: "full",
+    });
+    assert.equal(readBoardUiState(storage, ROOT_A).drawerMode, "full");
+    assert.equal(readBoardUiState(storage, ROOT_B).drawerMode, "normal");
+  });
+
+  it("resets persisted JSON written before the drawer mode field existed to normal", () => {
+    const legacy = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({ tag: null, sort: "id-asc" }),
+    });
+    assert.equal(readBoardUiState(legacy, ROOT_A).drawerMode, "normal");
+  });
+
+  it("falls back to normal on an unknown drawer mode", () => {
+    const wrongKind = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: null,
+        sort: "id-asc",
+        dropHintDismissed: false,
+        view: "columns",
+        drawerMode: "collapsed",
+      }),
+    });
+    assert.equal(readBoardUiState(wrongKind, ROOT_A).drawerMode, "normal");
+  });
+});
+
 describe("board drop hint persistence", () => {
   it("defaults the drop hint to visible", () => {
     assert.equal(DEFAULT_BOARD_UI_STATE.dropHintDismissed, false);
