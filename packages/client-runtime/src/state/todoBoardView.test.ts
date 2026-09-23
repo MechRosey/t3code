@@ -17,6 +17,7 @@ import {
   buildBlockedByIndex,
   buildBoardViewModel,
   cardHueStyle,
+  EMPTY_BOARD_SNAPSHOT,
   filterIssuesByTag,
   isQuickFilterActive,
   matchesIssueFreeText,
@@ -1151,5 +1152,24 @@ describe("board view-model golden", () => {
       .cards.find((card) => card.issue.id === "blocked")!;
     assert.deepEqual(blockedCard.blockedBy, [{ id: "blocker", title: "the cause" }]);
     assert.equal(blockedCard.tinted, false);
+  });
+});
+
+describe("empty board scaffold", () => {
+  it("builds a snapshot-free view model with every canonical column and no cards", () => {
+    const model = buildBoardViewModel(EMPTY_BOARD_SNAPSHOT, DEFAULT_BOARD_UI_STATE);
+    assert.deepEqual(
+      model.columns.map((column) => column.status),
+      ["backlog", "read", "doing", "delegated", "blocked", "done", "cancelled"],
+    );
+    assert.deepEqual(
+      model.columns.flatMap((column) => column.cards),
+      [],
+    );
+    assert.deepEqual(model.tags, []);
+    assert.deepEqual(model.epics, []);
+    assert.deepEqual(model.commonTags, []);
+    assert.equal(model.root, "");
+    assert.equal(model.repoName, "");
   });
 });
