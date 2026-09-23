@@ -21,6 +21,7 @@ import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import gnomeCaptureBundle from "../apps/desktop/gnome-extension/bundle.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
+import { resolveLinuxDesktopEntryName } from "../apps/desktop/src/app/DesktopEarlyElectronStartup.ts";
 
 import { applyWebBrandAssets } from "./apply-web-brand-assets.ts";
 import {
@@ -967,6 +968,7 @@ interface StagePackageJson {
   readonly description: string;
   readonly author: string;
   readonly main: string;
+  readonly desktopName: string;
   readonly build: Record<string, unknown>;
   readonly dependencies: Record<string, unknown>;
   readonly devDependencies: {
@@ -991,6 +993,7 @@ export const createStagePackageJson = (input: StagePackageJsonInput): StagePacka
   description: "T3 Code desktop build",
   author: "T3 Tools",
   main: "apps/desktop/dist-electron/main.cjs",
+  desktopName: resolveLinuxDesktopEntryName(false),
   build: input.build,
   dependencies: input.dependencies,
   devDependencies: {
@@ -2839,6 +2842,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.linux = {
       target: [target],
       executableName: "t3code",
+      syncDesktopName: true,
       icon: "icons",
       category: "Development",
       // electron-builder turns these into MimeType=x-scheme-handler/<scheme>;
