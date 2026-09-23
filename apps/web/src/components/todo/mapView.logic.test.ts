@@ -293,6 +293,27 @@ describe("map layout", () => {
     assert.deepEqual(model.edges, []);
   });
 
+  it("OR-matches comma-OR spec terms and free text like the columns view", () => {
+    const issues = [
+      issue({ id: "root", title: "root" }),
+      issue({ id: "kid", title: "kid", parentId: "root", depth: 1, tags: ["ui"] }),
+      issue({ id: "other", title: "other", tags: ["board"] }),
+      issue({ id: "stranger", title: "stranger", tags: ["unrelated"] }),
+    ];
+    const spec = buildMapView(snapshot(issues), { tag: null, tagSpec: "ui,board" });
+    assert.deepEqual(spec.nodes.map((node) => node.id).sort(), ["kid", "other"]);
+    const query = buildMapView(snapshot(issues), { tag: null, query: "10eb1" });
+    assert.deepEqual(query.nodes, []);
+    const byShortId = buildMapView(
+      snapshot([issue({ id: "10eb1-x", title: "x" }), issue({ id: "zzzz9-y", title: "y" })]),
+      { tag: null, query: "10EB" },
+    );
+    assert.deepEqual(
+      byShortId.nodes.map((node) => node.id),
+      ["10eb1-x"],
+    );
+  });
+
   it("terminates on a parentId cycle instead of hanging", () => {
     const model = buildMapView(
       snapshot([
