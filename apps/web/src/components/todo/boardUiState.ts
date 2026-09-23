@@ -7,7 +7,7 @@ import {
   type BoardSortOrder,
 } from "@t3tools/client-runtime/state/todo-board-view";
 
-export type BoardViewKind = "columns" | "map";
+export type BoardViewKind = "columns" | "map" | "archive";
 
 export type BoardDrawerMode = "normal" | "full";
 
@@ -17,6 +17,7 @@ export const BOARD_VIEW_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "columns", label: "Columns" },
   { value: "map", label: "Map" },
+  { value: "archive", label: "Archive" },
 ];
 
 export const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
