@@ -3054,6 +3054,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.todoBoardMutate, todoBoard.mutate(input), {
             "rpc.aggregate": "workspace",
           }),
+        [WS_METHODS.todoBoardRegenerate]: (input) =>
+          observeRpcEffect(WS_METHODS.todoBoardRegenerate, todoBoard.regenerate(input), {
+            "rpc.aggregate": "workspace",
+          }),
         [WS_METHODS.todoBoardSubscribe]: (input) =>
           observeRpcStream(WS_METHODS.todoBoardSubscribe, todoBoard.stream(input), {
             "rpc.aggregate": "workspace",

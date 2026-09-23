@@ -1,12 +1,21 @@
-import { describe, expect, it } from "vite-plus/test";
+﻿import { describe, expect, it } from "@effect/vitest";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeOS from "node:os";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 import { TodoBoardError } from "@t3tools/contracts";
+import { HostProcessHome } from "@t3tools/shared/hostProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import * as ProcessRunner from "../processRunner.ts";
+import { fixturesRoot } from "./fixtures.ts";
+import * as TodoBoard from "./TodoBoard.ts";
 import {
   regenerationArtifacts,
   regenerationSpawnArgs,
@@ -55,7 +64,7 @@ describe("regenerationSpawnArgs", () => {
 
   it("uses the index command for the index target", () => {
     const args = regenerationSpawnArgs("index", "C:\\script.ps1", "C:\\board\\.todo");
-    expect(args[4]).toBe("index");
+    expect(args[5]).toBe("index");
   });
 
   it("never carries an encoded or inline command", () => {
@@ -99,7 +108,7 @@ const fakeOutput = (overrides: Partial<ProcessRunner.ProcessRunOutput> = {}) =>
   }) as ProcessRunner.ProcessRunOutput;
 
 const runnerWith = (run: ProcessRunner.ProcessRunner["Service"]["run"]) =>
-  Layer.succeed(ProcessRunner.ProcessRunner, ProcessRunner.ProcessRunner.of({ run }));
+  ProcessRunner.ProcessRunner.of({ run });
 
 const spawnCalls: Array<ProcessRunner.ProcessRunInput> = [];
 
@@ -109,12 +118,15 @@ const capturingRunner = (exitCode: number, stderr: string) =>
     return Effect.succeed(fakeOutput({ code: ChildProcessSpawner.ExitCode(exitCode), stderr }));
   });
 
-const runRegeneration = (layer: Layer.Layer<ProcessRunner.ProcessRunner>) =>
+const runRegeneration = (runner: ProcessRunner.ProcessRunner["Service"]) =>
   Effect.runPromiseExit(
-    runTodoSkillRegeneration("board", "C:\\board\\.todo", {
+    runTodoSkillRegeneration(runner, "board", "C:\\board\\.todo", {
       scriptPath: "C:\\home\\.claude\\skills\\todo\\scripts\\Todo.ps1",
-    }).pipe(Effect.provide(layer)),
+    }),
   );
+
+const squashedFailure = (exit: Exit.Exit<unknown, unknown>) =>
+  Exit.isFailure(exit) ? (Cause.squash(exit.cause) as TodoBoardError) : null;
 
 describe("runTodoSkillRegeneration", () => {
   it("spawns powershell -File with the board command against the resolved root", async () => {
@@ -141,7 +153,7 @@ describe("runTodoSkillRegeneration", () => {
 
   it("fails with operation_failed and the captured stderr on a non-zero exit", async () => {
     const exit = await runRegeneration(capturingRunner(1, "Index rebuild failed: locked"));
-    const error = Exit.isFailure(exit) ? (exit.cause.error as TodoBoardError) : null;
+    const error = squashedFailure(exit);
     expect(error).not.toBeNull();
     expect(error?.failure).toBe("operation_failed");
     expect(error?.message).toContain("Index rebuild failed: locked");
@@ -159,7 +171,7 @@ describe("runTodoSkillRegeneration", () => {
         ),
       ),
     );
-    const error = Exit.isFailure(exit) ? (exit.cause.error as TodoBoardError) : null;
+    const error = squashedFailure(exit);
     expect(error).not.toBeNull();
     expect(error?.failure).toBe("operation_failed");
     expect(error?.message).toContain("Failed to run the todo skill script");
@@ -177,9 +189,97 @@ describe("runTodoSkillRegeneration", () => {
         ),
       ),
     );
-    const error = Exit.isFailure(exit) ? (exit.cause.error as TodoBoardError) : null;
+    const error = squashedFailure(exit);
     expect(error).not.toBeNull();
     expect(error?.failure).toBe("operation_failed");
     expect(error?.message).toContain("timed out");
   });
+});
+
+const integrationSkillPath = todoSkillScriptPath(NodeOS.homedir());
+
+const skillPresent = await Effect.runPromise(
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const stat = yield* Effect.option(fs.stat(integrationSkillPath));
+    return stat._tag === "Some" && stat.value.type === "File";
+  }).pipe(
+    Effect.provide(NodeFileSystem.layer),
+    Effect.orElseSucceed(() => false),
+  ),
+);
+
+const itIntegration = it.live.skipIf(!(process.platform === "win32" && skillPresent));
+
+const installFixtureBoard = (fixtureBoard: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const target = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-board-regen-" });
+    const boardDir = path.join(target, "project", ".todo");
+    yield* fs.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
+    const cwd = path.join(target, "project");
+    return { boardDir, cwd };
+  });
+
+describe("TodoBoard.regenerate with the real skill script", () => {
+  itIntegration(
+    "regenerates board.html and board-map.html into the board root",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { boardDir, cwd } = yield* installFixtureBoard("board-before");
+        const board = yield* TodoBoard.TodoBoard;
+        const { artifacts } = yield* board.regenerate({ cwd, target: "board" });
+        expect(artifacts).toEqual(["board.html", "board-map.html"]);
+        const html = yield* fs.stat(path.join(boardDir, "board.html"));
+        const map = yield* fs.stat(path.join(boardDir, "board-map.html"));
+        expect(html.type).toBe("File");
+        expect(map.type).toBe("File");
+      }).pipe(Effect.provide(TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
+    { timeout: 120_000 },
+  );
+
+  itIntegration(
+    "rebuilds INDEX.md and refreshes the board pages for the index target",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { boardDir, cwd } = yield* installFixtureBoard("board-before");
+        const board = yield* TodoBoard.TodoBoard;
+        const { artifacts } = yield* board.regenerate({ cwd, target: "index" });
+        expect(artifacts).toEqual(["INDEX.md", "board.html", "board-map.html"]);
+        const index = yield* fs.stat(path.join(boardDir, "INDEX.md"));
+        const html = yield* fs.stat(path.join(boardDir, "board.html"));
+        expect(index.type).toBe("File");
+        expect(html.type).toBe("File");
+        const indexText = yield* fs.readFileString(path.join(boardDir, "INDEX.md"));
+        expect(indexText).toContain("e20d1-status-target");
+      }).pipe(Effect.provide(TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
+    { timeout: 120_000 },
+  );
+
+  itIntegration(
+    "fails with operation_failed when the skill script is absent",
+    () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installFixtureBoard("board-before");
+        const board = yield* TodoBoard.TodoBoard;
+        const failure = yield* Effect.flip(board.regenerate({ cwd, target: "board" }));
+        expect(failure._tag).toBe("TodoBoardError");
+        if (failure._tag === "TodoBoardError") {
+          expect(failure.failure).toBe("operation_failed");
+          expect(failure.message).toContain("Todo skill script not found");
+        }
+      }).pipe(
+        Effect.provide(
+          TodoBoard.layer
+            .pipe(Layer.provideMerge(NodeServices.layer))
+            .pipe(Layer.merge(Layer.succeed(HostProcessHome, "C:\\no-skill-home"))),
+        ),
+      ),
+    { timeout: 120_000 },
+  );
 });

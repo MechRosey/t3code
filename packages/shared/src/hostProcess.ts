@@ -32,6 +32,13 @@ export const HostProcessEnvironment = Context.Reference<NodeJS.ProcessEnv>(
   },
 );
 
+export const HostProcessHome = Context.Reference<string>(
+  "@t3tools/shared/hostProcess/HostProcessHome",
+  {
+    defaultValue: () => NodeOS.homedir(),
+  },
+);
+
 export const HostProcessWorkingDirectory = Context.Reference<string>(
   "@t3tools/shared/hostProcess/HostProcessWorkingDirectory",
   {

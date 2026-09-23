@@ -16,11 +16,19 @@ import * as Stream from "effect/Stream";
 
 import {
   type TodoBoardMutateInput,
+  type TodoBoardRegenerateTarget,
   type TodoBoardSnapshot,
   TodoBoardError,
   type TodoIssue,
 } from "@t3tools/contracts";
+import { HostProcessHome, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
+import {
+  regenerationArtifacts,
+  runTodoSkillRegeneration,
+  todoSkillScriptPath,
+} from "./regenerate.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import { parseIssue, serializeIssue, type BoardIssue } from "./frontmatter.ts";
 import {
   ensureUnchanged,
@@ -76,6 +84,10 @@ export class TodoBoard extends Context.Service<
     readonly mutate: (
       input: TodoBoardMutateInput,
     ) => Effect.Effect<{ readonly issue: TodoIssue }, TodoBoardError>;
+    readonly regenerate: (input: {
+      readonly cwd: string;
+      readonly target: TodoBoardRegenerateTarget;
+    }) => Effect.Effect<{ readonly artifacts: ReadonlyArray<string> }, TodoBoardError>;
     readonly stream: (input: {
       readonly cwd: string;
     }) => Stream.Stream<TodoBoardSnapshot, TodoBoardError>;
@@ -126,6 +138,7 @@ const runRule = <A>(thunk: () => A): Effect.Effect<A, TodoBoardError> =>
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const processRunner = yield* ProcessRunner.ProcessRunner;
   const localZone = DateTime.zoneMakeLocal();
   const locks = yield* Ref.make(new Map<string, Semaphore.Semaphore>());
   const watchers = yield* Ref.make(new Map<string, WatchEntry>());
@@ -518,6 +531,35 @@ export const make = Effect.gen(function* () {
       }
     });
 
+  const resolveSkillScript: Effect.Effect<string, TodoBoardError> = Effect.gen(function* () {
+    const platform = yield* HostProcessPlatform;
+    if (platform !== "win32") {
+      return yield* toError(
+        "operation_failed",
+        "Todo board regeneration requires a Windows host: the todo skill script is PowerShell-only.",
+      );
+    }
+    const scriptPath = todoSkillScriptPath(yield* HostProcessHome);
+    const info = yield* Effect.option(statInfo(scriptPath));
+    if (Option.isNone(info) || info.value.type !== "File") {
+      return yield* toError(
+        "operation_failed",
+        `Todo skill script not found at ${scriptPath}. Install the todo skill to regenerate board artifacts.`,
+      );
+    }
+    return scriptPath;
+  });
+
+  const regenerateAt = (
+    root: string,
+    target: TodoBoardRegenerateTarget,
+  ): Effect.Effect<{ artifacts: ReadonlyArray<string> }, TodoBoardError> =>
+    Effect.gen(function* () {
+      const scriptPath = yield* resolveSkillScript;
+      yield* runTodoSkillRegeneration(processRunner, target, root, { scriptPath });
+      return { artifacts: regenerationArtifacts(target) };
+    });
+
   const startWatcher = (root: string, entry: WatchEntry) =>
     Stream.runForEach(
       fs.watch(root, { recursive: true }).pipe(Stream.debounce(Duration.millis(100))),
@@ -600,6 +642,10 @@ export const make = Effect.gen(function* () {
     read: (input) => Effect.flatMap(resolveRoot(input.cwd), readBoardAt),
     mutate: (input) =>
       Effect.flatMap(resolveRoot(input.cwd), (root) => withLock(root, mutateAt(root, input))),
+    regenerate: (input) =>
+      Effect.flatMap(resolveRoot(input.cwd), (root) =>
+        withLock(root, regenerateAt(root, input.target)),
+      ),
     stream: (input) =>
       Stream.unwrap(
         Effect.gen(function* () {
@@ -621,4 +667,4 @@ export const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(TodoBoard, make);
+export const layer = Layer.effect(TodoBoard, make).pipe(Layer.provide(ProcessRunner.layer));
