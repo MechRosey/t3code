@@ -211,6 +211,10 @@
       "types": "./src/state/todoBoard.ts",
       "default": "./src/state/todoBoard.ts"
     },
+    "./state/todo-board-status": {
+      "types": "./src/state/todoBoardStatus.ts",
+      "default": "./src/state/todoBoardStatus.ts"
+    },
     "./state/todo-board-view": {
       "types": "./src/state/todoBoardView.ts",
       "default": "./src/state/todoBoardView.ts"
