@@ -6,6 +6,9 @@ import {
   boardStatusGlyph,
   boardStatusLabel,
   filterIssuesByTag,
+  matchesIssueFreeText,
+  matchesTagSpec,
+  parseTagSpec,
   type BoardQuestionBadge,
 } from "@t3tools/client-runtime/state/todo-board-view";
 
@@ -193,9 +196,17 @@ function collectEdges(
 
 export function buildMapView(
   snapshot: TodoBoardSnapshot,
-  uiState: { readonly tag: string | null },
+  uiState: {
+    readonly tag: string | null;
+    readonly tagSpec?: string | null;
+    readonly query?: string;
+  },
 ): MapViewModel {
-  const issues = filterIssuesByTag(snapshot.issues, uiState.tag);
+  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
+  const issues = filterIssuesByTag(snapshot.issues, uiState.tag).filter(
+    (issue) =>
+      matchesTagSpec(issue.tags, specTerms) && matchesIssueFreeText(issue, uiState.query ?? ""),
+  );
   const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
   const levels = levelsByIssueId(issues, issuesById);
   const order = depthFirstOrder(issues, issuesById);
