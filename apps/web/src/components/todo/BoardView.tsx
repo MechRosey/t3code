@@ -31,7 +31,7 @@ import {
   XIcon,
   ZapIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
@@ -119,7 +119,12 @@ import {
   type BoardSortOrder,
   type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
-import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
+import {
+  useBoardUiState,
+  type BoardDrawerMode,
+  type BoardViewKind,
+  BOARD_VIEW_OPTIONS,
+} from "./boardUiState";
 import { MapView } from "./MapView";
 import { buildMapView } from "./mapView.logic";
 
@@ -513,6 +518,8 @@ function BoardIssueDrawer({
   boardTags,
   dispatchInFlight,
   viewDiff,
+  drawerMode,
+  onDrawerModeChange,
   onStatusChange,
   onDispatch,
   onComment,
@@ -526,6 +533,8 @@ function BoardIssueDrawer({
   readonly boardTags: ReadonlyArray<string>;
   readonly dispatchInFlight: boolean;
   readonly viewDiff: { readonly threadMissing: boolean } | null;
+  readonly drawerMode: BoardDrawerMode;
+  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
   readonly onDispatch: (issue: TodoIssue, mode: BoardDropActionMode) => void;
   readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
@@ -560,7 +569,11 @@ function BoardIssueDrawer({
   };
   return (
     <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <SheetPopup side="right" className="max-w-md">
+      <SheetPopup
+        side="right"
+        className={drawerMode === "full" ? "max-w-none" : undefined}
+        style={{ width: drawerMode === "full" ? "100%" : undefined }}
+      >
         <SheetHeader>
           <div className="flex items-center gap-2">
             <SheetClose
@@ -571,6 +584,20 @@ function BoardIssueDrawer({
                 </Button>
               }
             />
+            <Button
+              size="compact"
+              variant="ghost-muted"
+              aria-label={
+                drawerMode === "full" ? "Restore the issue drawer" : "Maximise the issue drawer"
+              }
+              onClick={() => onDrawerModeChange(drawerMode === "full" ? "normal" : "full")}
+            >
+              {drawerMode === "full" ? (
+                <Minimize2Icon className="size-3.5" />
+              ) : (
+                <Maximize2Icon className="size-3.5" />
+              )}
+            </Button>
           </div>
           <SheetTitle className="text-base">{issue.title}</SheetTitle>
           <SheetDescription className="font-mono text-xs">
@@ -1330,6 +1357,8 @@ export function BoardView({
           onComment={addComment}
           onTagAdd={addTag}
           onTagRemove={removeTag}
+          drawerMode={uiState.drawerMode}
+          onDrawerModeChange={(mode) => updateUiState({ drawerMode: mode })}
           onViewDiff={() => {
             if (selectedIssue === null) return;
             openRecordedDiff(selectedIssue);

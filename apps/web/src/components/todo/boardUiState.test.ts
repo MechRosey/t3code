@@ -90,6 +90,7 @@ describe("board UI state persistence", () => {
       sort: "created-asc",
       dropHintDismissed: true,
       view: "map",
+      drawerMode: "normal",
     });
     assert.deepEqual(readBoardUiState(storage, ""), DEFAULT_BOARD_UI_STATE);
   });
@@ -108,6 +109,7 @@ describe("board view toggle persistence", () => {
       sort: "id-asc",
       dropHintDismissed: false,
       view: "map",
+      drawerMode: "normal",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).view, "map");
     assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
@@ -196,6 +198,7 @@ describe("board drop hint persistence", () => {
       sort: "updated-desc",
       dropHintDismissed: true,
       view: "columns",
+      drawerMode: "normal",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).dropHintDismissed, true);
     assert.equal(readBoardUiState(storage, ROOT_B).dropHintDismissed, false);
