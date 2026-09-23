@@ -22,6 +22,7 @@ import {
   createStageWorkspaceConfig,
   createStagePatchedDependencies,
   createBuildConfig,
+  createStagePackageJson,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
@@ -95,6 +96,7 @@ import {
   wslRuntimeArchiveStem,
 } from "./build-desktop-artifact.ts";
 import { packagedAppUserModelId } from "../apps/desktop/src/app/DesktopEnvironment.ts";
+import { resolveLinuxDesktopEntryName } from "../apps/desktop/src/app/DesktopEarlyElectronStartup.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
@@ -751,6 +753,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual((linux.linux as Record<string, unknown>).protocols, [
         { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
       ]);
+      assert.strictEqual((linux.linux as Record<string, unknown>).syncDesktopName, true);
+      assert.strictEqual(
+        createStagePackageJson({
+          version: "1.2.3",
+          commitHash: "0123456789abcdef",
+          build: linux,
+          dependencies: {},
+          electronVersion: "30.0.0",
+        }).desktopName,
+        resolveLinuxDesktopEntryName(false),
+      );
       assert.deepStrictEqual(mac.files, [...DESKTOP_FILE_EXCLUSIONS, ...MAC_FILE_EXCLUSIONS]);
       assert.deepStrictEqual(linux.files, [...DESKTOP_FILE_EXCLUSIONS, ...LINUX_FILE_EXCLUSIONS]);
       assert.deepStrictEqual(win.files, DESKTOP_FILE_EXCLUSIONS);

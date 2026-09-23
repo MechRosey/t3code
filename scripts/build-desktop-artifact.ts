@@ -974,6 +974,30 @@ interface StagePackageJson {
   };
 }
 
+export interface StagePackageJsonInput {
+  readonly version: string;
+  readonly commitHash: string;
+  readonly build: Record<string, unknown>;
+  readonly dependencies: Record<string, unknown>;
+  readonly electronVersion: string;
+}
+
+export const createStagePackageJson = (input: StagePackageJsonInput): StagePackageJson => ({
+  name: "t3todo",
+  version: input.version,
+  t3codeCommitHash: input.commitHash,
+  private: true,
+  packageManager: rootPackageJson.packageManager,
+  description: "T3 Code desktop build",
+  author: "T3 Tools",
+  main: "apps/desktop/dist-electron/main.cjs",
+  build: input.build,
+  dependencies: input.dependencies,
+  devDependencies: {
+    electron: input.electronVersion,
+  },
+});
+
 export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
 export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
@@ -3721,37 +3745,30 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     forkCommitCount,
     options.version,
   );
-  const stagePackageJson: StagePackageJson = {
-    name: "t3todo",
+  const stageBuildConfig = yield* createBuildConfig(
+    options.platform,
+    options.target,
+    appVersion,
+    options.signed,
+    options.mockUpdates,
+    options.mockUpdateServerPort,
+    macPasskeySigning && macEntitlementsPath
+      ? {
+          entitlementsPath: macEntitlementsPath,
+          provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
+        }
+      : undefined,
+    bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
+    options.arch,
+    forkBuildVersionMetadata,
+  );
+  const stagePackageJson = createStagePackageJson({
     version: appVersion,
-    t3codeCommitHash: commitHash,
-    private: true,
-    packageManager: rootPackageJson.packageManager,
-    description: "T3 Code desktop build",
-    author: "T3 Tools",
-    main: "apps/desktop/dist-electron/main.cjs",
-    build: yield* createBuildConfig(
-      options.platform,
-      options.target,
-      appVersion,
-      options.signed,
-      options.mockUpdates,
-      options.mockUpdateServerPort,
-      macPasskeySigning && macEntitlementsPath
-        ? {
-            entitlementsPath: macEntitlementsPath,
-            provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
-          }
-        : undefined,
-      bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
-      options.arch,
-      forkBuildVersionMetadata,
-    ),
+    commitHash,
+    build: stageBuildConfig,
     dependencies: stageDependencies,
-    devDependencies: {
-      electron: electronVersion,
-    },
-  };
+    electronVersion,
+  });
 
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
