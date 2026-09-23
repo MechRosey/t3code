@@ -55,6 +55,7 @@ import {
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
   resolveForkBuildVersion,
+  resolveForkBuildConfigEntries,
   resolveForkBuildVersionMetadata,
   resolveDesktopWebAssetBrand,
   resolveResourceMonitorRustTargets,
@@ -334,6 +335,24 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       buildVersion: "9.9.9-rc.1",
       buildNumber: undefined,
     });
+  });
+
+  it("stamps the electron-builder config with the numeric fourth component only for fork-count builds", () => {
+    assert.deepStrictEqual(
+      resolveForkBuildConfigEntries(resolveForkBuildVersionMetadata("0.0.42", 105, undefined)),
+      { buildVersion: "0.0.42.105", buildNumber: "105" },
+    );
+    assert.deepStrictEqual(
+      resolveForkBuildConfigEntries(
+        resolveForkBuildVersionMetadata("0.0.42", undefined, undefined),
+      ),
+      {},
+    );
+    assert.deepStrictEqual(
+      resolveForkBuildConfigEntries(resolveForkBuildVersionMetadata("0.0.42", 105, "9.9.9-rc.1")),
+      {},
+    );
+    assert.deepStrictEqual(resolveForkBuildConfigEntries(undefined), {});
   });
 
   it.effect("resolves GitHub desktop publish config from Effect config", () =>
