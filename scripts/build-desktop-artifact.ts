@@ -961,8 +961,6 @@ interface ResolvedBuildOptions {
 interface StagePackageJson {
   readonly name: string;
   readonly version: string;
-  readonly buildVersion: string;
-  readonly buildNumber: string | undefined;
   readonly t3codeCommitHash: string;
   readonly private: true;
   readonly packageManager: string;
@@ -2644,6 +2642,14 @@ export function resolveForkBuildVersionMetadata(
   return { buildVersion: `${base}.${commitCount}`, buildNumber: String(commitCount) };
 }
 
+export function resolveForkBuildConfigEntries(
+  metadata: DesktopForkBuildVersionMetadata | undefined,
+): Record<string, string> {
+  return metadata?.buildNumber === undefined
+    ? {}
+    : { buildVersion: metadata.buildVersion, buildNumber: metadata.buildNumber };
+}
+
 export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
@@ -2705,8 +2711,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   // source file was never written fails the electron-builder step.
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  buildVersionMetadata?: DesktopForkBuildVersionMetadata,
 ) {
   const buildConfig: Record<string, unknown> = {
+    ...resolveForkBuildConfigEntries(buildVersionMetadata),
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
     artifactName: "T3-Todo-${version}-${arch}.${ext}",
@@ -3716,8 +3724,6 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const stagePackageJson: StagePackageJson = {
     name: "t3todo",
     version: appVersion,
-    buildVersion: forkBuildVersionMetadata.buildVersion,
-    buildNumber: forkBuildVersionMetadata.buildNumber,
     t3codeCommitHash: commitHash,
     private: true,
     packageManager: rootPackageJson.packageManager,
@@ -3739,6 +3745,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      forkBuildVersionMetadata,
     ),
     dependencies: stageDependencies,
     devDependencies: {
