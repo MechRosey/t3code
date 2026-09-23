@@ -805,7 +805,7 @@ function BoardIssueDrawer({
               </Button>
             </div>
           </div>
-          <div className="flex flex-col gap-1 text-[.65rem] text-muted-foreground">
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
             <span>created {issue.created}</span>
             <span>updated {issue.updated}</span>
             <span className="truncate font-mono">{issue.markerPath}</span>
