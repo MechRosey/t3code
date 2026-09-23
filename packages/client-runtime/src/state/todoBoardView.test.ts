@@ -5,6 +5,8 @@ import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_GLYPHS,
   boardArchiveEligibleSubtrees,
+  boardCommonTagQuickFilters,
+  boardEpicQuickFilters,
   boardSectionBadges,
   boardArchiveSweepCandidates,
   boardQuestionBadge,
@@ -16,6 +18,10 @@ import {
   buildBoardViewModel,
   cardHueStyle,
   filterIssuesByTag,
+  isQuickFilterActive,
+  matchesIssueFreeText,
+  matchesTagSpec,
+  parseTagSpec,
   sortBoardIssues,
 } from "./todoBoardView.ts";
 
@@ -68,6 +74,188 @@ function columnOf(model: ReturnType<typeof buildBoardViewModel>, id: string): st
 function visibleIds(model: ReturnType<typeof buildBoardViewModel>): Array<string> {
   return model.columns.flatMap((column) => column.cards.map((card) => card.issue.id));
 }
+
+describe("epic quick-filter derivation", () => {
+  it("derives one button per epic id, deduped, with the first root's hue", () => {
+    const first = issue({ id: "roota", title: "a", tags: ["Epic"], epic: "found", rootHue: 210 });
+    const duplicate = issue({
+      id: "rootb",
+      title: "b",
+      tags: ["Epic"],
+      epic: "found",
+      rootHue: 300,
+    });
+    const second = issue({ id: "rootc", title: "c", tags: ["Epic"], epic: "other", rootHue: 42 });
+    assert.deepEqual(boardEpicQuickFilters([first, duplicate, second]), [
+      { epic: "found", hue: 210 },
+      { epic: "other", hue: 42 },
+    ]);
+  });
+
+  it("skips issues without the Epic tag and Epic-tagged issues with an empty epic id", () => {
+    const untagged = issue({ id: "plain", title: "p", epic: "found" });
+    const emptyEpic = issue({ id: "roote", title: "e", tags: ["Epic"], epic: null });
+    assert.deepEqual(boardEpicQuickFilters([untagged, emptyEpic]), []);
+  });
+
+  it("recognises the Epic marker tag case-insensitively", () => {
+    const marker = issue({ id: "root", title: "r", tags: ["epic"], epic: "found", rootHue: 210 });
+    assert.deepEqual(boardEpicQuickFilters([marker]), [{ epic: "found", hue: 210 }]);
+  });
+});
+
+describe("common-tag recency ranking", () => {
+  const DAY = 86_400_000;
+  const REFERENCE = "2026-09-20T00:00:00.000Z";
+  const updatedDaysAgo = (days: number) =>
+    new Date(Date.parse(REFERENCE) - days * DAY).toISOString();
+
+  it("ranks tags by recency-weighted occurrences measured from the newest issue", () => {
+    const issues = [
+      issue({ id: "a", title: "a", tags: ["hot"], updated: REFERENCE }),
+      issue({ id: "b", title: "b", tags: ["hot"], updated: REFERENCE }),
+      issue({ id: "c", title: "c", tags: ["rare"], updated: REFERENCE }),
+      issue({ id: "d", title: "d", tags: ["rare"], updated: updatedDaysAgo(28) }),
+      issue({ id: "e", title: "e", tags: ["mid"], updated: REFERENCE }),
+      issue({ id: "f", title: "f", tags: ["stale"], updated: updatedDaysAgo(14) }),
+      issue({ id: "g", title: "g", tags: ["ancient"], updated: updatedDaysAgo(28) }),
+    ];
+    assert.deepEqual(boardCommonTagQuickFilters(issues), [
+      "hot",
+      "rare",
+      "mid",
+      "stale",
+      "ancient",
+    ]);
+  });
+
+  it("caps the ranked list at eight tags", () => {
+    const issues = Array.from({ length: 9 }, (_, index) =>
+      issue({
+        id: `carrier-${index}`,
+        title: `carrier ${index}`,
+        tags: [`t${String(index + 1).padStart(2, "0")}`],
+        updated: updatedDaysAgo(index),
+      }),
+    );
+    assert.deepEqual(boardCommonTagQuickFilters(issues), [
+      "t01",
+      "t02",
+      "t03",
+      "t04",
+      "t05",
+      "t06",
+      "t07",
+      "t08",
+    ]);
+  });
+
+  it("breaks score ties tag-ascending", () => {
+    const issues = [
+      issue({ id: "a", title: "a", tags: ["zeta"], updated: REFERENCE }),
+      issue({ id: "b", title: "b", tags: ["alpha"], updated: REFERENCE }),
+    ];
+    assert.deepEqual(boardCommonTagQuickFilters(issues), ["alpha", "zeta"]);
+  });
+
+  it("returns an empty list for a board without tags", () => {
+    assert.deepEqual(boardCommonTagQuickFilters([issue({ id: "a", title: "a" })]), []);
+    assert.deepEqual(boardCommonTagQuickFilters([]), []);
+  });
+});
+
+describe("tag-spec comma-OR matching", () => {
+  const tagged = [
+    issue({ id: "a", title: "a", tags: ["board"] }),
+    issue({ id: "b", title: "b", tags: ["todo-skill"] }),
+    issue({ id: "c", title: "c", tags: ["unrelated"] }),
+  ];
+
+  it("splits on commas and drops blank terms", () => {
+    assert.deepEqual(parseTagSpec("board, todo-skill,, "), ["board", "todo-skill"]);
+    assert.deepEqual(parseTagSpec(""), []);
+    assert.deepEqual(parseTagSpec("   "), []);
+  });
+
+  it("passes every issue through when the spec holds no terms", () => {
+    assert.deepEqual(
+      matchesTagSpec(
+        tagged.map((entry) => entry.tags),
+        parseTagSpec(""),
+      ),
+      true,
+    );
+    assert.equal(matchesTagSpec([], []), true);
+  });
+
+  it("matches a single term and OR-semantics across terms", () => {
+    assert.equal(matchesTagSpec(["board"], ["board"]), true);
+    assert.equal(matchesTagSpec(["board"], ["todo-skill"]), false);
+    assert.equal(matchesTagSpec(["todo-skill"], ["board", "todo-skill"]), true);
+    assert.equal(matchesTagSpec(["unrelated"], ["board", "todo-skill"]), false);
+  });
+
+  it("matches case-insensitively, matching the PowerShell -contains parity", () => {
+    assert.equal(matchesTagSpec(["Board"], ["board"]), true);
+    assert.equal(matchesTagSpec(["board"], ["BOARD"]), true);
+    assert.equal(matchesTagSpec(["unrelated"], ["Board"]), false);
+  });
+});
+
+describe("free-text issue matching", () => {
+  it("matches a tag substring case-insensitively", () => {
+    assert.equal(
+      matchesIssueFreeText(issue({ id: "a", title: "a", tags: ["todo-skill"] }), "SKILL"),
+      true,
+    );
+    assert.equal(
+      matchesIssueFreeText(issue({ id: "a", title: "a", tags: ["todo-skill"] }), "skill"),
+      true,
+    );
+    assert.equal(
+      matchesIssueFreeText(issue({ id: "a", title: "a", tags: ["todo-skill"] }), "nope"),
+      false,
+    );
+  });
+
+  it("matches the five-character short id case-insensitively", () => {
+    assert.equal(matchesIssueFreeText(issue({ id: "10eb1-tag", title: "t" }), "10eb"), true);
+    assert.equal(matchesIssueFreeText(issue({ id: "10eb1-tag", title: "t" }), "0EB1"), true);
+    assert.equal(matchesIssueFreeText(issue({ id: "10eb1-tag", title: "t" }), "10eb1-tag"), false);
+  });
+
+  it("ignores titles and bodies, matching tags and short ids only", () => {
+    assert.equal(
+      matchesIssueFreeText(issue({ id: "a", title: "restore filters" }), "restore"),
+      false,
+    );
+  });
+
+  it("treats a blank query as no filter", () => {
+    assert.equal(matchesIssueFreeText(issue({ id: "a", title: "a" }), ""), true);
+    assert.equal(matchesIssueFreeText(issue({ id: "a", title: "a" }), "   "), true);
+  });
+});
+
+describe("quick-filter active state", () => {
+  it("is active when the label is one of the comma-OR terms, case-insensitively", () => {
+    assert.equal(isQuickFilterActive("ui", { tagSpec: "ui,board" }), true);
+    assert.equal(isQuickFilterActive("UI", { tagSpec: "ui,board" }), true);
+    assert.equal(isQuickFilterActive("ui", { tagSpec: "board" }), false);
+    assert.equal(isQuickFilterActive("ui", { tagSpec: null }), false);
+  });
+
+  it("is active when the free-text query matches the label", () => {
+    assert.equal(isQuickFilterActive("todo-skill", { query: "skill" }), true);
+    assert.equal(isQuickFilterActive("todo-skill", { query: "  skill  " }), true);
+    assert.equal(isQuickFilterActive("ui", { query: "ux" }), false);
+  });
+
+  it("is inactive without any spec term or query match", () => {
+    assert.equal(isQuickFilterActive("ui", {}), false);
+    assert.equal(isQuickFilterActive("ui", { tagSpec: "", query: "" }), false);
+  });
+});
 
 describe("board status furniture", () => {
   it("labels every canonical status and falls back to the raw status", () => {
@@ -801,6 +989,87 @@ describe("tag-filter ancestor expansion", () => {
     const root = issue({ id: "aaa", title: "a" });
     const model = buildBoardViewModel(snapshot([leaf, mid, root]), { tag: "ui", sort: "id-asc" });
     assert.deepEqual(visibleIds(model), ["aaa", "mmm", "zzz"]);
+  });
+});
+
+describe("spec and free-text filters through the pipeline", () => {
+  it("OR-matches any comma-OR term and still expands ancestors of the matches", () => {
+    const root = issue({ id: "root", title: "root" });
+    const child = issue({
+      id: "child",
+      title: "child",
+      parentId: "root",
+      depth: 1,
+      tags: ["ui"],
+    });
+    const other = issue({ id: "other", title: "other", tags: ["board"] });
+    const stranger = issue({ id: "stranger", title: "stranger", tags: ["unrelated"] });
+    const model = buildBoardViewModel(snapshot([root, child, other, stranger]), {
+      tag: null,
+      sort: "id-asc",
+      tagSpec: "ui,board",
+    });
+    assert.deepEqual(visibleIds(model), ["child", "other", "root"]);
+  });
+
+  it("intersects the dropdown tag with the spec terms instead of unifying them", () => {
+    const uiOnly = issue({ id: "uionly", title: "uionly", tags: ["ui"] });
+    const both = issue({ id: "both", title: "both", tags: ["ui", "board"] });
+    const model = buildBoardViewModel(snapshot([uiOnly, both]), {
+      tag: "ui",
+      sort: "id-asc",
+      tagSpec: "board",
+    });
+    assert.deepEqual(visibleIds(model), ["both"]);
+  });
+
+  it("filters by free text over a tag or the five-character short id", () => {
+    const tagged = issue({ id: "aaaa1-x", title: "tagged", tags: ["todo-skill"] });
+    const shortId = issue({ id: "10eb1-y", title: "by id" });
+    const plain = issue({ id: "zzzz9-z", title: "plain" });
+    assert.deepEqual(
+      visibleIds(
+        buildBoardViewModel(snapshot([tagged, shortId, plain]), {
+          tag: null,
+          sort: "id-asc",
+          query: "SKILL",
+        }),
+      ),
+      ["aaaa1-x"],
+    );
+    assert.deepEqual(
+      visibleIds(
+        buildBoardViewModel(snapshot([tagged, shortId, plain]), {
+          tag: null,
+          sort: "id-asc",
+          query: "10eb",
+        }),
+      ),
+      ["10eb1-y"],
+    );
+  });
+
+  it("exposes epic buttons and ranked common tags on the view model", () => {
+    const epicRoot = issue({
+      id: "root",
+      title: "root",
+      tags: ["Epic", "ui"],
+      epic: "found",
+      rootHue: 210,
+      updated: "2026-09-20T00:00:00.000Z",
+    });
+    const child = issue({
+      id: "child",
+      title: "child",
+      parentId: "root",
+      depth: 1,
+      tags: ["board", "ui"],
+      updated: "2026-09-10T00:00:00.000Z",
+    });
+    const model = buildBoardViewModel(snapshot([epicRoot, child]), DEFAULT_BOARD_UI_STATE);
+    assert.deepEqual(model.epics, [{ epic: "found", hue: 210 }]);
+    assert.deepEqual(model.commonTags, ["ui", "board"]);
+    assert.deepEqual(model.tags, ["Epic", "board", "ui"]);
   });
 });
 
