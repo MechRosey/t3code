@@ -194,6 +194,101 @@ describe("TodoBoard service", () => {
     );
   });
 
+  it.layer(TestLayer)("reads the archive", (it) => {
+    it.effect("reads each archived group as a whole-subtree snapshot", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("after-archive");
+        const board = yield* TodoBoard.TodoBoard;
+        const archive = yield* board.readArchive({ cwd });
+        expect(archive.repoName).toBe("project");
+        expect(archive.boardRoot.replace(/\\/g, "/")).toContain("project/.todo");
+        const group = archive.groups.find((entry) => entry.dirName === "e0ae5-archive-target");
+        expect(group?.rootIssue).toMatchObject({
+          id: "e0ae5-archive-target",
+          title: "Archive target",
+          status: "done",
+          depth: 0,
+          parentId: null,
+          archived: true,
+          rootHue: 270,
+        });
+        expect(group?.rootIssue?.markerPath.replace(/\\/g, "/")).toContain(
+          "archive/e0ae5-archive-target/e0ae5-archive-target.md",
+        );
+        const child = group?.snapshot.issues.find((issue) => issue.id === "df3cf-archive-child");
+        expect(child).toMatchObject({ archived: true, rootHue: 270 });
+        expect(child?.markerPath.replace(/\\/g, "/")).toContain(
+          "archive/e0ae5-archive-target/df3cf-archive-child/df3cf-archive-child.md",
+        );
+        expect(group?.snapshot.issues.length).toBe(2);
+      }),
+    );
+
+    it.effect("keys duplicate-id groups by directory name, never issue id", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("after-archive");
+        const board = yield* TodoBoard.TodoBoard;
+        const archive = yield* board.readArchive({ cwd });
+        expect(archive.groups.map((group) => group.dirName)).toEqual([
+          "9f7e2-orphan-group",
+          "e0ae5-archive-target",
+          "e0ae5-archive-target-2",
+        ]);
+        const dupes = archive.groups.filter((group) =>
+          group.snapshot.issues.some((issue) => issue.id === "e0ae5-archive-target"),
+        );
+        expect(dupes.map((group) => group.dirName)).toEqual([
+          "e0ae5-archive-target",
+          "e0ae5-archive-target-2",
+        ]);
+        for (const group of dupes) {
+          expect(group.rootIssue?.id).toBe("e0ae5-archive-target");
+        }
+      }),
+    );
+
+    it.effect("reports a marker-less group root as null and still reads its children", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("after-archive");
+        const board = yield* TodoBoard.TodoBoard;
+        const archive = yield* board.readArchive({ cwd });
+        const orphan = archive.groups.find((entry) => entry.dirName === "9f7e2-orphan-group");
+        expect(orphan?.rootIssue).toBeNull();
+        expect(orphan?.snapshot.issues.map((issue) => issue.id)).toEqual(["aa1b2-orphan-child"]);
+      }),
+    );
+
+    it.effect("returns no groups for a board without an archive", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("board-before");
+        const board = yield* TodoBoard.TodoBoard;
+        const archive = yield* board.readArchive({ cwd });
+        expect(archive.groups).toEqual([]);
+      }),
+    );
+
+    it.effect("keeps the archive read-only: mutations cannot reach an archived id", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("after-archive");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const markerPath = path.join(
+          boardDir,
+          "archive",
+          "e0ae5-archive-target-2",
+          "e0ae5-archive-target.md",
+        );
+        const before = yield* fs.readFileString(markerPath);
+        const board = yield* TodoBoard.TodoBoard;
+        const failure = yield* board
+          .mutate({ action: "tag", cwd, id: "e0ae5-archive-target", tag: "beta" })
+          .pipe(Effect.flip);
+        expect(failure.failure).toBe("issue_not_found");
+        expect(yield* fs.readFileString(markerPath)).toBe(before);
+      }),
+    );
+  });
+
   it.layer(TestLayer)("mutates", (it) => {
     it.effect("status writes the skill's exact bytes", () =>
       Effect.gen(function* () {
