@@ -34,5 +34,9 @@ export function createTodoBoardAtoms<R, E>(runtime: Atom.AtomRuntime<Environment
         input: TodoBoardMutateInput;
       }>,
     }),
+    regenerate: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:todo-board:regenerate",
+      tag: WS_METHODS.todoBoardRegenerate,
+    }),
   };
 }

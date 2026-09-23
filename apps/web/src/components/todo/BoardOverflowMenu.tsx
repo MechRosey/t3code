@@ -1,10 +1,15 @@
-import { TodoBoardError, type EnvironmentId, type TodoIssue } from "@t3tools/contracts";
+import {
+  TodoBoardError,
+  type EnvironmentId,
+  type TodoBoardRegenerateTarget,
+  type TodoIssue,
+} from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import { EllipsisIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import { todoBoardMutate } from "../../state/todoBoard";
+import { todoBoardMutate, todoBoardRegenerate } from "../../state/todoBoard";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import {
@@ -33,6 +38,8 @@ export interface BoardOverflowMenuProps {
 
 export function BoardOverflowMenu({ environmentId, cwd, issues }: BoardOverflowMenuProps) {
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
+  const regenerate = useAtomCommand(todoBoardRegenerate, { reportFailure: false });
+  const [regenerating, setRegenerating] = useState<TodoBoardRegenerateTarget | null>(null);
   const eligibleSubtrees = useMemo(() => boardArchiveEligibleSubtrees(issues), [issues]);
   const sweepCandidates = useMemo(() => boardArchiveSweepCandidates(issues), [issues]);
 
@@ -80,6 +87,34 @@ export function BoardOverflowMenu({ environmentId, cwd, issues }: BoardOverflowM
     }
   };
 
+  const regenerateArtifacts = async (target: TodoBoardRegenerateTarget) => {
+    setRegenerating(target);
+    try {
+      const result = await regenerate({ environmentId, input: { cwd, target } });
+      if (result._tag !== "Failure") {
+        toastManager.add({
+          type: "success",
+          title:
+            target === "index"
+              ? "Rebuilt INDEX.md (board.html refreshed too)"
+              : "Regenerated board.html and board-map.html",
+        });
+        return;
+      }
+      const failure = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: "Could not regenerate the board",
+        description:
+          failure instanceof Error && failure.message.length > 0
+            ? failure.message
+            : "The board rejected the rebuild.",
+      });
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
   return (
     <Menu>
       <MenuTrigger
@@ -110,8 +145,18 @@ export function BoardOverflowMenu({ environmentId, cwd, issues }: BoardOverflowM
           </MenuSubPopup>
         </MenuSub>
         <MenuSeparator />
-        <MenuItem disabled>Regenerate board.html</MenuItem>
-        <MenuItem disabled>Rebuild INDEX.md</MenuItem>
+        <MenuItem
+          disabled={regenerating !== null}
+          onClick={() => void regenerateArtifacts("board")}
+        >
+          Regenerate board.html
+        </MenuItem>
+        <MenuItem
+          disabled={regenerating !== null}
+          onClick={() => void regenerateArtifacts("index")}
+        >
+          Rebuild INDEX.md (also refreshes board.html)
+        </MenuItem>
       </MenuPopup>
     </Menu>
   );

@@ -9,6 +9,7 @@ const todoBoardAtoms = createTodoBoardAtoms(connectionAtomRuntime);
 export const todoBoardRead = todoBoardAtoms.read;
 export const todoBoardSubscribe = todoBoardAtoms.subscribe;
 export const todoBoardMutate = todoBoardAtoms.mutate;
+export const todoBoardRegenerate = todoBoardAtoms.regenerate;
 
 export function useTodoBoardAvailability(
   environmentId: EnvironmentId | null,
