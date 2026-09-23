@@ -105,10 +105,9 @@ describe("epic quick-filter derivation", () => {
 });
 
 describe("common-tag recency ranking", () => {
-  const DAY = 86_400_000;
   const REFERENCE = "2026-09-20T00:00:00.000Z";
   const updatedDaysAgo = (days: number) =>
-    new Date(Date.parse(REFERENCE) - days * DAY).toISOString();
+    `2026-09-${String(20 - days).padStart(2, "0")}T00:00:00.000Z`;
 
   it("ranks tags by recency-weighted occurrences measured from the newest issue", () => {
     const issues = [
@@ -176,12 +175,6 @@ describe("common-tag recency ranking", () => {
 });
 
 describe("tag-spec comma-OR matching", () => {
-  const tagged = [
-    issue({ id: "a", title: "a", tags: ["board"] }),
-    issue({ id: "b", title: "b", tags: ["todo-skill"] }),
-    issue({ id: "c", title: "c", tags: ["unrelated"] }),
-  ];
-
   it("splits on commas and drops blank terms", () => {
     assert.deepEqual(parseTagSpec("board, todo-skill,, "), ["board", "todo-skill"]);
     assert.deepEqual(parseTagSpec(""), []);
@@ -189,13 +182,7 @@ describe("tag-spec comma-OR matching", () => {
   });
 
   it("passes every issue through when the spec holds no terms", () => {
-    assert.deepEqual(
-      matchesTagSpec(
-        tagged.map((entry) => entry.tags),
-        parseTagSpec(""),
-      ),
-      true,
-    );
+    assert.equal(matchesTagSpec(["board"], []), true);
     assert.equal(matchesTagSpec([], []), true);
   });
 
