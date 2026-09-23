@@ -1,10 +1,17 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { TodoBoardMutateInput, TodoIssue } from "./todoBoard.ts";
+import {
+  TodoBoardMutateInput,
+  TodoBoardRegenerateInput,
+  TodoBoardRegenerateResult,
+  TodoIssue,
+} from "./todoBoard.ts";
 
 const decodeMutate = Schema.decodeUnknownSync(TodoBoardMutateInput);
 const decodeIssue = Schema.decodeUnknownSync(TodoIssue);
+const decodeRegenerate = Schema.decodeUnknownSync(TodoBoardRegenerateInput);
+const decodeRegenerateResult = Schema.decodeUnknownSync(TodoBoardRegenerateResult);
 
 describe("TodoBoardMutateInput", () => {
   it("accepts every consumed verb as a discriminated member", () => {
@@ -51,6 +58,37 @@ describe("TodoBoardMutateInput", () => {
         target: "def13-y",
       }),
     ).toThrow();
+  });
+});
+
+describe("TodoBoardRegenerateInput", () => {
+  it("accepts the board and index targets", () => {
+    expect(decodeRegenerate({ cwd: "C:\\proj", target: "board" })).toEqual({
+      cwd: "C:\\proj",
+      target: "board",
+    });
+    expect(decodeRegenerate({ cwd: "C:\\proj", target: "index" })).toEqual({
+      cwd: "C:\\proj",
+      target: "index",
+    });
+  });
+
+  it("rejects unknown targets, missing cwd, and empty cwd", () => {
+    expect(() => decodeRegenerate({ cwd: "C:\\proj", target: "both" })).toThrow();
+    expect(() => decodeRegenerate({ target: "board" })).toThrow();
+    expect(() => decodeRegenerate({ cwd: "", target: "board" })).toThrow();
+  });
+});
+
+describe("TodoBoardRegenerateResult", () => {
+  it("decodes the artifact filenames written", () => {
+    expect(decodeRegenerateResult({ artifacts: ["INDEX.md", "board.html"] })).toEqual({
+      artifacts: ["INDEX.md", "board.html"],
+    });
+  });
+
+  it("rejects non-string artifacts", () => {
+    expect(() => decodeRegenerateResult({ artifacts: [1] })).toThrow();
   });
 });
 
