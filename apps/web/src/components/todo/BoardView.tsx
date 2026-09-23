@@ -158,7 +158,7 @@ function BoardCard({
       onClick={onOpen}
       style={cardHueStyle(card.issue)}
       className={cn(
-        "relative block w-full cursor-pointer rounded-lg border p-2 text-left shadow-xs transition-colors hover:border-foreground/30",
+        "relative block w-full cursor-grab rounded-lg border p-2 text-left shadow-xs transition-colors hover:border-foreground/30",
         card.tinted ? (card.isRoot ? "board-card-root" : "board-card-child") : "bg-card/70",
         card.issue.status === "blocked" && "board-card-blocked",
       )}
@@ -273,7 +273,12 @@ function BoardDraggableCard({
     id: `card:${card.issue.id}`,
   });
   return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className={cn(isDragging && "opacity-40")}>
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={cn(isDragging && "cursor-grabbing opacity-40")}
+    >
       <BoardCard card={card} onOpen={onOpen} progress={progress} />
     </div>
   );
@@ -295,7 +300,9 @@ function BoardDragPreview({
   if (card === undefined) return null;
   return (
     <DragOverlay dropAnimation={null}>
-      <BoardCard card={card} progress={progressByIssueId[issueId] ?? null} onOpen={() => {}} />
+      <div className="cursor-grabbing">
+        <BoardCard card={card} progress={progressByIssueId[issueId] ?? null} onOpen={() => {}} />
+      </div>
     </DragOverlay>
   );
 }
