@@ -106,8 +106,11 @@ describe("epic quick-filter derivation", () => {
 
 describe("common-tag recency ranking", () => {
   const REFERENCE = "2026-09-20T00:00:00.000Z";
-  const updatedDaysAgo = (days: number) =>
-    `2026-09-${String(20 - days).padStart(2, "0")}T00:00:00.000Z`;
+  const updatedDaysAgo = (days: number) => {
+    const day = 20 - days;
+    if (day > 0) return `2026-09-${String(day).padStart(2, "0")}T00:00:00.000Z`;
+    return `2026-08-${String(day + 31).padStart(2, "0")}T00:00:00.000Z`;
+  };
 
   it("ranks tags by recency-weighted occurrences measured from the newest issue", () => {
     const issues = [
