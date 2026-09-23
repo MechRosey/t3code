@@ -3062,6 +3062,10 @@ const makeWsRpcLayer = (
           observeRpcStream(WS_METHODS.todoBoardSubscribe, todoBoard.stream(input), {
             "rpc.aggregate": "workspace",
           }),
+        [WS_METHODS.todoArchiveRead]: (input) =>
+          observeRpcEffect(WS_METHODS.todoArchiveRead, todoBoard.readArchive(input), {
+            "rpc.aggregate": "workspace",
+          }),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
             "rpc.aggregate": "workspace",

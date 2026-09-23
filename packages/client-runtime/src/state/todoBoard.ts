@@ -22,6 +22,12 @@ export function createTodoBoardAtoms<R, E>(runtime: Atom.AtomRuntime<Environment
       tag: WS_METHODS.todoBoardSubscribe,
       idleTtlMs: 5 * 60_000,
     }),
+    archive: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:todo-archive:read",
+      tag: WS_METHODS.todoArchiveRead,
+      staleTimeMs: 30_000,
+      idleTtlMs: 5 * 60_000,
+    }),
     mutate: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:todo-board:mutate",
       tag: WS_METHODS.todoBoardMutate,

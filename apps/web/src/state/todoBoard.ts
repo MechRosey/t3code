@@ -10,6 +10,7 @@ export const todoBoardRead = todoBoardAtoms.read;
 export const todoBoardSubscribe = todoBoardAtoms.subscribe;
 export const todoBoardMutate = todoBoardAtoms.mutate;
 export const todoBoardRegenerate = todoBoardAtoms.regenerate;
+export const todoBoardArchiveRead = todoBoardAtoms.archive;
 
 export function useTodoBoardAvailability(
   environmentId: EnvironmentId | null,

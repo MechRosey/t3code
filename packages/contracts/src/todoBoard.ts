@@ -145,6 +145,25 @@ export const TodoBoardSubscribeInput = Schema.Struct({
 });
 export type TodoBoardSubscribeInput = typeof TodoBoardSubscribeInput.Type;
 
+export const TodoArchiveGroup = Schema.Struct({
+  dirName: Schema.String,
+  rootIssue: Schema.NullOr(TodoIssue),
+  snapshot: TodoBoardSnapshot,
+});
+export type TodoArchiveGroup = typeof TodoArchiveGroup.Type;
+
+export const TodoArchiveReadInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+});
+export type TodoArchiveReadInput = typeof TodoArchiveReadInput.Type;
+
+export const TodoArchiveReadResult = Schema.Struct({
+  boardRoot: Schema.String,
+  repoName: Schema.String,
+  groups: Schema.Array(TodoArchiveGroup),
+});
+export type TodoArchiveReadResult = typeof TodoArchiveReadResult.Type;
+
 export const TodoBoardFailure = Schema.Literals([
   "board_not_found",
   "pointer_dangling",

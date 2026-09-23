@@ -112,6 +112,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.todoBoardMutate]: AuthOrchestrationOperateScope,
   [WS_METHODS.todoBoardRegenerate]: AuthOrchestrationOperateScope,
   [WS_METHODS.todoBoardSubscribe]: AuthOrchestrationReadScope,
+  [WS_METHODS.todoArchiveRead]: AuthOrchestrationReadScope,
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.filesystemBrowse]: AuthOrchestrationReadScope,
   [WS_METHODS.agentSessionsScan]: AuthOrchestrationReadScope,

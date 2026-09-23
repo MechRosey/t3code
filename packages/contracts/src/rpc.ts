@@ -271,6 +271,8 @@ import {
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import {
+  TodoArchiveReadInput,
+  TodoArchiveReadResult,
   TodoBoardError,
   TodoBoardMutateInput,
   TodoBoardMutateResult,
@@ -308,6 +310,7 @@ export const WS_METHODS = {
   todoBoardMutate: "todo.mutate",
   todoBoardRegenerate: "todo.regenerate",
   todoBoardSubscribe: "todo.subscribe",
+  todoArchiveRead: "todo.archiveRead",
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
@@ -978,6 +981,12 @@ const WsTodoBoardSubscribeRpc = Rpc.make(WS_METHODS.todoBoardSubscribe, {
   stream: true,
 });
 
+const WsTodoArchiveReadRpc = Rpc.make(WS_METHODS.todoArchiveRead, {
+  payload: TodoArchiveReadInput,
+  success: TodoArchiveReadResult,
+  error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1494,6 +1503,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTodoBoardMutateRpc,
   WsTodoBoardRegenerateRpc,
   WsTodoBoardSubscribeRpc,
+  WsTodoArchiveReadRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,
