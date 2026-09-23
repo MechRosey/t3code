@@ -4957,8 +4957,6 @@ export default function Sidebar() {
 
 function SidebarProjectBoardButton({ project }: { project: SidebarProjectSnapshot }) {
   const router = useRouter();
-  const available = useTodoBoardAvailability(project.environmentId, project.workspaceRoot);
-  if (available !== true) return null;
   return (
     <Button
       size="icon-xs"
