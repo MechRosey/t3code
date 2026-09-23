@@ -18,9 +18,10 @@ import {
   type TodoBoardMutateInput,
   type TodoBoardRegenerateTarget,
   type TodoBoardSnapshot,
-  TodoBoardError,
   type TodoIssue,
+  TodoBoardError,
 } from "@t3tools/contracts";
+import type { TodoArchiveGroup, TodoArchiveReadResult } from "@t3tools/contracts";
 import { HostProcessHome, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import {
@@ -81,6 +82,9 @@ export class TodoBoard extends Context.Service<
     readonly read: (input: {
       readonly cwd: string;
     }) => Effect.Effect<TodoBoardSnapshot, TodoBoardError>;
+    readonly readArchive: (input: {
+      readonly cwd: string;
+    }) => Effect.Effect<TodoArchiveReadResult, TodoBoardError>;
     readonly mutate: (
       input: TodoBoardMutateInput,
     ) => Effect.Effect<{ readonly issue: TodoIssue }, TodoBoardError>;
@@ -223,7 +227,10 @@ export const make = Effect.gen(function* () {
       return yield* toError("board_not_found", `No .todo/ found at or above ${cwd}.`);
     });
 
-  const listIssueDirs = (root: string): Effect.Effect<ReadonlyArray<IssueDir>, TodoBoardError> =>
+  const listIssueDirs = (
+    root: string,
+    options?: { readonly looseRootMarkers?: boolean },
+  ): Effect.Effect<ReadonlyArray<IssueDir>, TodoBoardError> =>
     Effect.gen(function* () {
       const entries = yield* fs
         .readDirectory(root, { recursive: true })
@@ -237,11 +244,12 @@ export const make = Effect.gen(function* () {
       const markers = new Map<string, string>();
       for (const file of files.toSorted()) {
         const segments = file.split("/");
-        if (segments.length < 2) continue;
-        const dirName = segments[segments.length - 2] ?? "";
+        const loose = segments.length === 1 && options?.looseRootMarkers === true;
+        if (segments.length < 2 && !loose) continue;
         const baseName = (segments[segments.length - 1] ?? "").replace(/\.md$/, "");
+        const dirName = loose ? baseName : (segments[segments.length - 2] ?? "");
         if (!isIssueMarkerFile(dirName, baseName)) continue;
-        const dirRel = segments.slice(0, -1).join("/");
+        const dirRel = loose ? dirName : segments.slice(0, -1).join("/");
         if (!markers.has(dirRel)) markers.set(dirRel, file);
       }
       return [...markers.entries()]
@@ -298,22 +306,42 @@ export const make = Effect.gen(function* () {
       }
     });
 
-  const readBoardAt = (root: string): Effect.Effect<TodoBoardSnapshot, TodoBoardError> =>
+  const readBoardAt = (
+    root: string,
+    archived = false,
+  ): Effect.Effect<TodoBoardSnapshot, TodoBoardError> =>
     Effect.gen(function* () {
-      const dirs = yield* listIssueDirs(root);
+      const dirs = yield* listIssueDirs(root, { looseRootMarkers: archived });
       const active = dirs;
       const knownIds = active.map((dir) => dir.name);
+      const looseRoot = archived
+        ? (active.find((dir) => !dir.markerRel.includes("/")) ?? null)
+        : null;
       const rootHues = new Map<string, number | null>();
+      if (looseRoot !== null) {
+        const { text } = yield* readMarker(root, looseRoot);
+        rootHues.set(looseRoot.name, toRootHue(parseIssue(text, looseRoot.name).fm.colour));
+      }
       const issues: Array<TodoIssue> = [];
       for (const dir of active) {
         const { text } = yield* readMarker(root, dir);
         const parsed = parseIssue(text, dir.name);
-        if (dir.rel.split("/").length === 1) {
+        const segments = dir.rel.split("/");
+        const loose = dir.markerRel.split("/").length === 1;
+        const depth = looseRoot === null ? segments.length - 1 : loose ? 0 : segments.length;
+        const parentId = loose
+          ? null
+          : looseRoot !== null
+            ? depth === 1
+              ? (looseRoot.name ?? null)
+              : (segments[depth - 2] ?? null)
+            : depth >= 1
+              ? (segments[depth - 1] ?? null)
+              : null;
+        if (looseRoot !== null ? loose : segments.length === 1) {
           rootHues.set(dir.name, toRootHue(parsed.fm.colour));
         }
-        const segments = dir.rel.split("/");
-        const depth = segments.length - 1;
-        const rootId = segments[0] ?? "";
+        const rootId = looseRoot !== null ? (looseRoot.name ?? "") : (segments[0] ?? "");
         issues.push({
           id: parsed.fm.id,
           title: parsed.fm.title,
@@ -322,11 +350,11 @@ export const make = Effect.gen(function* () {
           updated: parsed.fm.updated,
           tags: [...parsed.fm.tags],
           epic: parsed.fm.epic ?? null,
-          parentId: depth >= 1 ? (segments[depth - 1] ?? null) : null,
+          parentId,
           depth,
           rootHue: rootHues.get(rootId) ?? null,
           markerPath: normalizeSlashes(path.join(root, dir.markerRel)),
-          archived: false,
+          archived,
           sections: toSections(getSectionMap(parsed.body)),
           body: parsed.body,
           links: {
@@ -336,6 +364,30 @@ export const make = Effect.gen(function* () {
         });
       }
       return { root, repoName: repoDisplayName(root), issues };
+    });
+
+  const readArchiveAt = (root: string): Effect.Effect<TodoArchiveReadResult, TodoBoardError> =>
+    Effect.gen(function* () {
+      const archiveRoot = path.join(root, "archive");
+      const groupNames = yield* fs.readDirectory(archiveRoot).pipe(
+        Effect.mapError((cause) =>
+          toError("operation_failed", `Failed to list ${archiveRoot}`, cause),
+        ),
+        Effect.catch(() => Effect.succeed([] as Array<string>)),
+      );
+      const groupDirs: Array<TodoArchiveGroup> = [];
+      for (const dirName of groupNames.toSorted()) {
+        const groupDir = path.join(archiveRoot, dirName);
+        if (!(yield* existsDirectory(groupDir))) continue;
+        const snapshot = yield* readBoardAt(groupDir, true);
+        const normalizedGroupDir = normalizeSlashes(groupDir);
+        const rootIssue =
+          snapshot.issues.find(
+            (issue) => normalizeSlashes(path.dirname(issue.markerPath)) === normalizedGroupDir,
+          ) ?? null;
+        groupDirs.push({ dirName, rootIssue, snapshot });
+      }
+      return { boardRoot: root, repoName: repoDisplayName(root), groups: groupDirs };
     });
 
   const nowStamp = Effect.map(DateTime.now, (now) => {
@@ -639,7 +691,8 @@ export const make = Effect.gen(function* () {
     );
 
   return TodoBoard.of({
-    read: (input) => Effect.flatMap(resolveRoot(input.cwd), readBoardAt),
+    read: (input) => Effect.flatMap(resolveRoot(input.cwd), (root) => readBoardAt(root)),
+    readArchive: (input) => Effect.flatMap(resolveRoot(input.cwd), (root) => readArchiveAt(root)),
     mutate: (input) =>
       Effect.flatMap(resolveRoot(input.cwd), (root) => withLock(root, mutateAt(root, input))),
     regenerate: (input) =>
