@@ -185,6 +185,52 @@ describe("board drawer mode persistence", () => {
   });
 });
 
+describe("board filter spec and query persistence", () => {
+  it("defaults the tag spec and free-text query to empty", () => {
+    assert.equal(DEFAULT_BOARD_UI_STATE.tagSpec, "");
+    assert.equal(DEFAULT_BOARD_UI_STATE.query, "");
+    assert.equal(readBoardUiState(memoryStorage(), ROOT_A).tagSpec, "");
+    assert.equal(readBoardUiState(memoryStorage(), ROOT_A).query, "");
+  });
+
+  it("round-trips a tag spec and free-text query per resolved root", () => {
+    const storage = memoryStorage();
+    writeBoardUiState(storage, ROOT_A, {
+      tag: null,
+      sort: "updated-desc",
+      dropHintDismissed: false,
+      view: "columns",
+      drawerMode: "normal",
+      tagSpec: "ui,board",
+      query: "10eb",
+    });
+    const read = readBoardUiState(storage, ROOT_A);
+    assert.equal(read.tagSpec, "ui,board");
+    assert.equal(read.query, "10eb");
+    assert.equal(readBoardUiState(storage, ROOT_B).tagSpec, "");
+  });
+
+  it("resets persisted JSON written before the filter fields existed to empty", () => {
+    const legacy = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({ tag: null, sort: "id-asc" }),
+    });
+    const read = readBoardUiState(legacy, ROOT_A);
+    assert.equal(read.tagSpec, "");
+    assert.equal(read.query, "");
+  });
+
+  it("falls back to defaults on a wrong-shaped filter field", () => {
+    const wrongShape = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: null,
+        sort: "id-asc",
+        tagSpec: 7,
+      }),
+    });
+    assert.deepEqual(readBoardUiState(wrongShape, ROOT_A), DEFAULT_BOARD_UI_STATE);
+  });
+});
+
 describe("board drop hint persistence", () => {
   it("defaults the drop hint to visible", () => {
     assert.equal(DEFAULT_BOARD_UI_STATE.dropHintDismissed, false);
