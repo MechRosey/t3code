@@ -1,6 +1,7 @@
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  BOARD_VIEW_OPTIONS,
   boardUiStorageKey,
   DEFAULT_BOARD_UI_STATE,
   readBoardUiState,
@@ -110,6 +111,13 @@ describe("board view toggle persistence", () => {
     assert.equal(readBoardUiState(memoryStorage(), ROOT_A).view, "columns");
   });
 
+  it("offers the archive view alongside columns and map", () => {
+    assert.deepEqual(
+      BOARD_VIEW_OPTIONS.map((option) => option.value),
+      ["columns", "map", "archive"],
+    );
+  });
+
   it("round-trips a map view choice per resolved root", () => {
     const storage = memoryStorage();
     writeBoardUiState(storage, ROOT_A, {
@@ -122,6 +130,21 @@ describe("board view toggle persistence", () => {
       query: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).view, "map");
+    assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
+  });
+
+  it("round-trips an archive view choice per resolved root", () => {
+    const storage = memoryStorage();
+    writeBoardUiState(storage, ROOT_A, {
+      tag: null,
+      sort: "id-asc",
+      dropHintDismissed: false,
+      view: "archive",
+      drawerMode: "normal",
+      tagSpec: "",
+      query: "",
+    });
+    assert.equal(readBoardUiState(storage, ROOT_A).view, "archive");
     assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
   });
 
