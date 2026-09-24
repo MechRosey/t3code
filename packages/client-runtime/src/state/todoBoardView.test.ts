@@ -19,6 +19,7 @@ import {
   cardHueStyle,
   EMPTY_BOARD_SNAPSHOT,
   filterIssuesByTag,
+  isBoardFilterActive,
   isQuickFilterActive,
   matchesIssueFreeText,
   matchesTagSpec,
@@ -260,6 +261,25 @@ describe("free-text issue matching", () => {
   it("treats a blank query as no filter", () => {
     assert.equal(matchesIssueFreeText(issue({ id: "a", title: "a" }), ""), true);
     assert.equal(matchesIssueFreeText(issue({ id: "a", title: "a" }), "   "), true);
+  });
+});
+
+describe("board filter active state", () => {
+  it("is inactive when the spec and query are both blank", () => {
+    assert.equal(isBoardFilterActive({ tagSpec: "", query: "" }), false);
+    assert.equal(isBoardFilterActive({ tagSpec: "", query: "   " }), false);
+  });
+
+  it("is inactive when the spec holds only commas", () => {
+    assert.equal(isBoardFilterActive({ tagSpec: ",, ,", query: "" }), false);
+  });
+
+  it("is active when the spec holds a term, with no query", () => {
+    assert.equal(isBoardFilterActive({ tagSpec: "board", query: "" }), true);
+  });
+
+  it("is active when the query holds text, with an empty spec", () => {
+    assert.equal(isBoardFilterActive({ tagSpec: "", query: "board" }), true);
   });
 });
 
