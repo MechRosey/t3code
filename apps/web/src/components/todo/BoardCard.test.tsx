@@ -1,5 +1,5 @@
 import { act } from "react";
-import { create } from "react-test-renderer";
+import { create, type ReactTestRenderer } from "react-test-renderer";
 import { DndContext } from "@dnd-kit/core";
 import type { TodoIssue } from "@t3tools/contracts";
 import type { BoardCardViewModel } from "@t3tools/client-runtime/state/todo-board-view";
@@ -90,7 +90,7 @@ describe("board card copy affordance", () => {
 
   it("renders the drag-preview card without a copy affordance", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    let renderer: ReactTestRenderer;
+    let renderer: ReactTestRenderer | undefined;
     act(() => {
       renderer = create(
         <BoardCard card={cardModel("abc12-rest-of-id")} onOpen={() => {}} progress={null} />,

@@ -85,7 +85,8 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
-import { BoardDraggableCard, BoardDragPreview } from "./BoardCard";
+import { BoardDraggableCard, BoardDragPreview, CopyIssueIdButton } from "./BoardCard";
+import { shortBoardId } from "./boardCopy.logic";
 import { BoardMarkdown } from "./BoardMarkdown";
 import {
   DEFAULT_COMMENT_ACTOR,
@@ -516,10 +517,11 @@ function BoardIssueDrawer({
                 <Maximize2Icon className="size-3.5" />
               )}
             </Button>
+            <CopyIssueIdButton issue={issue} />
           </div>
           <SheetTitle className="text-base">{issue.title}</SheetTitle>
           <SheetDescription className="font-mono text-xs">
-            {issue.id} - {boardStatusLabel(issue.status)}
+            {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
           </SheetDescription>
         </SheetHeader>
         <SheetPanel className="flex flex-col gap-4">

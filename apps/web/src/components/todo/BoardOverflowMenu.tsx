@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 
 import { todoBoardMutate, todoBoardRegenerate } from "../../state/todoBoard";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { shortBoardId } from "./boardCopy.logic";
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -137,7 +138,7 @@ export function BoardOverflowMenu({ environmentId, cwd, issues }: BoardOverflowM
               eligibleSubtrees.map((issue) => (
                 <MenuItem key={issue.id} onClick={() => void archiveSubtree(issue)}>
                   <span className="min-w-0 truncate">
-                    {issue.id} {issue.title}
+                    {shortBoardId(issue.id)} {issue.title}
                   </span>
                 </MenuItem>
               ))

@@ -22,8 +22,7 @@ import {
   SheetTitle,
 } from "../ui/sheet";
 import { BoardMarkdown } from "./BoardMarkdown";
-
-const shortArchiveId = (id: string) => id.slice(0, 5);
+import { shortBoardId } from "./boardCopy.logic";
 
 function ArchiveIssueSheet({
   issue,
@@ -46,7 +45,7 @@ function ArchiveIssueSheet({
           />
           <SheetTitle className="text-base">{issue.title}</SheetTitle>
           <SheetDescription className="font-mono text-xs">
-            {issue.id} - {boardStatusLabel(issue.status)}
+            {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
           </SheetDescription>
         </SheetHeader>
         <SheetPanel className="flex flex-col gap-4">
@@ -91,10 +90,10 @@ function ArchiveIssueRow({
     >
       <span className="min-w-0 flex-1 truncate text-xs text-foreground/90">{issue.title}</span>
       <span
-        title={issue.id}
+        title={issue.title}
         className="shrink-0 font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
       >
-        {shortArchiveId(issue.id)}
+        {shortBoardId(issue.id)}
       </span>
       <span
         title={boardStatusLabel(issue.status)}
@@ -131,7 +130,7 @@ function ArchiveGroupCard({
               title={root.id}
               className="font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
             >
-              {shortArchiveId(root.id)}
+              {shortBoardId(root.id)}
             </span>
             <span
               className={cn("text-xs leading-4", boardStatusColourClass(root.status))}
