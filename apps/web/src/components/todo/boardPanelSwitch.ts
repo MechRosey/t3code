@@ -110,3 +110,31 @@ export function resolveBoardPanelSwitch(
     },
   };
 }
+
+export function resolveProjectBoardEntry(
+  project: BoardPanelSwitchProject,
+  threads: readonly BoardPanelSwitchThread[],
+): BoardPanelSwitchTarget | null {
+  if (project.workspaceRoot.length === 0) return null;
+  let latest: BoardPanelSwitchThread | null = null;
+  for (const thread of threads) {
+    if (thread.archivedAt !== null) continue;
+    if (thread.environmentId !== project.environmentId || thread.projectId !== project.id) continue;
+    if (
+      latest === null ||
+      thread.updatedAt > latest.updatedAt ||
+      (thread.updatedAt === latest.updatedAt && thread.id > latest.id)
+    ) {
+      latest = thread;
+    }
+  }
+  if (latest === null) return null;
+  const threadRef = scopeThreadRef(latest.environmentId, latest.id);
+  return {
+    threadRef,
+    routeTarget: {
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+    },
+  };
+}
