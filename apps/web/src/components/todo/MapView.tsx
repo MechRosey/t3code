@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { shortBoardId } from "./boardCopy.logic";
 import {
   mapTitleLines,
   type MapEdgeViewModel,
@@ -112,7 +113,7 @@ function MapNode({
         </text>
       ) : null}
       <text x={12} y={55} className="fill-muted-foreground/70 font-mono text-[9px]">
-        {node.id}
+        {shortBoardId(node.id)}
       </text>
       <text
         x={node.width - 14}
