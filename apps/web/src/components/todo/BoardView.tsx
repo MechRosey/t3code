@@ -818,7 +818,7 @@ export function BoardView({
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: `Could not move ${issue.id} to ${status}`,
+      title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
       description:
         failure instanceof Error && failure.message.length > 0
           ? failure.message
@@ -883,7 +883,7 @@ export function BoardView({
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: `Could not move ${issue.id} to ${status}`,
+      title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
       description:
         failure instanceof Error && failure.message.length > 0
           ? failure.message
