@@ -1,7 +1,14 @@
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
-import { resolveBoardPanelSwitch, resolveProjectBoardEntry } from "./boardPanelSwitch";
+import {
+  BOARD_OPEN_STYLE_STORAGE_KEY,
+  readStoredBoardOpenStyle,
+  resolveBoardOpenStyle,
+  resolveBoardPanelSwitch,
+  resolveProjectBoardEntry,
+  writeStoredBoardOpenStyle,
+} from "./boardPanelSwitch";
 
 const ENV = "env-1" as EnvironmentId;
 
@@ -221,5 +228,62 @@ describe("resolveProjectBoardEntry", () => {
       thread({ id: "thread-2", updatedAt: "2026-09-05T00:00:00.000Z" }),
     ]);
     assert.deepEqual(target?.threadRef, { environmentId: ENV, threadId: "thread-2" });
+  });
+});
+
+describe("resolveBoardOpenStyle", () => {
+  it("opens the side panel when the stored style is panel and a thread resolves", () => {
+    assert.equal(resolveBoardOpenStyle("panel", true), "panel");
+  });
+
+  it("falls back to the full page when the stored style is panel but no thread resolves", () => {
+    assert.equal(resolveBoardOpenStyle("panel", false), "page");
+  });
+
+  it("opens the full page when the stored style is page even though a thread resolves", () => {
+    assert.equal(resolveBoardOpenStyle("page", true), "page");
+    assert.equal(resolveBoardOpenStyle("page", false), "page");
+  });
+
+  it("defaults to the panel-when-a-thread-resolves-else-page behaviour when nothing is stored", () => {
+    assert.equal(resolveBoardOpenStyle(null, true), "panel");
+    assert.equal(resolveBoardOpenStyle(null, false), "page");
+  });
+
+  it("treats an unknown stored value as nothing stored", () => {
+    assert.equal(resolveBoardOpenStyle("columns", true), "panel");
+    assert.equal(resolveBoardOpenStyle("columns", false), "page");
+  });
+});
+
+describe("board open style persistence", () => {
+  function memoryStorage(entries: Record<string, string> = {}) {
+    const map = new Map(Object.entries(entries));
+    return {
+      getItem: (key: string) => (map.has(key) ? (map.get(key) as string) : null),
+      setItem: (key: string, value: string) => void map.set(key, value),
+    };
+  }
+
+  it("round-trips the open style under the board-open-style key", () => {
+    const storage = memoryStorage();
+    writeStoredBoardOpenStyle("panel", storage);
+    assert.equal(storage.getItem(BOARD_OPEN_STYLE_STORAGE_KEY), "panel");
+    assert.equal(readStoredBoardOpenStyle(storage), "panel");
+    writeStoredBoardOpenStyle("page", storage);
+    assert.equal(readStoredBoardOpenStyle(storage), "page");
+  });
+
+  it("reads null when nothing is stored or the stored value is not an open style", () => {
+    assert.equal(readStoredBoardOpenStyle(memoryStorage()), null);
+    assert.equal(
+      readStoredBoardOpenStyle(memoryStorage({ [BOARD_OPEN_STYLE_STORAGE_KEY]: "columns" })),
+      null,
+    );
+    assert.equal(readStoredBoardOpenStyle(undefined), null);
+  });
+
+  it("does not throw when writing with no storage available", () => {
+    writeStoredBoardOpenStyle("page", undefined);
   });
 });
