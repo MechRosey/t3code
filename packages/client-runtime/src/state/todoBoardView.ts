@@ -173,6 +173,15 @@ export function matchesIssueFreeText(issue: TodoIssue, query: string): boolean {
   return issue.id.slice(0, BOARD_SHORT_ID_LENGTH).toLowerCase().includes(needle);
 }
 
+export function toggleTagSpecTerm(term: string, spec: string): string {
+  const terms = parseTagSpec(spec);
+  const lowered = term.toLowerCase();
+  const next = terms.some((entry) => entry.toLowerCase() === lowered)
+    ? terms.filter((entry) => entry.toLowerCase() !== lowered)
+    : [...terms, term];
+  return next.join(",");
+}
+
 export function isQuickFilterActive(
   label: string,
   uiState: { readonly tagSpec?: string | null; readonly query?: string },
