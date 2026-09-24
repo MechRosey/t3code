@@ -2,6 +2,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { EnvironmentId } from "@t3tools/contracts";
 import {
   buildBoardViewModel,
+  toggleTagSpecTerm,
   type BoardCardViewModel,
   type BoardColumnViewModel,
   type BoardViewModel,
@@ -28,6 +29,12 @@ import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { todoBoard } from "../../state/todoBoard";
 import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
 import { boardFailureMessage } from "./boardStatus";
+import {
+  BoardFilterStrip,
+  EMPTY_BOARD_FILTER_STATE,
+  isBoardFilterActive,
+  type BoardFilterState,
+} from "./BoardFilterStrip";
 
 type BoardRouteScreenProps = StaticScreenProps<{
   readonly environmentId: string;
@@ -47,6 +54,7 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
   const boardResult = useAtomValue(boardAtom);
   const refreshBoard = useAtomRefresh(boardAtom);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<BoardFilterState>(EMPTY_BOARD_FILTER_STATE);
 
   const failure = boardResult._tag === "Failure" ? boardResult.cause : null;
   const snapshot = boardResult._tag === "Success" ? boardResult.value : null;
@@ -54,9 +62,24 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
     () =>
       snapshot === null
         ? null
-        : buildBoardViewModel(snapshot, { tag: null, sort: "updated-desc" as const }),
-    [snapshot],
+        : buildBoardViewModel(snapshot, {
+            tag: null,
+            sort: "updated-desc" as const,
+            tagSpec: filter.tagSpec,
+            query: filter.query,
+          }),
+    [snapshot, filter],
   );
+  const handleFilterQueryChange = useCallback(
+    (query: string) => setFilter((current) => ({ ...current, query })),
+    [],
+  );
+  const handleFilterToggleTerm = useCallback(
+    (term: string) =>
+      setFilter((current) => ({ ...current, tagSpec: toggleTagSpecTerm(term, current.tagSpec) })),
+    [],
+  );
+  const handleFilterClear = useCallback(() => setFilter(EMPTY_BOARD_FILTER_STATE), []);
   const selectedCard =
     viewModel === null || selectedIssueId === null
       ? null
@@ -93,13 +116,36 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
   } else if (viewModel === null) {
     body = <LoadingScreen message="Loading board..." messagePlacement="above-spinner" />;
   } else {
+    const totalCards = viewModel.columns.reduce((count, column) => count + column.cards.length, 0);
+    const filterHidesEverything = totalCards === 0 && isBoardFilterActive(filter);
     body = (
-      <BoardSurface
-        viewModel={viewModel}
-        selectedCard={selectedCard}
-        onSelect={setSelectedIssueId}
-        onDeselect={handleDeselect}
-      />
+      <View className="flex-1">
+        <BoardFilterStrip
+          epics={viewModel.epics}
+          commonTags={viewModel.commonTags}
+          filter={filter}
+          onQueryChange={handleFilterQueryChange}
+          onToggleTerm={handleFilterToggleTerm}
+          onClear={handleFilterClear}
+        />
+        {filterHidesEverything ? (
+          <View className="flex-1 items-center justify-center px-6">
+            <EmptyState
+              title="No matching issues"
+              detail="No issues match the current filters."
+              actionLabel="Clear filters"
+              onAction={handleFilterClear}
+            />
+          </View>
+        ) : (
+          <BoardSurface
+            viewModel={viewModel}
+            selectedCard={selectedCard}
+            onSelect={setSelectedIssueId}
+            onDeselect={handleDeselect}
+          />
+        )}
+      </View>
     );
   }
 
