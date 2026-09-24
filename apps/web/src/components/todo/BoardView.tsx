@@ -122,6 +122,7 @@ import {
   EMPTY_BOARD_SNAPSHOT,
   isQuickFilterActive,
   parseTagSpec,
+  toggleTagSpecTerm as toggleTagSpecTermInSpec,
   type BoardSortOrder,
   type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
@@ -777,12 +778,7 @@ export function BoardView({
     parseTagSpec(uiState.tagSpec).length > 0 ||
     uiState.query.trim().length > 0;
   const toggleTagSpecTerm = (term: string) => {
-    const terms = parseTagSpec(uiState.tagSpec);
-    const lowered = term.toLowerCase();
-    const next = terms.some((entry) => entry.toLowerCase() === lowered)
-      ? terms.filter((entry) => entry.toLowerCase() !== lowered)
-      : [...terms, term];
-    updateUiState({ tagSpec: next.join(",") });
+    updateUiState({ tagSpec: toggleTagSpecTermInSpec(term, uiState.tagSpec) });
   };
   const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "" });
 
