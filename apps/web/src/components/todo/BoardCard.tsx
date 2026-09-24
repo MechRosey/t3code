@@ -45,6 +45,7 @@ export function CopyIssueIdButton({
       data-copied={isCopied ? "true" : undefined}
       className={className}
       onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
       onClick={() => copyToClipboard(shortId)}
     >
       {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}

@@ -127,7 +127,7 @@ function ArchiveGroupCard({
           </span>
           <div className="mt-1 flex items-center gap-2">
             <span
-              title={root.id}
+              title={root.title}
               className="font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
             >
               {shortBoardId(root.id)}

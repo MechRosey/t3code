@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type KeyboardEvent } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { DndContext } from "@dnd-kit/core";
 import type { TodoIssue } from "@t3tools/contracts";
@@ -83,6 +83,14 @@ describe("board card copy affordance", () => {
       expect(writeText).toHaveBeenCalledWith("abc12");
       expect(onOpen).not.toHaveBeenCalled();
       expect(String(copyButton.props["aria-label"])).toBe("Copied abc12");
+      const stopPropagation = vi.fn();
+      const keydown = {
+        key: "Enter",
+        stopPropagation,
+      } as unknown as KeyboardEvent<HTMLButtonElement>;
+      await act(async () => copyButton.props.onKeyDown(keydown));
+      expect(stopPropagation).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
     } finally {
       await act(async () => renderer.unmount());
     }
