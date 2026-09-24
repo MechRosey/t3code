@@ -182,6 +182,13 @@ export function toggleTagSpecTerm(term: string, spec: string): string {
   return next.join(",");
 }
 
+export function isBoardFilterActive(uiState: {
+  readonly tagSpec: string;
+  readonly query: string;
+}): boolean {
+  return parseTagSpec(uiState.tagSpec).length > 0 || uiState.query.trim().length > 0;
+}
+
 export function isQuickFilterActive(
   label: string,
   uiState: { readonly tagSpec?: string | null; readonly query?: string },
