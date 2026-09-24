@@ -120,9 +120,9 @@ import {
   boardStatusLabel,
   buildBoardViewModel,
   EMPTY_BOARD_SNAPSHOT,
+  isBoardFilterActive,
   isQuickFilterActive,
-  parseTagSpec,
-  toggleTagSpecTerm as toggleTagSpecTermInSpec,
+  toggleTagSpecTerm,
   type BoardSortOrder,
   type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
@@ -773,12 +773,9 @@ export function BoardView({
   const newTaskProgress = progressByIssueId[BOARD_NEW_TASK_DISPATCH_KEY] ?? null;
 
   const totalCards = model?.columns.reduce((count, column) => count + column.cards.length, 0) ?? 0;
-  const filterActive =
-    uiState.tag !== null ||
-    parseTagSpec(uiState.tagSpec).length > 0 ||
-    uiState.query.trim().length > 0;
-  const toggleTagSpecTerm = (term: string) => {
-    updateUiState({ tagSpec: toggleTagSpecTermInSpec(term, uiState.tagSpec) });
+  const filterActive = uiState.tag !== null || isBoardFilterActive(uiState);
+  const handleToggleTagSpecTerm = (term: string) => {
+    updateUiState({ tagSpec: toggleTagSpecTerm(term, uiState.tagSpec) });
   };
   const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "" });
 
@@ -1242,7 +1239,7 @@ export function BoardView({
                   label={epicFilter.epic}
                   hue={epicFilter.hue}
                   active={isQuickFilterActive(epicFilter.epic, uiState)}
-                  onClick={() => toggleTagSpecTerm(epicFilter.epic)}
+                  onClick={() => handleToggleTagSpecTerm(epicFilter.epic)}
                 />
               ))}
             </div>
@@ -1255,7 +1252,7 @@ export function BoardView({
                   label={tag}
                   hue={null}
                   active={isQuickFilterActive(tag, uiState)}
-                  onClick={() => toggleTagSpecTerm(tag)}
+                  onClick={() => handleToggleTagSpecTerm(tag)}
                 />
               ))}
             </div>
