@@ -26,7 +26,8 @@ import {
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { todoBoard } from "../../state/todoBoard";
-import { boardFailureMessage, classifyBoardFailure } from "./boardStatus";
+import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
+import { boardFailureMessage } from "./boardStatus";
 
 type BoardRouteScreenProps = StaticScreenProps<{
   readonly environmentId: string;
@@ -75,7 +76,7 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
   let body: ReactNode;
   if (failure !== null && snapshot === null) {
     body =
-      classifyBoardFailure(failure) === "board_not_found" ? (
+      classifyTodoBoardFailure(failure) === "bootstrap" ? (
         <View className="flex-1 items-center justify-center px-6">
           <EmptyState title="No .todo board resolves here." detail={cwd} />
         </View>
