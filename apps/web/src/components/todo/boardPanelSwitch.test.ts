@@ -1,7 +1,7 @@
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
-import { resolveBoardPanelSwitch } from "./boardPanelSwitch";
+import { resolveBoardPanelSwitch, resolveProjectBoardEntry } from "./boardPanelSwitch";
 
 const ENV = "env-1" as EnvironmentId;
 
@@ -163,5 +163,63 @@ describe("resolveBoardPanelSwitch", () => {
       [],
     );
     assert.equal(target, null);
+  });
+});
+
+describe("resolveProjectBoardEntry", () => {
+  it("resolves the latest non-archived thread of the project as the side-panel target", () => {
+    const target = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-1", updatedAt: "2026-09-01T00:00:00.000Z" }),
+      thread({ id: "thread-2", updatedAt: "2026-09-05T00:00:00.000Z" }),
+    ]);
+    assert.deepEqual(target, {
+      threadRef: { environmentId: ENV, threadId: "thread-2" },
+      routeTarget: {
+        to: "/$environmentId/$threadId",
+        params: { environmentId: ENV, threadId: "thread-2" },
+      },
+    });
+  });
+
+  it("never resolves a thread of another project so the panel can only show the clicked project's board", () => {
+    const target = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-9", projectId: "proj-2", updatedAt: "2026-09-09T00:00:00.000Z" }),
+    ]);
+    assert.equal(target, null);
+  });
+
+  it("never resolves a thread of another environment so a same-id project elsewhere cannot leak in", () => {
+    const target = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-9", environmentId: "env-2" as EnvironmentId }),
+    ]);
+    assert.equal(target, null);
+  });
+
+  it("resolves null when the project has no live thread so the caller falls back to the full page", () => {
+    assert.equal(resolveProjectBoardEntry(project(), []), null);
+    assert.equal(
+      resolveProjectBoardEntry(project(), [thread({ archivedAt: "2026-09-02T00:00:00.000Z" })]),
+      null,
+    );
+  });
+
+  it("resolves a worktree thread of the project even though its thread root is the worktree path", () => {
+    const target = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-3", worktreePath: "C:/repo/.worktrees/wt" }),
+    ]);
+    assert.deepEqual(target?.threadRef, { environmentId: ENV, threadId: "thread-3" });
+  });
+
+  it("degrades to null on an empty workspace root so the caller uses the full-page fallback", () => {
+    const target = resolveProjectBoardEntry(project({ workspaceRoot: "" }), [thread()]);
+    assert.equal(target, null);
+  });
+
+  it("breaks update-time ties deterministically by thread id", () => {
+    const target = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-1", updatedAt: "2026-09-05T00:00:00.000Z" }),
+      thread({ id: "thread-2", updatedAt: "2026-09-05T00:00:00.000Z" }),
+    ]);
+    assert.deepEqual(target?.threadRef, { environmentId: ENV, threadId: "thread-2" });
   });
 });
