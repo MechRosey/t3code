@@ -127,6 +127,7 @@ import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import {
   readThreadShell,
+  readThreadShells,
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
   useThreadShells,
@@ -2236,7 +2237,7 @@ export default function Sidebar() {
   );
   const openProjectBoard = useCallback(
     (project: EnvironmentProject) => {
-      const target = resolveProjectBoardEntry(project, threads);
+      const target = resolveProjectBoardEntry(project, readThreadShells());
       if (target === null) {
         void router.navigate({
           to: "/board",
@@ -2250,7 +2251,7 @@ export default function Sidebar() {
         params: target.routeTarget.params,
       });
     },
-    [router, threads],
+    [router],
   );
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
