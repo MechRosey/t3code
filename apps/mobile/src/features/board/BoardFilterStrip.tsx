@@ -1,6 +1,6 @@
 import {
+  isBoardFilterActive,
   isQuickFilterActive,
-  parseTagSpec,
   type BoardEpicQuickFilter,
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { Pressable, ScrollView, View } from "react-native";
@@ -14,10 +14,6 @@ export interface BoardFilterState {
 }
 
 export const EMPTY_BOARD_FILTER_STATE: BoardFilterState = { tagSpec: "", query: "" };
-
-export function isBoardFilterActive(filter: BoardFilterState): boolean {
-  return parseTagSpec(filter.tagSpec).length > 0 || filter.query.trim().length > 0;
-}
 
 export function BoardFilterStrip(props: {
   readonly epics: ReadonlyArray<BoardEpicQuickFilter>;
@@ -99,7 +95,7 @@ function BoardFilterChip(props: {
       onPress={props.onPress}
       className={cn(
         "rounded-full border px-3 py-1.5",
-        props.hue === null ? "border-border bg-muted" : "border-border",
+        props.hue === null ? "border-border bg-card" : "border-border",
         props.active && "border-primary",
       )}
       style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1, ...tint })}

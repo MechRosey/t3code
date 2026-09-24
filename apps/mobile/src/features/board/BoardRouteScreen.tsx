@@ -2,6 +2,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { EnvironmentId } from "@t3tools/contracts";
 import {
   buildBoardViewModel,
+  isBoardFilterActive,
   toggleTagSpecTerm,
   type BoardCardViewModel,
   type BoardColumnViewModel,
@@ -32,7 +33,6 @@ import { boardFailureMessage } from "./boardStatus";
 import {
   BoardFilterStrip,
   EMPTY_BOARD_FILTER_STATE,
-  isBoardFilterActive,
   type BoardFilterState,
 } from "./BoardFilterStrip";
 
