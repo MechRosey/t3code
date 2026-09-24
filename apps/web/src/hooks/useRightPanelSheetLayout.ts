@@ -6,7 +6,19 @@ import { isElectron } from "~/env";
 function subscribe(callback: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   window.addEventListener("resize", callback);
-  return () => window.removeEventListener("resize", callback);
+  if (!isElectron) return () => window.removeEventListener("resize", callback);
+  let resolution = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  const onResolutionChange = () => {
+    resolution.removeEventListener("change", onResolutionChange);
+    resolution = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    resolution.addEventListener("change", onResolutionChange);
+    callback();
+  };
+  resolution.addEventListener("change", onResolutionChange);
+  return () => {
+    window.removeEventListener("resize", callback);
+    resolution.removeEventListener("change", onResolutionChange);
+  };
 }
 
 function useViewportWidth(): number {
