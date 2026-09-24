@@ -6,7 +6,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../components/WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { BoardView } from "../components/todo/BoardView";
-import { resolveBoardPanelSwitch } from "../components/todo/boardPanelSwitch";
+import {
+  resolveBoardPanelSwitch,
+  writeStoredBoardOpenStyle,
+} from "../components/todo/boardPanelSwitch";
 import { isElectron } from "../env";
 import { useProjects, useThreadShells } from "../state/entities";
 import { useRightPanelStore } from "../rightPanelStore";
@@ -78,6 +81,7 @@ function BoardRouteView() {
               panelSwitchTarget === null
                 ? undefined
                 : () => {
+                    writeStoredBoardOpenStyle("panel");
                     useRightPanelStore.getState().open(panelSwitchTarget.threadRef, "board");
                     void navigate({
                       to: panelSwitchTarget.routeTarget.to,

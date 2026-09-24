@@ -213,7 +213,12 @@ import {
   type SnoozePreset,
 } from "./Sidebar.snooze";
 import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
-import { resolveProjectBoardEntry } from "./todo/boardPanelSwitch";
+import {
+  readStoredBoardOpenStyle,
+  resolveBoardOpenStyle,
+  resolveProjectBoardEntry,
+  writeStoredBoardOpenStyle,
+} from "./todo/boardPanelSwitch";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "./chat/providerIconUtils";
@@ -2239,6 +2244,15 @@ export default function Sidebar() {
     (project: EnvironmentProject) => {
       const target = resolveProjectBoardEntry(project, readThreadShells());
       if (target === null) {
+        void router.navigate({
+          to: "/board",
+          search: { environmentId: project.environmentId, cwd: project.workspaceRoot },
+        });
+        return;
+      }
+      const openStyle = resolveBoardOpenStyle(readStoredBoardOpenStyle(), true);
+      writeStoredBoardOpenStyle(openStyle);
+      if (openStyle === "page") {
         void router.navigate({
           to: "/board",
           search: { environmentId: project.environmentId, cwd: project.workspaceRoot },
@@ -4576,14 +4590,16 @@ export default function Sidebar() {
               onNewProject={openAddProjectCommandPalette}
               onOpenBoard={
                 scopedProjectGroup !== null && scopedProjectBoardAvailable === true
-                  ? () =>
+                  ? () => {
+                      writeStoredBoardOpenStyle("page");
                       void router.navigate({
                         to: "/board",
                         search: {
                           environmentId: scopedProjectGroup.environmentId,
                           cwd: scopedProjectGroup.workspaceRoot,
                         },
-                      })
+                      });
+                    }
                   : undefined
               }
               onNewThread={handleNewThreadClick}
@@ -5004,6 +5020,7 @@ function SidebarProjectBoardButton({ project }: { project: SidebarProjectSnapsho
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
+        writeStoredBoardOpenStyle("page");
         void router.navigate({
           to: "/board",
           search: { environmentId: project.environmentId, cwd: project.workspaceRoot },

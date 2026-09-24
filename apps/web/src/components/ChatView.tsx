@@ -217,6 +217,7 @@ import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavaila
 import { RightPanelTabs } from "./RightPanelTabs";
 import { AgentsPanel } from "./AgentsPanel";
 import { BoardView } from "./todo/BoardView";
+import { writeStoredBoardOpenStyle } from "./todo/boardPanelSwitch";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { ThreadPullRequestsPanel } from "./pullRequest/ThreadPullRequestsPanel";
 import { useDeviceState } from "~/state/device";
@@ -4563,6 +4564,7 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThreadRef]);
   const addBoardSurface = useCallback(() => {
     if (!activeThreadRef || !activeProject || !activeWorkspaceRoot) return;
+    writeStoredBoardOpenStyle("panel");
     useRightPanelStore.getState().open(activeThreadRef, "board");
   }, [activeProject, activeThreadRef, activeWorkspaceRoot]);
   const supportsThreadPullRequests =
@@ -9683,7 +9685,8 @@ export default function ChatView(props: ChatViewProps) {
           key={`${activeThread.environmentId}:${activeWorkspaceRoot ?? ""}`}
           environmentId={activeThread.environmentId}
           cwd={activeWorkspaceRoot ?? ""}
-          onOpenFullPage={() =>
+          onOpenFullPage={() => {
+            writeStoredBoardOpenStyle("page");
             void navigate({
               to: "/board",
               search: {
@@ -9691,8 +9694,8 @@ export default function ChatView(props: ChatViewProps) {
                 cwd: activeWorkspaceRoot ?? "",
                 threadId: activeThreadRef.threadId,
               },
-            })
-          }
+            });
+          }}
         />
       </Suspense>
     ) : renderedRightPanelSurface?.kind === "device" ? (
