@@ -41,10 +41,10 @@ export function MermaidView({ source }: { readonly source: string }) {
   if (state.kind === "failed") {
     return (
       <div className="flex flex-col gap-1">
-        <pre className="overflow-x-auto rounded-md bg-muted/60 p-2 font-mono text-[.65rem] text-muted-foreground">
+        <pre className="overflow-x-auto rounded-md bg-muted/60 p-2 font-mono text-xs text-muted-foreground">
           {source}
         </pre>
-        <span className="text-[.65rem] text-red-500">Diagram failed to render</span>
+        <span className="text-xs text-red-500">Diagram failed to render</span>
       </div>
     );
   }
