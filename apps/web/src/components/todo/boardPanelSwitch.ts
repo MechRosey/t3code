@@ -24,6 +24,46 @@ export interface BoardPanelSwitchProject {
   readonly workspaceRoot: string;
 }
 
+export type BoardOpenStyle = "panel" | "page";
+
+export const BOARD_OPEN_STYLE_STORAGE_KEY = "t3code:board-open-style";
+
+type BoardOpenStyleStorage = Pick<Storage, "getItem" | "setItem">;
+
+function resolveOpenStyleStorage(storage: BoardOpenStyleStorage | undefined) {
+  return storage ?? (typeof window === "undefined" ? undefined : window.localStorage);
+}
+
+export function resolveBoardOpenStyle(
+  stored: string | null,
+  hasResolvableThread: boolean,
+): BoardOpenStyle {
+  if (stored === "page") return "page";
+  return hasResolvableThread ? "panel" : "page";
+}
+
+export function readStoredBoardOpenStyle(
+  storage?: BoardOpenStyleStorage | undefined,
+): BoardOpenStyle | null {
+  try {
+    const raw = resolveOpenStyleStorage(storage)?.getItem(BOARD_OPEN_STYLE_STORAGE_KEY) ?? null;
+    return raw === "panel" || raw === "page" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredBoardOpenStyle(
+  style: BoardOpenStyle,
+  storage?: BoardOpenStyleStorage | undefined,
+): void {
+  try {
+    resolveOpenStyleStorage(storage)?.setItem(BOARD_OPEN_STYLE_STORAGE_KEY, style);
+  } catch {
+    return;
+  }
+}
+
 export interface BoardPanelSwitchTarget {
   readonly threadRef: ScopedThreadRef;
   readonly routeTarget: {
