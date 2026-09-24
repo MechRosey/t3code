@@ -212,6 +212,7 @@ import {
   type SnoozePreset,
 } from "./Sidebar.snooze";
 import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
+import { resolveProjectBoardEntry } from "./todo/boardPanelSwitch";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "./chat/providerIconUtils";
@@ -997,6 +998,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   wokeAt: string | null;
   isActive: boolean;
   openPullRequestsInRightPanel: boolean;
+  onOpenProjectBoard: (project: EnvironmentProject) => void;
   jumpLabel: string | null;
   currentEnvironmentId: string | null;
   environmentLabel: string | null;
@@ -1616,6 +1618,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
             >
               {props.project ? <ProjectFavicon project={props.project} className="size-4" /> : null}
             </span>
+            {props.project ? (
+              <SidebarRowProjectBoardButton
+                project={props.project}
+                displayName={props.projectDisplayName}
+                onOpen={props.onOpenProjectBoard}
+              />
+            ) : null}
             {draftIndicator}
             {title}
             {pinIndicator}
@@ -1763,6 +1772,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               {draftIndicator}
               {props.project ? (
                 <ProjectFavicon project={props.project} className="size-4 shrink-0" />
+              ) : null}
+              {props.project ? (
+                <SidebarRowProjectBoardButton
+                  project={props.project}
+                  displayName={props.projectDisplayName}
+                  onOpen={props.onOpenProjectBoard}
+                />
               ) : null}
               {props.projectDisplayName ? (
                 <span
@@ -2217,6 +2233,24 @@ export default function Sidebar() {
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
+  );
+  const openProjectBoard = useCallback(
+    (project: EnvironmentProject) => {
+      const target = resolveProjectBoardEntry(project, threads);
+      if (target === null) {
+        void router.navigate({
+          to: "/board",
+          search: { environmentId: project.environmentId, cwd: project.workspaceRoot },
+        });
+        return;
+      }
+      useRightPanelStore.getState().open(target.threadRef, "board");
+      void router.navigate({
+        to: target.routeTarget.to,
+        params: target.routeTarget.params,
+      });
+    },
+    [router, threads],
   );
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -4725,6 +4759,7 @@ export default function Sidebar() {
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
                             isActive={routeThreadKey === threadKey}
                             openPullRequestsInRightPanel={routeThreadRef !== null}
+                            onOpenProjectBoard={openProjectBoard}
                             jumpLabel={
                               showThreadJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null
                             }
@@ -4972,6 +5007,33 @@ function SidebarProjectBoardButton({ project }: { project: SidebarProjectSnapsho
           to: "/board",
           search: { environmentId: project.environmentId, cwd: project.workspaceRoot },
         });
+      }}
+    >
+      <SquareKanban className="size-3.5" />
+    </Button>
+  );
+}
+
+function SidebarRowProjectBoardButton({
+  project,
+  displayName,
+  onOpen,
+}: {
+  project: EnvironmentProject;
+  displayName: string | null;
+  onOpen: (project: EnvironmentProject) => void;
+}) {
+  return (
+    <Button
+      size="icon-xs"
+      variant="ghost-muted"
+      tabIndex={-1}
+      title={`Open board for ${displayName ?? project.title}`}
+      className="size-5 shrink-0 rounded-sm [--control-icon-color:currentColor] text-icon-muted hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen(project);
       }}
     >
       <SquareKanban className="size-3.5" />
