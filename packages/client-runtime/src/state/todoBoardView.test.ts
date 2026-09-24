@@ -24,6 +24,7 @@ import {
   matchesTagSpec,
   parseTagSpec,
   sortBoardIssues,
+  toggleTagSpecTerm,
 } from "./todoBoardView.ts";
 
 const DEFAULT_BOARD_UI_STATE = { tag: null, sort: "updated-desc" } as const;
@@ -201,6 +202,29 @@ describe("tag-spec comma-OR matching", () => {
     assert.equal(matchesTagSpec(["Board"], ["board"]), true);
     assert.equal(matchesTagSpec(["board"], ["BOARD"]), true);
     assert.equal(matchesTagSpec(["unrelated"], ["Board"]), false);
+  });
+});
+
+describe("tag-spec term toggling", () => {
+  it("appends a term to an empty spec", () => {
+    assert.equal(toggleTagSpecTerm("board", ""), "board");
+  });
+
+  it("appends a term to a spec with existing terms", () => {
+    assert.equal(toggleTagSpecTerm("todo-skill", "board"), "board,todo-skill");
+  });
+
+  it("removes a term that matches case-insensitively", () => {
+    assert.equal(toggleTagSpecTerm("BOARD", "board,todo-skill"), "todo-skill");
+    assert.equal(toggleTagSpecTerm("board", "Board,todo-skill"), "todo-skill");
+  });
+
+  it("preserves the original case of a newly added term", () => {
+    assert.equal(toggleTagSpecTerm("UI", ""), "UI");
+  });
+
+  it("re-joins the remaining terms with commas after a removal", () => {
+    assert.equal(toggleTagSpecTerm("board", "board,todo-skill,ui"), "todo-skill,ui");
   });
 });
 
