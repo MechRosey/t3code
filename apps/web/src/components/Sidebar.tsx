@@ -135,7 +135,6 @@ import {
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
-import { useTodoBoardAvailability } from "../state/todoBoard";
 import { useEnvironmentQuery } from "../state/query";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
@@ -2460,10 +2459,6 @@ export default function Sidebar() {
         : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
     [projectGroups, projectScopeKey],
   );
-  const scopedProjectBoardAvailable = useTodoBoardAvailability(
-    scopedProjectGroup?.environmentId ?? null,
-    scopedProjectGroup?.workspaceRoot ?? null,
-  );
   const scopedProjectKeys = useMemo(
     () =>
       scopedProjectGroup === null
@@ -4589,7 +4584,7 @@ export default function Sidebar() {
               }
               onNewProject={openAddProjectCommandPalette}
               onOpenBoard={
-                scopedProjectGroup !== null && scopedProjectBoardAvailable === true
+                scopedProjectGroup !== null
                   ? () => {
                       writeStoredBoardOpenStyle("page");
                       void router.navigate({
