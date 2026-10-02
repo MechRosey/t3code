@@ -12,12 +12,12 @@ import { useEnvironmentQuery } from "../../state/query";
 import { todoBoardArchiveRead } from "../../state/todoBoard";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import {
   Sheet,
-  SheetClose,
+  SheetContent,
   SheetDescription,
   SheetHeader,
-  SheetPanel,
   SheetPopup,
   SheetTitle,
 } from "../ui/sheet";
@@ -35,7 +35,7 @@ function ArchiveIssueSheet({
     <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
       <SheetPopup side="right" className="w-[448px] max-w-none">
         <SheetHeader>
-          <SheetClose
+          <SheetPrimitive.Close
             render={
               <Button size="compact" variant="ghost-muted" aria-label="Back to the archive">
                 <ArrowLeftIcon />
@@ -48,7 +48,7 @@ function ArchiveIssueSheet({
             {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
           </SheetDescription>
         </SheetHeader>
-        <SheetPanel className="flex flex-col gap-4">
+        <SheetContent className="flex flex-col gap-4">
           {issue.tags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {issue.tags.map((tag) => (
@@ -67,7 +67,7 @@ function ArchiveIssueSheet({
             <span>updated {issue.updated}</span>
             <span className="truncate font-mono">{issue.markerPath}</span>
           </div>
-        </SheetPanel>
+        </SheetContent>
       </SheetPopup>
     </Sheet>
   );

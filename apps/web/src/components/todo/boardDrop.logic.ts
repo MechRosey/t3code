@@ -88,15 +88,28 @@ export type BoardDispatchProgress = "starting" | "running" | "settled";
 export function boardDispatchProgress(
   shell:
     | {
-        readonly session: { readonly status: string } | null;
-        readonly latestTurn: { readonly state: string } | null;
+        readonly status: string;
+        readonly activityRunStatus?:
+          | "preparing"
+          | "starting"
+          | "running"
+          | "waiting"
+          | null
+          | undefined;
       }
     | null
     | undefined,
 ): BoardDispatchProgress {
   if (shell === undefined || shell === null) return "starting";
-  const sessionStatus = shell.session?.status;
-  if (sessionStatus === "starting" || sessionStatus === "running") return "running";
-  if (shell.latestTurn?.state === "running") return "running";
+  if (
+    shell.status === "preparing" ||
+    shell.status === "queued" ||
+    shell.status === "starting" ||
+    shell.status === "running" ||
+    shell.status === "waiting"
+  ) {
+    return "running";
+  }
+  if (shell.activityRunStatus === "running") return "running";
   return "settled";
 }

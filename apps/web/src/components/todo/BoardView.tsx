@@ -71,12 +71,12 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import {
   Sheet,
-  SheetClose,
+  SheetContent,
   SheetDescription,
   SheetHeader,
-  SheetPanel,
   SheetPopup,
   SheetTitle,
 } from "../ui/sheet";
@@ -496,7 +496,7 @@ function BoardIssueDrawer({
         ) : null}
         <SheetHeader>
           <div className="flex items-center gap-2">
-            <SheetClose
+            <SheetPrimitive.Close
               render={
                 <Button size="compact" variant="ghost-muted" aria-label="Back to the board">
                   <ArrowLeftIcon />
@@ -525,7 +525,7 @@ function BoardIssueDrawer({
             {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
           </SheetDescription>
         </SheetHeader>
-        <SheetPanel className="flex flex-col gap-4">
+        <SheetContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <Menu>
               <MenuTrigger
@@ -689,7 +689,7 @@ function BoardIssueDrawer({
             <span>updated {issue.updated}</span>
             <span className="truncate font-mono">{issue.markerPath}</span>
           </div>
-        </SheetPanel>
+        </SheetContent>
       </SheetPopup>
     </Sheet>
   );

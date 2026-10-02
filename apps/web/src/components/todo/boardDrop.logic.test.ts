@@ -245,42 +245,20 @@ describe("dispatch progress from a thread snapshot", () => {
     assert.equal(boardDispatchProgress(null), "starting");
   });
 
-  it("reports running while the session is starting or running", () => {
+  it("reports running while the thread status is active", () => {
+    assert.equal(boardDispatchProgress({ status: "starting", activityRunStatus: null }), "running");
+    assert.equal(boardDispatchProgress({ status: "running", activityRunStatus: null }), "running");
+    assert.equal(boardDispatchProgress({ status: "queued" }), "running");
+    assert.equal(boardDispatchProgress({ status: "waiting" }), "running");
     assert.equal(
-      boardDispatchProgress({ session: { status: "starting" }, latestTurn: null }),
-      "running",
-    );
-    assert.equal(
-      boardDispatchProgress({
-        session: { status: "running" },
-        latestTurn: { state: "running" },
-      }),
-      "running",
-    );
-    assert.equal(
-      boardDispatchProgress({
-        session: { status: "idle" },
-        latestTurn: { state: "running" },
-      }),
+      boardDispatchProgress({ status: "idle", activityRunStatus: "running" }),
       "running",
     );
   });
 
-  it("reports settled once the turn and session are done", () => {
-    assert.equal(
-      boardDispatchProgress({
-        session: { status: "idle" },
-        latestTurn: { state: "completed" },
-      }),
-      "settled",
-    );
-    assert.equal(
-      boardDispatchProgress({
-        session: { status: "stopped" },
-        latestTurn: { state: "error" },
-      }),
-      "settled",
-    );
-    assert.equal(boardDispatchProgress({ session: null, latestTurn: null }), "settled");
+  it("reports settled once the run is done", () => {
+    assert.equal(boardDispatchProgress({ status: "idle", activityRunStatus: null }), "settled");
+    assert.equal(boardDispatchProgress({ status: "failed", activityRunStatus: null }), "settled");
+    assert.equal(boardDispatchProgress({ status: "completed" }), "settled");
   });
 });

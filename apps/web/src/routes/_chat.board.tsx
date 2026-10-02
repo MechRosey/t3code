@@ -14,7 +14,7 @@ import { isElectron } from "../env";
 import { useProjects, useThreadShells } from "../state/entities";
 import { useRightPanelStore } from "../rightPanelStore";
 
-interface BoardSearch {
+export interface BoardSearch {
   readonly environmentId?: EnvironmentId;
   readonly cwd?: string;
   readonly threadId?: ThreadId;
