@@ -9,8 +9,10 @@ import type { BoardDrawerMode } from "./boardUiState";
 const WIDE_CONTAINER = 1200;
 const NARROW_CONTAINER = 400;
 
-function fakeWindow() {
-  const stored = new Map<string, string>();
+const ISSUE_PANE_WIDTH_STORAGE_KEY = "t3code:board-issue-drawer-width";
+
+function fakeWindow(initialEntries: ReadonlyArray<readonly [string, string]> = []) {
+  const stored = new Map<string, string>(initialEntries);
   return {
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -26,9 +28,10 @@ function renderLayout(options: {
   readonly drawerMode: BoardDrawerMode;
   readonly detail: BoardSplitDetail | null;
   readonly onClose: () => void;
+  readonly storedEntries?: ReadonlyArray<readonly [string, string]>;
 }): ReactTestRenderer {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal("window", fakeWindow());
+  vi.stubGlobal("window", fakeWindow(options.storedEntries));
   let renderer: ReactTestRenderer | undefined;
   act(() => {
     renderer = create(
@@ -139,6 +142,32 @@ describe("BoardSplitLayout", () => {
         expect(boardWrapper(renderer).props.hidden).toBe(true);
         expect(aside.findAll((node) => node.props.role === "separator")).toHaveLength(0);
         expect(renderer.root.findAll(isModalNode)).toHaveLength(0);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    }
+  });
+
+  it("BoardSplitLayout_WideContainerOnMount_OpensPaneAtStoredOrDefaultWidth", () => {
+    const cases: ReadonlyArray<{
+      storedEntries: ReadonlyArray<readonly [string, string]>;
+      expectedWidth: number;
+    }> = [
+      { storedEntries: [[ISSUE_PANE_WIDTH_STORAGE_KEY, "500"]], expectedWidth: 500 },
+      { storedEntries: [], expectedWidth: 448 },
+    ];
+    for (const { storedEntries, expectedWidth } of cases) {
+      const renderer = renderLayout({
+        containerWidth: WIDE_CONTAINER,
+        drawerMode: "normal",
+        detail: detailRecordingMode([]),
+        onClose: () => {},
+        storedEntries,
+      });
+      try {
+        const aside = renderer.root.findByType("aside");
+
+        expect(aside.props.style).toEqual({ width: expectedWidth });
       } finally {
         act(() => renderer.unmount());
       }
