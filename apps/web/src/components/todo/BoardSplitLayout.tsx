@@ -14,11 +14,20 @@ import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
 import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
 import { Button } from "../ui/button";
-import { detailWidthBounds, resolveSplitMode, type BoardSplitMode } from "./boardSplit.logic";
+import {
+  ISSUE_PANE_MIN_WIDTH,
+  detailWidthBounds,
+  resolveSplitMode,
+  type BoardSplitMode,
+} from "./boardSplit.logic";
 import type { BoardDrawerMode } from "./boardUiState";
 
 const ISSUE_PANE_WIDTH_STORAGE_KEY = "t3code:board-issue-drawer-width";
 const ISSUE_PANE_DEFAULT_WIDTH = 448;
+const STACKED_PANE_WIDTH_BOUNDS = {
+  minWidth: ISSUE_PANE_MIN_WIDTH,
+  maxWidth: Number.POSITIVE_INFINITY,
+};
 
 export interface BoardSplitDetail {
   readonly key: string;
@@ -80,7 +89,7 @@ export function BoardSplitLayout({
     storageKey: ISSUE_PANE_WIDTH_STORAGE_KEY,
     defaultWidth: ISSUE_PANE_DEFAULT_WIDTH,
     edge: "left",
-    ...detailWidthBounds(containerWidth),
+    ...(stacked ? STACKED_PANE_WIDTH_BOUNDS : detailWidthBounds(containerWidth)),
   });
   useFocusReturnOnClose(detail?.key ?? null, paneRef);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
