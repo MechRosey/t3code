@@ -985,7 +985,11 @@ export function BoardView({
                   </div>
                 )
               ) : (
-                <MapView model={mapModel} onNodeOpen={setSelectedIssueId} />
+                <MapView
+                  model={mapModel}
+                  selectedIssueId={selectedIssue?.id ?? null}
+                  onNodeOpen={setSelectedIssueId}
+                />
               )
             ) : totalCards === 0 && filterActive ? (
               <BoardFilteredEmpty onClearFilters={clearFilters} />
@@ -1011,6 +1015,7 @@ export function BoardView({
                             key={card.issue.id}
                             card={card}
                             progress={progressByIssueId[card.issue.id] ?? null}
+                            selected={card.issue.id === selectedIssue?.id}
                             onOpen={() => setSelectedIssueId(card.issue.id)}
                           />
                         ))}

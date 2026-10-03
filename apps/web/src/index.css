@@ -2329,6 +2329,12 @@ code {
   stroke-dasharray: 4 3;
 }
 
+.board-map-node.board-map-node-selected {
+  stroke: var(--primary);
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+}
+
 @layer components {
   .chat-composer-lane {
     padding-inline-start: calc(

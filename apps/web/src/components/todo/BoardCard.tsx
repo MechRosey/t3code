@@ -57,20 +57,24 @@ export function BoardCard({
   card,
   onOpen,
   progress,
+  selected = false,
 }: {
   readonly card: BoardCardViewModel;
   readonly onOpen: () => void;
   readonly progress: BoardDispatchProgress | null;
+  readonly selected?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onOpen}
+      aria-current={selected ? true : undefined}
       style={cardHueStyle(card.issue)}
       className={cn(
         "relative block w-full cursor-grab rounded-lg border p-2 text-left shadow-xs transition-colors hover:border-foreground/30",
         card.tinted ? (card.isRoot ? "board-card-root" : "board-card-child") : "bg-card/70",
         card.issue.status === "blocked" && "board-card-blocked",
+        selected && "outline-2 -outline-offset-1 outline-primary",
       )}
     >
       <span className="block text-xs font-medium break-words text-foreground/90">
@@ -174,10 +178,12 @@ export function BoardDraggableCard({
   card,
   onOpen,
   progress,
+  selected,
 }: {
   readonly card: BoardCardViewModel;
   readonly onOpen: () => void;
   readonly progress: BoardDispatchProgress | null;
+  readonly selected: boolean;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `card:${card.issue.id}`,
@@ -189,7 +195,7 @@ export function BoardDraggableCard({
       {...attributes}
       className={cn("group/card relative", isDragging && "cursor-grabbing opacity-40")}
     >
-      <BoardCard card={card} onOpen={onOpen} progress={progress} />
+      <BoardCard card={card} onOpen={onOpen} progress={progress} selected={selected} />
       <CopyIssueIdButton
         issue={card.issue}
         className="absolute end-1 top-1 z-10 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100 data-[copied=true]:opacity-100"

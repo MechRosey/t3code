@@ -58,7 +58,7 @@ describe("map view node labels", () => {
     });
     let renderer: ReturnType<typeof create> | undefined;
     act(() => {
-      renderer = create(<MapView model={model} onNodeOpen={() => {}} />);
+      renderer = create(<MapView model={model} selectedIssueId={null} onNodeOpen={() => {}} />);
     });
     try {
       const texts = renderer!.root.findAllByType("text").flatMap((node) => collectText(node));

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { cn } from "~/lib/utils";
 import { shortBoardId } from "./boardCopy.logic";
 import {
   mapTitleLines,
@@ -12,6 +13,7 @@ const MAP_TITLE_MAX_CHARS = 26;
 
 interface MapViewProps {
   readonly model: MapViewModel;
+  readonly selectedIssueId: string | null;
   readonly onNodeOpen: (issueId: string) => void;
 }
 
@@ -83,9 +85,11 @@ function MapEdge({
 
 function MapNode({
   node,
+  selected,
   onOpen,
 }: {
   readonly node: MapNodeViewModel;
+  readonly selected: boolean;
   readonly onOpen: () => void;
 }) {
   const titleLines = mapTitleLines(node.title, MAP_TITLE_MAX_CHARS);
@@ -95,6 +99,7 @@ function MapNode({
       className="cursor-pointer"
       role="button"
       aria-label={`${node.title} - ${node.statusLabel}`}
+      aria-current={selected ? true : undefined}
       onClick={onOpen}
     >
       <rect
@@ -102,7 +107,7 @@ function MapNode({
         height={node.height}
         rx={10}
         style={nodeHueStyle(node)}
-        className={mapNodeClass(node)}
+        className={cn(mapNodeClass(node), selected && "board-map-node-selected")}
       />
       <text x={12} y={25} className="fill-foreground/90 text-[11px] font-medium">
         {titleLines[0]}
@@ -156,7 +161,7 @@ function mapNodeClass(node: MapNodeViewModel): string {
   return node.isRoot ? "board-map-node board-map-node-root" : "board-map-node board-map-node-child";
 }
 
-export function MapView({ model, onNodeOpen }: MapViewProps) {
+export function MapView({ model, selectedIssueId, onNodeOpen }: MapViewProps) {
   const nodesById = new Map(model.nodes.map((node) => [node.id, node] as const));
   return (
     <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-3">
@@ -202,7 +207,12 @@ export function MapView({ model, onNodeOpen }: MapViewProps) {
           <MapEdge key={edge.key} edge={edge} path={edgePath(nodesById, edge)} />
         ))}
         {model.nodes.map((node) => (
-          <MapNode key={node.id} node={node} onOpen={() => onNodeOpen(node.id)} />
+          <MapNode
+            key={node.id}
+            node={node}
+            selected={node.id === selectedIssueId}
+            onOpen={() => onNodeOpen(node.id)}
+          />
         ))}
       </svg>
     </div>

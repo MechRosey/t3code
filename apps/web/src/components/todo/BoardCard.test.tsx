@@ -69,6 +69,7 @@ describe("board card copy affordance", () => {
             card={cardModel("abc12-rest-of-id")}
             onOpen={onOpen}
             progress={null}
+            selected={false}
           />
         </DndContext>,
       ),
