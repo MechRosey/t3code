@@ -2327,6 +2327,8 @@ code {
 
 .board-map-node-blocked {
   stroke-dasharray: 4 3;
+}
+
 @layer components {
   .chat-composer-lane {
     padding-inline-start: calc(
