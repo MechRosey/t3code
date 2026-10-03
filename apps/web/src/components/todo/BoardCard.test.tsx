@@ -96,6 +96,39 @@ describe("board card copy affordance", () => {
     }
   });
 
+  it("BoardDraggableCard_SelectedOrNot_MarksOnlyTheOpenCardCurrent", () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.stubGlobal("window", {});
+    const isCardButton = (node: { type: unknown; props: Record<string, unknown> }): boolean =>
+      node.type === "button" && !isCopyButton(node);
+    let renderer: ReactTestRenderer | undefined;
+    act(() => {
+      renderer = create(
+        <DndContext>
+          <BoardDraggableCard
+            card={cardModel("abc12-open")}
+            onOpen={() => {}}
+            progress={null}
+            selected
+          />
+          <BoardDraggableCard
+            card={cardModel("def34-closed")}
+            onOpen={() => {}}
+            progress={null}
+            selected={false}
+          />
+        </DndContext>,
+      );
+    });
+    try {
+      const cards = renderer!.root.findAll(isCardButton);
+
+      expect(cards.map((card) => card.props["aria-current"])).toEqual([true, undefined]);
+    } finally {
+      act(() => renderer!.unmount());
+    }
+  });
+
   it("renders the drag-preview card without a copy affordance", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;

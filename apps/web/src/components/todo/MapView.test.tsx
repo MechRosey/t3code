@@ -69,4 +69,32 @@ describe("map view node labels", () => {
       act(() => renderer!.unmount());
     }
   });
+
+  it("MapView_IssueOpenInPane_MarksOnlyItsNodeCurrent", () => {
+    const model = buildMapView(
+      snapshot([
+        issue({ id: "abc12-open", title: "Open ticket" }),
+        issue({ id: "def34-closed", title: "Other ticket" }),
+      ]),
+      { tag: null },
+    );
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(
+        <MapView model={model} selectedIssueId="abc12-open" onNodeOpen={() => {}} />,
+      );
+    });
+    try {
+      const nodes = renderer!.root.findAll(
+        (node) => node.type === "g" && node.props.role === "button",
+      );
+      const current = nodes.filter((node) => node.props["aria-current"] === true);
+
+      expect(nodes).toHaveLength(2);
+      expect(current).toHaveLength(1);
+      expect(String(current[0]!.props["aria-label"])).toContain("Open ticket");
+    } finally {
+      act(() => renderer!.unmount());
+    }
+  });
 });
