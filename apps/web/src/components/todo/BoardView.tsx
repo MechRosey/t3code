@@ -97,7 +97,12 @@ import {
   toggleTagSpecTerm,
   type BoardSortOrder,
 } from "@t3tools/client-runtime/state/todo-board-view";
-import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
+import {
+  useBoardUiState,
+  type BoardDrawerMode,
+  type BoardViewKind,
+  BOARD_VIEW_OPTIONS,
+} from "./boardUiState";
 import { MapView } from "./MapView";
 import { buildMapView } from "./mapView.logic";
 import { ArchiveView } from "./ArchiveView";
@@ -441,6 +446,7 @@ export function BoardView({
     updateUiState({ tagSpec: toggleTagSpecTerm(term, uiState.tagSpec) });
   };
   const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "" });
+  const changeDrawerMode = (mode: BoardDrawerMode) => updateUiState({ drawerMode: mode });
 
   const rollupAfterStatus = async (issue: TodoIssue, status: string) => {
     const rollup = boardStatusRollup(issue, status);
@@ -766,7 +772,7 @@ export function BoardView({
               boardTags={model?.tags ?? []}
               dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
               viewDiff={selectedIssueViewDiff}
-              onDrawerModeChange={(mode) => updateUiState({ drawerMode: mode })}
+              onDrawerModeChange={changeDrawerMode}
               onStatusChange={(issue, status) => void changeStatus(issue, status)}
               onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}
               onComment={addComment}
@@ -953,7 +959,12 @@ export function BoardView({
           <p className="text-xs text-muted-foreground">No .todo board resolves here.</p>
         </div>
       ) : uiState.view === "archive" ? (
-        <ArchiveView environmentId={environmentId} cwd={cwd} />
+        <ArchiveView
+          environmentId={environmentId}
+          cwd={cwd}
+          drawerMode={uiState.drawerMode}
+          onDrawerModeChange={changeDrawerMode}
+        />
       ) : model === null ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">{"Loading board\u2026"}</p>

@@ -3,14 +3,7 @@ import {
   boardStatusColourClass,
   boardStatusLabel,
 } from "@t3tools/client-runtime/state/todo-board-view";
-import {
-  GitCompareIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-  PlusIcon,
-  XIcon,
-  ZapIcon,
-} from "lucide-react";
+import { GitCompareIcon, PlusIcon, XIcon, ZapIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -41,26 +34,6 @@ import {
   prepareCommentText,
 } from "./commentForm.logic";
 import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
-
-function IssuePaneSizeToggle({
-  drawerMode,
-  onDrawerModeChange,
-}: {
-  readonly drawerMode: BoardDrawerMode;
-  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
-}) {
-  const maximised = drawerMode === "full";
-  return (
-    <Button
-      size="compact"
-      variant="ghost-muted"
-      aria-label={maximised ? "Restore the issue pane" : "Maximise the issue pane"}
-      onClick={() => onDrawerModeChange(maximised ? "normal" : "full")}
-    >
-      {maximised ? <Minimize2Icon className="size-3.5" /> : <Maximize2Icon className="size-3.5" />}
-    </Button>
-  );
-}
 
 export function BoardIssuePane({
   issue,
@@ -105,7 +78,6 @@ export function BoardIssuePane({
     () => unusedBoardTags(boardTags, issue.tags),
     [boardTags, issue.tags],
   );
-  const sizeToggleVisible = splitMode === "split" || drawerMode === "full";
   const submitComment = async () => {
     const text = preparedComment;
     if (text === null || submittingComment) return;
@@ -124,20 +96,12 @@ export function BoardIssuePane({
     <>
       <BoardPaneHeader
         splitMode={splitMode}
+        drawerMode={drawerMode}
+        onDrawerModeChange={onDrawerModeChange}
         backLabel="Board"
         backAriaLabel="Back to the board"
         onClose={onClose}
-        tools={
-          <>
-            {sizeToggleVisible ? (
-              <IssuePaneSizeToggle
-                drawerMode={drawerMode}
-                onDrawerModeChange={onDrawerModeChange}
-              />
-            ) : null}
-            <CopyIssueIdButton issue={issue} />
-          </>
-        }
+        tools={<CopyIssueIdButton issue={issue} />}
         title={issue.title}
         description={`${shortBoardId(issue.id)} - ${boardStatusLabel(issue.status)}`}
       />

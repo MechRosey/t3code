@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
 import {
   Fragment,
   useEffect,
@@ -124,8 +124,30 @@ function BoardPaneHeading({ children }: { readonly children: ReactNode }) {
   );
 }
 
+function BoardPaneSizeToggle({
+  drawerMode,
+  onDrawerModeChange,
+}: {
+  readonly drawerMode: BoardDrawerMode;
+  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
+}) {
+  const maximised = drawerMode === "full";
+  return (
+    <Button
+      size="compact"
+      variant="ghost-muted"
+      aria-label={maximised ? "Restore the issue pane" : "Maximise the issue pane"}
+      onClick={() => onDrawerModeChange(maximised ? "normal" : "full")}
+    >
+      {maximised ? <Minimize2Icon className="size-3.5" /> : <Maximize2Icon className="size-3.5" />}
+    </Button>
+  );
+}
+
 export function BoardPaneHeader({
   splitMode,
+  drawerMode,
+  onDrawerModeChange,
   backLabel,
   backAriaLabel,
   tools,
@@ -134,6 +156,8 @@ export function BoardPaneHeader({
   onClose,
 }: {
   readonly splitMode: BoardSplitMode;
+  readonly drawerMode: BoardDrawerMode;
+  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
   readonly backLabel: string;
   readonly backAriaLabel: string;
   readonly tools?: ReactNode;
@@ -141,6 +165,7 @@ export function BoardPaneHeader({
   readonly description: ReactNode;
   readonly onClose: () => void;
 }) {
+  const sizeToggleVisible = splitMode === "split" || drawerMode === "full";
   return (
     <div className="flex shrink-0 flex-col gap-2 border-b border-border/50 p-4">
       <div className="flex items-center gap-2">
@@ -149,6 +174,9 @@ export function BoardPaneHeader({
             <ArrowLeftIcon />
             {backLabel}
           </Button>
+        ) : null}
+        {sizeToggleVisible ? (
+          <BoardPaneSizeToggle drawerMode={drawerMode} onDrawerModeChange={onDrawerModeChange} />
         ) : null}
         {tools}
         <div className="min-w-0 flex-1" />

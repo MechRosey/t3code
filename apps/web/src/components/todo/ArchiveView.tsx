@@ -1,60 +1,55 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, TodoArchiveGroup, TodoIssue } from "@t3tools/contracts";
 import {
   boardStatusColourClass,
   boardStatusLabel,
   cardHueStyle,
 } from "@t3tools/client-runtime/state/todo-board-view";
-import { ArchiveIcon, ArrowLeftIcon } from "lucide-react";
+import { ArchiveIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
 import { todoBoardArchiveRead } from "../../state/todoBoard";
 import { cn } from "~/lib/utils";
-import { Button } from "../ui/button";
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetPopup,
-  SheetTitle,
-} from "../ui/sheet";
+import { ScrollArea } from "../ui/scroll-area";
 import { BoardMarkdown } from "./BoardMarkdown";
 import { shortBoardId } from "./boardCopy.logic";
+import { BoardPaneHeader, BoardSplitLayout } from "./BoardSplitLayout";
+import type { BoardSplitMode } from "./boardSplit.logic";
+import type { BoardDrawerMode } from "./boardUiState";
 
-function ArchiveIssueSheet({
+function ArchiveIssuePane({
   issue,
+  splitMode,
+  drawerMode,
+  onDrawerModeChange,
   onClose,
 }: {
   readonly issue: TodoIssue;
+  readonly splitMode: BoardSplitMode;
+  readonly drawerMode: BoardDrawerMode;
+  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
   readonly onClose: () => void;
 }) {
   return (
-    <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <SheetPopup side="right" className="w-[448px] max-w-none">
-        <SheetHeader>
-          <SheetPrimitive.Close
-            render={
-              <Button size="compact" variant="ghost-muted" aria-label="Back to the archive">
-                <ArrowLeftIcon />
-                Archive
-              </Button>
-            }
-          />
-          <SheetTitle className="text-base">{issue.title}</SheetTitle>
-          <SheetDescription className="font-mono text-xs">
-            {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
-          </SheetDescription>
-        </SheetHeader>
-        <SheetContent className="flex flex-col gap-4">
+    <>
+      <BoardPaneHeader
+        splitMode={splitMode}
+        drawerMode={drawerMode}
+        onDrawerModeChange={onDrawerModeChange}
+        backLabel="Archive"
+        backAriaLabel="Back to the archive"
+        onClose={onClose}
+        title={issue.title}
+        description={`${shortBoardId(issue.id)} - ${boardStatusLabel(issue.status)}`}
+      />
+      <ScrollArea scrollFade className="min-h-0 flex-1">
+        <div className="flex flex-col gap-4 p-4">
           {issue.tags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {issue.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-sm bg-muted px-1 font-mono text-[.6rem] text-muted-foreground"
+                  className="rounded-sm bg-muted px-1 font-mono text-3xs text-muted-foreground"
                 >
                   {tag}
                 </span>
@@ -67,9 +62,9 @@ function ArchiveIssueSheet({
             <span>updated {issue.updated}</span>
             <span className="truncate font-mono">{issue.markerPath}</span>
           </div>
-        </SheetContent>
-      </SheetPopup>
-    </Sheet>
+        </div>
+      </ScrollArea>
+    </>
   );
 }
 
@@ -165,9 +160,16 @@ function ArchiveGroupCard({
 export interface ArchiveViewProps {
   readonly environmentId: EnvironmentId;
   readonly cwd: string;
+  readonly drawerMode: BoardDrawerMode;
+  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
 }
 
-export function ArchiveView({ environmentId, cwd }: ArchiveViewProps) {
+export function ArchiveView({
+  environmentId,
+  cwd,
+  drawerMode,
+  onDrawerModeChange,
+}: ArchiveViewProps) {
   const archiveQuery = useEnvironmentQuery(todoBoardArchiveRead({ environmentId, input: { cwd } }));
   const [selected, setSelected] = useState<TodoIssue | null>(null);
   const groups = archiveQuery.data?.groups ?? [];
@@ -185,23 +187,41 @@ export function ArchiveView({ environmentId, cwd }: ArchiveViewProps) {
       </div>
     );
   }
+  const closeSelected = () => setSelected(null);
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {groups.length === 0 ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
-          <ArchiveIcon className="size-5 text-muted-foreground/50" />
-          <p className="text-xs text-muted-foreground">Nothing archived yet.</p>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          {groups.map((group) => (
-            <ArchiveGroupCard key={group.dirName} group={group} onOpen={setSelected} />
-          ))}
-        </div>
-      )}
-      {selected !== null ? (
-        <ArchiveIssueSheet issue={selected} onClose={() => setSelected(null)} />
-      ) : null}
-    </div>
+    <BoardSplitLayout
+      drawerMode={drawerMode}
+      onClose={closeSelected}
+      detail={
+        selected === null
+          ? null
+          : {
+              key: selected.markerPath,
+              render: (splitMode) => (
+                <ArchiveIssuePane
+                  issue={selected}
+                  splitMode={splitMode}
+                  drawerMode={drawerMode}
+                  onDrawerModeChange={onDrawerModeChange}
+                  onClose={closeSelected}
+                />
+              ),
+            }
+      }
+      primary={
+        groups.length === 0 ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
+            <ArchiveIcon className="size-5 text-muted-foreground/50" />
+            <p className="text-xs text-muted-foreground">Nothing archived yet.</p>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+            {groups.map((group) => (
+              <ArchiveGroupCard key={group.dirName} group={group} onOpen={setSelected} />
+            ))}
+          </div>
+        )
+      }
+    />
   );
 }
