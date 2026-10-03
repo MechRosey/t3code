@@ -113,7 +113,7 @@ export function BoardCard({
       <div className="mt-1.5 flex items-center gap-1">
         <span
           title={card.issue.title}
-          className="shrink-0 font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
+          className="shrink-0 font-mono text-xs leading-4 font-bold text-foreground/70"
         >
           {shortBoardId(card.issue.id)}
         </span>

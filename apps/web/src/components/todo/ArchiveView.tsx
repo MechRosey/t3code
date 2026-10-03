@@ -91,7 +91,7 @@ function ArchiveIssueRow({
       <span className="min-w-0 flex-1 truncate text-xs text-foreground/90">{issue.title}</span>
       <span
         title={issue.title}
-        className="shrink-0 font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
+        className="shrink-0 font-mono text-xs leading-4 font-bold text-foreground/70"
       >
         {shortBoardId(issue.id)}
       </span>
@@ -128,7 +128,7 @@ function ArchiveGroupCard({
           <div className="mt-1 flex items-center gap-2">
             <span
               title={root.title}
-              className="font-mono text-[.625rem] leading-4 font-bold text-foreground/70"
+              className="font-mono text-xs leading-4 font-bold text-foreground/70"
             >
               {shortBoardId(root.id)}
             </span>
