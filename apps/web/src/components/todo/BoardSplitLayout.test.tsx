@@ -9,6 +9,18 @@ import type { BoardDrawerMode } from "./boardUiState";
 const WIDE_CONTAINER = 1200;
 const NARROW_CONTAINER = 400;
 
+function fakeWindow() {
+  const stored = new Map<string, string>();
+  return {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    localStorage: {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+    },
+  };
+}
+
 function renderLayout(options: {
   readonly containerWidth: number;
   readonly drawerMode: BoardDrawerMode;
@@ -16,6 +28,7 @@ function renderLayout(options: {
   readonly onClose: () => void;
 }): ReactTestRenderer {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", fakeWindow());
   let renderer: ReactTestRenderer | undefined;
   act(() => {
     renderer = create(

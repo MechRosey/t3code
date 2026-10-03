@@ -15,8 +15,6 @@ import { DndContext, useDroppable, type DragEndEvent } from "@dnd-kit/core";
 import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
-  ArrowLeftIcon,
-  GitCompareIcon,
   Maximize2Icon,
   Minimize2Icon,
   NetworkIcon,
@@ -36,7 +34,6 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
-import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { newMessageId, newThreadId } from "~/lib/utils";
 import { resolveAppModelSelectionState } from "~/modelSelection";
 import { NO_PROVIDER_MODEL_SELECTION } from "~/providerInstances";
@@ -61,38 +58,16 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import {
-  Menu,
-  MenuGroupLabel,
-  MenuItem,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "../ui/menu";
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetPopup,
-  SheetTitle,
-} from "../ui/sheet";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
-import { BoardDraggableCard, BoardDragPreview, CopyIssueIdButton } from "./BoardCard";
+import { BoardDraggableCard, BoardDragPreview } from "./BoardCard";
 import { shortBoardId } from "./boardCopy.logic";
-import { BoardMarkdown } from "./BoardMarkdown";
-import {
-  DEFAULT_COMMENT_ACTOR,
-  prepareCommentActor,
-  prepareCommentText,
-} from "./commentForm.logic";
+import { BoardIssuePane } from "./BoardIssuePane";
+import { BoardSplitLayout, type BoardSplitDetail } from "./BoardSplitLayout";
 import {
   boardDispatchProgress,
   BOARD_NEW_TASK_DISPATCH_KEY,
@@ -106,8 +81,7 @@ import {
   type BoardDropActionMode,
   type BoardDropSpeed,
 } from "./boardDrop.logic";
-import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
-import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
+import { normalizeTagInput } from "./tagForm.logic";
 import {
   BOARD_DISPATCH_ACTOR,
   composeThreadAssociationComment,
@@ -116,22 +90,14 @@ import {
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
-  boardStatusColourClass,
-  boardStatusLabel,
   buildBoardViewModel,
   EMPTY_BOARD_SNAPSHOT,
   isBoardFilterActive,
   isQuickFilterActive,
   toggleTagSpecTerm,
   type BoardSortOrder,
-  type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
-import {
-  useBoardUiState,
-  type BoardDrawerMode,
-  type BoardViewKind,
-  BOARD_VIEW_OPTIONS,
-} from "./boardUiState";
+import { useBoardUiState, type BoardViewKind, BOARD_VIEW_OPTIONS } from "./boardUiState";
 import { MapView } from "./MapView";
 import { buildMapView } from "./mapView.logic";
 import { ArchiveView } from "./ArchiveView";
@@ -151,35 +117,6 @@ const BOARD_SORT_LABELS = new Map(
 const BOARD_TAG_ALL = "\u0000all";
 
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
-
-const BOARD_ISSUE_DRAWER_WIDTH_STORAGE_KEY = "t3code:board-issue-drawer-width";
-const BOARD_ISSUE_DRAWER_MIN_WIDTH = 320;
-const BOARD_ISSUE_DRAWER_DEFAULT_WIDTH = 448;
-const BOARD_ISSUE_DRAWER_BACKDROP_MARGIN = 48;
-const BOARD_ISSUE_DRAWER_FALLBACK_VIEWPORT_WIDTH = 1280;
-
-function useDrawerViewportMaxWidth(minWidth: number): number {
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window === "undefined" ? BOARD_ISSUE_DRAWER_FALLBACK_VIEWPORT_WIDTH : window.innerWidth,
-  );
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let frame = 0;
-    const onResize = () => {
-      if (frame !== 0) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = 0;
-        setViewportWidth(window.innerWidth);
-      });
-    };
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (frame !== 0) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-  return Math.max(minWidth, viewportWidth - BOARD_ISSUE_DRAWER_BACKDROP_MARGIN);
-}
 
 function BoardColumnCards({
   status,
@@ -418,280 +355,6 @@ function BoardFilteredEmpty({ onClearFilters }: { readonly onClearFilters: () =>
         Clear filters
       </Button>
     </div>
-  );
-}
-
-function BoardIssueDrawer({
-  issue,
-  statusOptions,
-  boardTags,
-  dispatchInFlight,
-  viewDiff,
-  drawerMode,
-  onDrawerModeChange,
-  onStatusChange,
-  onDispatch,
-  onComment,
-  onTagAdd,
-  onTagRemove,
-  onViewDiff,
-  onClose,
-}: {
-  readonly issue: TodoIssue;
-  readonly statusOptions: ReadonlyArray<string>;
-  readonly boardTags: ReadonlyArray<string>;
-  readonly dispatchInFlight: boolean;
-  readonly viewDiff: { readonly threadMissing: boolean } | null;
-  readonly drawerMode: BoardDrawerMode;
-  readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
-  readonly onStatusChange: (issue: TodoIssue, status: string) => void;
-  readonly onDispatch: (issue: TodoIssue, mode: BoardDropActionMode) => void;
-  readonly onComment: (issue: TodoIssue, text: string, by: string | undefined) => Promise<boolean>;
-  readonly onTagAdd: (issue: TodoIssue, tag: string) => void;
-  readonly onTagRemove: (issue: TodoIssue, tag: string) => void;
-  readonly onViewDiff: () => void;
-  readonly onClose: () => void;
-}) {
-  const [commentText, setCommentText] = useState("");
-  const [commentActor, setCommentActor] = useState(DEFAULT_COMMENT_ACTOR);
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [newTagText, setNewTagText] = useState("");
-  const preparedComment = prepareCommentText(commentText);
-  const preparedTag = normalizeTagInput(newTagText, issue.tags);
-  const tagSuggestions = useMemo(
-    () => unusedBoardTags(boardTags, issue.tags),
-    [boardTags, issue.tags],
-  );
-  const drawerMaxWidth = useDrawerViewportMaxWidth(BOARD_ISSUE_DRAWER_MIN_WIDTH);
-  const { width: drawerWidth, handlers: drawerResizeHandlers } = useResizableWidth({
-    storageKey: BOARD_ISSUE_DRAWER_WIDTH_STORAGE_KEY,
-    defaultWidth: BOARD_ISSUE_DRAWER_DEFAULT_WIDTH,
-    minWidth: BOARD_ISSUE_DRAWER_MIN_WIDTH,
-    maxWidth: drawerMaxWidth,
-    edge: "left",
-  });
-  const submitComment = async () => {
-    const text = preparedComment;
-    if (text === null || submittingComment) return;
-    setSubmittingComment(true);
-    const succeeded = await onComment(issue, text, prepareCommentActor(commentActor));
-    setSubmittingComment(false);
-    if (succeeded) setCommentText("");
-  };
-  const submitNewTag = () => {
-    const prepared = preparedTag;
-    if (prepared === null) return;
-    onTagAdd(issue, prepared.tag);
-    setNewTagText("");
-  };
-  return (
-    <Sheet open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <SheetPopup
-        side="right"
-        className="max-w-none"
-        style={{ width: drawerMode === "full" ? "100%" : `${drawerWidth}px` }}
-      >
-        {drawerMode === "normal" ? (
-          <RightPanelResizeHandle handlers={drawerResizeHandlers} />
-        ) : null}
-        <SheetHeader>
-          <div className="flex items-center gap-2">
-            <SheetPrimitive.Close
-              render={
-                <Button size="compact" variant="ghost-muted" aria-label="Back to the board">
-                  <ArrowLeftIcon />
-                  Board
-                </Button>
-              }
-            />
-            <Button
-              size="compact"
-              variant="ghost-muted"
-              aria-label={
-                drawerMode === "full" ? "Restore the issue drawer" : "Maximise the issue drawer"
-              }
-              onClick={() => onDrawerModeChange(drawerMode === "full" ? "normal" : "full")}
-            >
-              {drawerMode === "full" ? (
-                <Minimize2Icon className="size-3.5" />
-              ) : (
-                <Maximize2Icon className="size-3.5" />
-              )}
-            </Button>
-            <CopyIssueIdButton issue={issue} />
-          </div>
-          <SheetTitle className="text-base">{issue.title}</SheetTitle>
-          <SheetDescription className="font-mono text-xs">
-            {shortBoardId(issue.id)} - {boardStatusLabel(issue.status)}
-          </SheetDescription>
-        </SheetHeader>
-        <SheetContent className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Menu>
-              <MenuTrigger
-                render={
-                  <Button size="compact" variant="outline" aria-label="Change status">
-                    {boardStatusLabel(issue.status)}
-                  </Button>
-                }
-              />
-              <MenuPopup align="start" className="min-w-40">
-                <MenuRadioGroup
-                  value={issue.status}
-                  onValueChange={(next) => onStatusChange(issue, next as string)}
-                >
-                  {statusOptions.map((status) => (
-                    <MenuRadioItem key={status} value={status}>
-                      <span className={boardStatusColourClass(status)}>
-                        {boardStatusLabel(status)}
-                      </span>
-                    </MenuRadioItem>
-                  ))}
-                </MenuRadioGroup>
-              </MenuPopup>
-            </Menu>
-            <Button
-              size="compact"
-              variant="outline"
-              disabled={dispatchInFlight}
-              aria-label={`Dispatch todo -read ${issue.id}`}
-              onClick={() => onDispatch(issue, "read")}
-            >
-              <ZapIcon className="size-3" />
-              Read
-            </Button>
-            <Button
-              size="compact"
-              variant="outline"
-              disabled={dispatchInFlight}
-              aria-label={`Dispatch todo -do ${issue.id}`}
-              onClick={() => onDispatch(issue, "doing")}
-            >
-              <ZapIcon className="size-3" />
-              Do
-            </Button>
-            {viewDiff !== null ? (
-              <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex" />}>
-                  <Button
-                    size="compact"
-                    variant="outline"
-                    disabled={viewDiff.threadMissing}
-                    aria-label="View the diff of the thread recorded for this ticket"
-                    onClick={onViewDiff}
-                  >
-                    <GitCompareIcon className="size-3" />
-                    View diff
-                  </Button>
-                </TooltipTrigger>
-                <TooltipPopup>
-                  {viewDiff.threadMissing
-                    ? "The recorded thread is gone"
-                    : "Open the recorded thread's diff"}
-                </TooltipPopup>
-              </Tooltip>
-            ) : null}
-            {issue.tags.map((tag) => (
-              <span
-                key={tag}
-                className="flex items-center gap-0.5 rounded-sm bg-muted py-0.5 ps-1.5 pe-1 font-mono text-[.6rem] text-muted-foreground"
-              >
-                {tag}
-                <button
-                  type="button"
-                  aria-label={`Remove tag ${tag}`}
-                  className="cursor-pointer rounded-sm text-muted-foreground/50 outline-none hover:text-foreground focus-visible:text-foreground"
-                  onClick={() => onTagRemove(issue, tag)}
-                >
-                  <XIcon className="size-2.5" />
-                </button>
-              </span>
-            ))}
-            <Menu>
-              <MenuTrigger
-                render={
-                  <Button size="compact" variant="ghost-muted" aria-label="Add a tag">
-                    <PlusIcon className="size-3" />
-                    <span>Add tag</span>
-                  </Button>
-                }
-              />
-              <MenuPopup align="start" className="min-w-40">
-                {tagSuggestions.length > 0 ? (
-                  tagSuggestions.map((tag) => (
-                    <MenuItem key={tag} onClick={() => onTagAdd(issue, tag)}>
-                      {tag}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuGroupLabel>No unused board tags</MenuGroupLabel>
-                )}
-                <MenuSeparator />
-                <div
-                  className="flex items-center gap-1 p-1"
-                  onKeyDown={(event) => {
-                    if (event.key !== "Escape") {
-                      event.stopPropagation();
-                    }
-                  }}
-                >
-                  <Input
-                    size="compact"
-                    className="flex-1"
-                    placeholder="New tag"
-                    aria-label="New tag"
-                    value={newTagText}
-                    onChange={(event) => setNewTagText(event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        submitNewTag();
-                      }
-                    }}
-                  />
-                  <Button size="compact" disabled={preparedTag === null} onClick={submitNewTag}>
-                    Add
-                  </Button>
-                </div>
-              </MenuPopup>
-            </Menu>
-          </div>
-          {issue.body.trim().length > 0 ? <BoardMarkdown body={issue.body} /> : null}
-          <div className="flex flex-col gap-2">
-            <Textarea
-              size="sm"
-              placeholder="Add a comment to the ticket log"
-              aria-label="Comment text"
-              value={commentText}
-              onChange={(event) => setCommentText(event.currentTarget.value)}
-            />
-            <div className="flex items-center gap-2">
-              <Input
-                size="compact"
-                className="flex-1"
-                placeholder="Commenting as"
-                aria-label="Commenting as"
-                value={commentActor}
-                onChange={(event) => setCommentActor(event.currentTarget.value)}
-              />
-              <Button
-                size="compact"
-                variant="outline"
-                disabled={preparedComment === null || submittingComment}
-                onClick={() => void submitComment()}
-              >
-                Comment
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-            <span>created {issue.created}</span>
-            <span>updated {issue.updated}</span>
-            <span className="truncate font-mono">{issue.markerPath}</span>
-          </div>
-        </SheetContent>
-      </SheetPopup>
-    </Sheet>
   );
 }
 
@@ -1089,6 +752,32 @@ export function BoardView({
 
   const showMissing = boardLoadState === "unavailable";
 
+  const issueDetail: BoardSplitDetail | null =
+    selectedIssue === null
+      ? null
+      : {
+          key: selectedIssue.id,
+          render: (splitMode) => (
+            <BoardIssuePane
+              issue={selectedIssue}
+              splitMode={splitMode}
+              drawerMode={uiState.drawerMode}
+              statusOptions={statusOptions}
+              boardTags={model?.tags ?? []}
+              dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
+              viewDiff={selectedIssueViewDiff}
+              onDrawerModeChange={(mode) => updateUiState({ drawerMode: mode })}
+              onStatusChange={(issue, status) => void changeStatus(issue, status)}
+              onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}
+              onComment={addComment}
+              onTagAdd={addTag}
+              onTagRemove={removeTag}
+              onViewDiff={() => openRecordedDiff(selectedIssue)}
+              onClose={() => setSelectedIssueId(null)}
+            />
+          ),
+        };
+
   useEffect(() => {
     if (boardBootstrap) setAddTaskOpen(true);
   }, [boardBootstrap]);
@@ -1269,51 +958,60 @@ export function BoardView({
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">
           <p className="text-xs text-muted-foreground">{"Loading board\u2026"}</p>
         </div>
-      ) : uiState.view === "map" ? (
-        mapModel === null || mapModel.nodes.length === 0 ? (
-          filterActive ? (
-            <BoardFilteredEmpty onClearFilters={clearFilters} />
-          ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-              <p className="text-xs text-muted-foreground">No active issues.</p>
-            </div>
-          )
-        ) : (
-          <MapView model={mapModel} onNodeOpen={setSelectedIssueId} />
-        )
-      ) : totalCards === 0 && filterActive ? (
-        <BoardFilteredEmpty onClearFilters={clearFilters} />
       ) : (
-        <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
-          <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
-            {model.columns.map((column) => (
-              <div key={column.status} className="flex w-56 shrink-0 flex-col">
-                <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
-                  <span className="min-w-0 truncate">
-                    {column.label}
-                    <span className="ml-1 font-normal text-muted-foreground/50">
-                      {column.cards.length}
-                    </span>
-                  </span>
-                  {column.status === "read" || column.status === "doing" ? (
-                    <BoardActionNowTarget status={column.status} />
-                  ) : null}
-                </div>
-                <BoardColumnCards status={column.status}>
-                  {column.cards.map((card) => (
-                    <BoardDraggableCard
-                      key={card.issue.id}
-                      card={card}
-                      progress={progressByIssueId[card.issue.id] ?? null}
-                      onOpen={() => setSelectedIssueId(card.issue.id)}
-                    />
+        <BoardSplitLayout
+          drawerMode={uiState.drawerMode}
+          detail={issueDetail}
+          onClose={() => setSelectedIssueId(null)}
+          primary={
+            uiState.view === "map" ? (
+              mapModel === null || mapModel.nodes.length === 0 ? (
+                filterActive ? (
+                  <BoardFilteredEmpty onClearFilters={clearFilters} />
+                ) : (
+                  <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                    <p className="text-xs text-muted-foreground">No active issues.</p>
+                  </div>
+                )
+              ) : (
+                <MapView model={mapModel} onNodeOpen={setSelectedIssueId} />
+              )
+            ) : totalCards === 0 && filterActive ? (
+              <BoardFilteredEmpty onClearFilters={clearFilters} />
+            ) : (
+              <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
+                <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
+                  {model.columns.map((column) => (
+                    <div key={column.status} className="flex w-56 shrink-0 flex-col">
+                      <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
+                        <span className="min-w-0 truncate">
+                          {column.label}
+                          <span className="ml-1 font-normal text-muted-foreground/50">
+                            {column.cards.length}
+                          </span>
+                        </span>
+                        {column.status === "read" || column.status === "doing" ? (
+                          <BoardActionNowTarget status={column.status} />
+                        ) : null}
+                      </div>
+                      <BoardColumnCards status={column.status}>
+                        {column.cards.map((card) => (
+                          <BoardDraggableCard
+                            key={card.issue.id}
+                            card={card}
+                            progress={progressByIssueId[card.issue.id] ?? null}
+                            onOpen={() => setSelectedIssueId(card.issue.id)}
+                          />
+                        ))}
+                      </BoardColumnCards>
+                    </div>
                   ))}
-                </BoardColumnCards>
-              </div>
-            ))}
-          </div>
-          <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
-        </DndContext>
+                </div>
+                <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
+              </DndContext>
+            )
+          }
+        />
       )}
       {addTaskOpen ? (
         <BoardAddTaskDialog
@@ -1342,27 +1040,6 @@ export function BoardView({
             void changeStatus(target.issue, target.mode);
           }}
           onClose={() => setConfirmDispatch(null)}
-        />
-      ) : null}
-      {selectedIssue !== null ? (
-        <BoardIssueDrawer
-          issue={selectedIssue}
-          statusOptions={statusOptions}
-          boardTags={model?.tags ?? []}
-          dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
-          viewDiff={selectedIssueViewDiff}
-          onStatusChange={(issue, status) => void changeStatus(issue, status)}
-          onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}
-          onComment={addComment}
-          onTagAdd={addTag}
-          onTagRemove={removeTag}
-          drawerMode={uiState.drawerMode}
-          onDrawerModeChange={(mode) => updateUiState({ drawerMode: mode })}
-          onViewDiff={() => {
-            if (selectedIssue === null) return;
-            openRecordedDiff(selectedIssue);
-          }}
-          onClose={() => setSelectedIssueId(null)}
         />
       ) : null}
     </div>

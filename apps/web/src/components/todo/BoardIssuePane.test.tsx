@@ -36,6 +36,18 @@ function issue(): TodoIssue {
   };
 }
 
+function fakeWindow() {
+  const stored = new Map<string, string>();
+  return {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    localStorage: {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+    },
+  };
+}
+
 function renderPane(options: {
   readonly containerWidth: number;
   readonly drawerMode: BoardDrawerMode;
@@ -43,6 +55,7 @@ function renderPane(options: {
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
 }): ReactTestRenderer {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", fakeWindow());
   const selected = issue();
   let renderer: ReactTestRenderer | undefined;
   act(() => {
