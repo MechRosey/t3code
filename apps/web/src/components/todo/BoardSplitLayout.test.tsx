@@ -64,10 +64,11 @@ function boardWrapper(renderer: ReactTestRenderer): ReactTestInstance {
   return boardButton.parent!;
 }
 
-function escapeKey(defaultPrevented: boolean): KeyboardEvent<HTMLElement> {
+function escapeKey(defaultPrevented: boolean, isComposing = false): KeyboardEvent<HTMLElement> {
   return {
     key: "Escape",
     defaultPrevented,
+    nativeEvent: { isComposing },
     preventDefault: vi.fn(),
   } as unknown as KeyboardEvent<HTMLElement>;
 }
@@ -99,6 +100,11 @@ describe("BoardSplitLayout", () => {
 
       act(() => aside.props.onKeyDown(escapeKey(true)));
       expect(onClose).not.toHaveBeenCalled();
+
+      const composingEscape = escapeKey(false, true);
+      act(() => aside.props.onKeyDown(composingEscape));
+      expect(onClose).not.toHaveBeenCalled();
+      expect(composingEscape.preventDefault).not.toHaveBeenCalled();
 
       const escape = escapeKey(false);
       act(() => aside.props.onKeyDown(escape));
