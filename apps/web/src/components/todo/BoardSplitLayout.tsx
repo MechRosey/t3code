@@ -93,7 +93,7 @@ export function BoardSplitLayout({
   });
   useFocusReturnOnClose(detail?.key ?? null, paneRef);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
     event.preventDefault();
     onClose();
   };
