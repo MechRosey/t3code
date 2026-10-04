@@ -192,6 +192,21 @@ describe("empty-panel launcher", () => {
   });
 });
 
+describe("board tab", () => {
+  it("is titled Todo Board", () => {
+    const html = renderToStaticMarkup(
+      <RightPanelTabs
+        {...tabsProps({
+          surfaces: [{ id: "board", kind: "board" }],
+          activeSurfaceId: "board",
+        })}
+      />,
+    );
+
+    expect(html).toContain("Todo Board");
+  });
+});
+
 describe("surface shortcuts", () => {
   const actions = [
     { shortcut: "B", available: true, label: "Browser" },
