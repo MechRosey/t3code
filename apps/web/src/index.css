@@ -2297,22 +2297,6 @@ code {
   background-color: hsl(var(--card-hue) 16% 17%);
 }
 
-.board-map-node {
-  fill: var(--card);
-  stroke: var(--contrast-muted-foreground);
-  stroke-opacity: 0.35;
-}
-
-.board-map-node-blocked {
-  stroke-dasharray: 4 3;
-}
-
-.board-map-node.board-map-node-selected {
-  stroke: var(--primary);
-  stroke-opacity: 1;
-  stroke-width: 2.5;
-}
-
 @layer components {
   .chat-composer-lane {
     padding-inline-start: calc(

@@ -104,6 +104,7 @@ import {
   BOARD_VIEW_OPTIONS,
 } from "./boardUiState";
 import { ArchiveView } from "./ArchiveView";
+import { buildFocusGraph } from "./mapView.logic";
 
 export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
@@ -402,6 +403,13 @@ export function BoardView({
     [snapshotQuery.data],
   );
   const selectedIssue = selectedIssueId === null ? null : (issuesById.get(selectedIssueId) ?? null);
+  const focusGraph = useMemo(
+    () =>
+      snapshotQuery.data === null || selectedIssue === null
+        ? null
+        : buildFocusGraph(snapshotQuery.data.issues, selectedIssue.id),
+    [snapshotQuery.data, selectedIssue],
+  );
   const statusOptions = useMemo(() => {
     const statuses: Array<string> = [...BOARD_STATUS_ORDER];
     if (selectedIssue !== null && !statuses.includes(selectedIssue.status)) {
@@ -766,6 +774,8 @@ export function BoardView({
               boardTags={model?.tags ?? []}
               dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
               viewDiff={selectedIssueViewDiff}
+              focusGraph={focusGraph}
+              onFocusIssue={setSelectedIssueId}
               onDrawerModeChange={changeDrawerMode}
               onStatusChange={(issue, status) => void changeStatus(issue, status)}
               onDispatch={(issue, mode) => setConfirmDispatch({ issue, mode })}

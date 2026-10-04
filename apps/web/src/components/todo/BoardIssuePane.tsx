@@ -33,6 +33,8 @@ import {
   prepareCommentActor,
   prepareCommentText,
 } from "./commentForm.logic";
+import type { FocusGraph } from "./mapView.logic";
+import { MapView } from "./MapView";
 import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
 
 export function BoardIssuePane({
@@ -43,6 +45,8 @@ export function BoardIssuePane({
   boardTags,
   dispatchInFlight,
   viewDiff,
+  focusGraph,
+  onFocusIssue,
   onDrawerModeChange,
   onStatusChange,
   onDispatch,
@@ -59,6 +63,8 @@ export function BoardIssuePane({
   readonly boardTags: ReadonlyArray<string>;
   readonly dispatchInFlight: boolean;
   readonly viewDiff: { readonly threadMissing: boolean } | null;
+  readonly focusGraph: FocusGraph | null;
+  readonly onFocusIssue: (issueId: string) => void;
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
   readonly onDispatch: (issue: TodoIssue, mode: BoardDropActionMode) => void;
@@ -107,6 +113,9 @@ export function BoardIssuePane({
       />
       <ScrollArea scrollFade className="min-h-0 flex-1">
         <div className="flex flex-col gap-4 p-4">
+          {focusGraph !== null && focusGraph.nodes.length > 0 ? (
+            <MapView graph={focusGraph} onFocusIssue={onFocusIssue} />
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <Menu>
               <MenuTrigger

@@ -41,7 +41,7 @@ const ANCHOR_SIDES = {
   },
 } as const;
 
-export type FocusOrientation = "TD" | "LR";
+type FocusOrientation = "TD" | "LR";
 
 export type FocusAnchor = "top" | "bottom" | "left" | "right";
 

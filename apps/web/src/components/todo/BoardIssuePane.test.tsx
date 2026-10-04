@@ -75,6 +75,8 @@ function renderPane(options: {
               boardTags={["ui", "bug"]}
               dispatchInFlight={false}
               viewDiff={null}
+              focusGraph={null}
+              onFocusIssue={() => {}}
               onDrawerModeChange={options.onDrawerModeChange}
               onStatusChange={() => {}}
               onDispatch={() => {}}
