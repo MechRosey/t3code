@@ -7,7 +7,7 @@ import {
   type BoardSortOrder,
 } from "@t3tools/client-runtime/state/todo-board-view";
 
-export type BoardViewKind = "columns" | "map" | "archive";
+export type BoardViewKind = "columns" | "archive";
 
 export type BoardDrawerMode = "normal" | "full";
 
@@ -16,11 +16,15 @@ export const BOARD_VIEW_OPTIONS: ReadonlyArray<{
   readonly label: string;
 }> = [
   { value: "columns", label: "Columns" },
-  { value: "map", label: "Map" },
   { value: "archive", label: "Archive" },
 ];
 
 export const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
+
+const RETIRED_MAP_VIEW = "map";
+
+const withoutRetiredView = (view: string): string =>
+  view === RETIRED_MAP_VIEW ? DEFAULT_BOARD_VIEW : view;
 
 const isBoardViewKind = (value: string): value is BoardViewKind =>
   BOARD_VIEW_OPTIONS.some((option) => option.value === value);
@@ -85,7 +89,8 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort, dropHintDismissed, view, drawerMode, tagSpec, query } = decoded.value;
+    const { tag, sort, dropHintDismissed, drawerMode, tagSpec, query } = decoded.value;
+    const view = withoutRetiredView(decoded.value.view);
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardViewKind(view)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardDrawerMode(drawerMode)) return DEFAULT_BOARD_UI_STATE;

@@ -103,8 +103,6 @@ import {
   type BoardViewKind,
   BOARD_VIEW_OPTIONS,
 } from "./boardUiState";
-import { MapView } from "./MapView";
-import { buildMapView } from "./mapView.logic";
 import { ArchiveView } from "./ArchiveView";
 
 export interface BoardViewProps {
@@ -399,10 +397,6 @@ export function BoardView({
     if (boardBootstrap) return buildBoardViewModel(EMPTY_BOARD_SNAPSHOT, uiState);
     return null;
   }, [snapshotQuery.data, boardBootstrap, uiState]);
-  const mapModel = useMemo(
-    () => (snapshotQuery.data === null ? null : buildMapView(snapshotQuery.data, uiState)),
-    [snapshotQuery.data, uiState],
-  );
   const issuesById = useMemo(
     () => new Map((snapshotQuery.data?.issues ?? []).map((issue) => [issue.id, issue] as const)),
     [snapshotQuery.data],
@@ -975,23 +969,7 @@ export function BoardView({
           detail={issueDetail}
           onClose={() => setSelectedIssueId(null)}
           primary={
-            uiState.view === "map" ? (
-              mapModel === null || mapModel.nodes.length === 0 ? (
-                filterActive ? (
-                  <BoardFilteredEmpty onClearFilters={clearFilters} />
-                ) : (
-                  <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-                    <p className="text-xs text-muted-foreground">No active issues.</p>
-                  </div>
-                )
-              ) : (
-                <MapView
-                  model={mapModel}
-                  selectedIssueId={selectedIssue?.id ?? null}
-                  onNodeOpen={setSelectedIssueId}
-                />
-              )
-            ) : totalCards === 0 && filterActive ? (
+            totalCards === 0 && filterActive ? (
               <BoardFilteredEmpty onClearFilters={clearFilters} />
             ) : (
               <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
