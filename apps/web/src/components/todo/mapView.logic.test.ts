@@ -470,7 +470,7 @@ describe("focus graph reach", () => {
   });
 
   it("returns an empty graph for an unknown focus ticket", () => {
-    const empty = {
+    const empty: FocusGraph = {
       orientation: "TD",
       nodes: [],
       edges: [],
@@ -563,7 +563,7 @@ describe("focus graph edges", () => {
       ...children("m", ["kid-b", "kid-a"]),
       issue({ id: "kid-c", title: "kid-c", parentId: "kid-a", depth: 2 }),
     ];
-    const reversed = [...family].reverse();
+    const reversed = family.toReversed();
     const rotated = [...family.slice(3), ...family.slice(0, 3)];
 
     const expected = buildFocusGraph(family, "m");
