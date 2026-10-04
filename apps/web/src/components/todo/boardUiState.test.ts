@@ -96,7 +96,7 @@ describe("board UI state persistence", () => {
       tag: "ui",
       sort: "created-asc",
       dropHintDismissed: true,
-      view: "map",
+      view: "archive",
       drawerMode: "normal",
       tagSpec: "",
       query: "",
@@ -111,26 +111,34 @@ describe("board view toggle persistence", () => {
     assert.equal(readBoardUiState(memoryStorage(), ROOT_A).view, "columns");
   });
 
-  it("offers the archive view alongside columns and map", () => {
+  it("offers only the columns and archive views", () => {
     assert.deepEqual(
       BOARD_VIEW_OPTIONS.map((option) => option.value),
-      ["columns", "map", "archive"],
+      ["columns", "archive"],
     );
   });
 
-  it("round-trips a map view choice per resolved root", () => {
-    const storage = memoryStorage();
-    writeBoardUiState(storage, ROOT_A, {
-      tag: null,
-      sort: "id-asc",
-      dropHintDismissed: false,
-      view: "map",
-      drawerMode: "normal",
-      tagSpec: "",
-      query: "",
+  it("opens a board last left on the retired map view in columns and keeps its other settings", () => {
+    const retiredMap = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({
+        tag: "ui",
+        sort: "created-asc",
+        dropHintDismissed: true,
+        view: "map",
+        drawerMode: "full",
+        tagSpec: "ui,board",
+        query: "10eb",
+      }),
     });
-    assert.equal(readBoardUiState(storage, ROOT_A).view, "map");
-    assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
+    assert.deepEqual(readBoardUiState(retiredMap, ROOT_A), {
+      tag: "ui",
+      sort: "created-asc",
+      dropHintDismissed: true,
+      view: "columns",
+      drawerMode: "full",
+      tagSpec: "ui,board",
+      query: "10eb",
+    });
   });
 
   it("round-trips an archive view choice per resolved root", () => {
