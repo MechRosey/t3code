@@ -51,7 +51,7 @@ export function MermaidView({ source }: { readonly source: string }) {
   if (state.kind === "pending") return null;
   return (
     <div
-      className="max-w-full overflow-x-auto [&_svg]:max-w-full"
+      className="max-w-full overflow-x-auto rounded-md bg-white p-3 [&_svg]:max-w-full"
       dangerouslySetInnerHTML={{ __html: state.svg }}
     />
   );
