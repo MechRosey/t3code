@@ -251,7 +251,7 @@ function MapNode({
       role="button"
       tabIndex={0}
       aria-label={`${node.title} - ${node.statusLabel}`}
-      className="cursor-pointer outline-none hover:opacity-80 focus-visible:opacity-80"
+      className="cursor-pointer outline-none hover:opacity-80 focus-visible:outline-1 focus-visible:outline-primary"
       onClick={() => onFocusIssue(node.id)}
       onKeyDown={handleKeyDown}
     >
