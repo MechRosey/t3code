@@ -39,7 +39,7 @@ const BOARD_MARKDOWN_COMPONENTS = {
   ),
   pre: (props: ComponentProps<"pre">) => (
     <pre
-      className="overflow-x-auto rounded-md bg-muted/60 p-2 font-mono text-xs [&_code]:bg-transparent [&_code]:p-0"
+      className="overflow-x-auto rounded-md bg-foreground/10 p-2 font-mono text-xs [&_code]:bg-transparent [&_code]:p-0"
       {...props}
     />
   ),

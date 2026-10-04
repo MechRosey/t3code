@@ -1,9 +1,9 @@
 import { act } from "react";
 import { create } from "react-test-renderer";
-import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import type { TodoIssue } from "@t3tools/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import { buildMapView } from "./mapView.logic";
+import { buildFocusGraph } from "./mapView.logic";
 import { MapView } from "./MapView";
 
 function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">): TodoIssue {
@@ -31,40 +31,42 @@ function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">):
   };
 }
 
-function snapshot(issues: TodoIssue[]): TodoBoardSnapshot {
-  return { root: "C:/repo/.todo", repoName: "repo", issues };
-}
-
-function collectText(node: { type: unknown; children: ReadonlyArray<unknown> }): Array<string> {
-  const texts: Array<string> = [];
-  const walk = (value: unknown): void => {
-    if (typeof value === "string") {
-      texts.push(value);
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach(walk);
-    }
-  };
-  walk(node.children);
-  return texts;
-}
-
-describe("map view node labels", () => {
-  it("renders the short id instead of the full issue id", () => {
-    const longId = "b2ce6-mapview-nodes-show-full";
-    const model = buildMapView(snapshot([issue({ id: longId, title: "A mapped ticket" })]), {
-      tag: null,
-    });
+describe("MapView", () => {
+  it("MapView_NodesActivated_RefocusesOtherTicketsAndLeavesFocusAndOverflowInert", () => {
+    const graph = buildFocusGraph(
+      [
+        issue({ id: "abc12-centre", title: "Centre ticket" }),
+        issue({ id: "def34-near", title: "Near ticket", parentId: "abc12-centre", depth: 1 }),
+        issue({ id: "ghi56-far", title: "Far ticket", parentId: "def34-near", depth: 2 }),
+        issue({ id: "jkl78-beyond", title: "Beyond ticket", parentId: "ghi56-far", depth: 3 }),
+      ],
+      "abc12-centre",
+    );
+    const onFocusIssue = vi.fn();
     let renderer: ReturnType<typeof create> | undefined;
     act(() => {
-      renderer = create(<MapView model={model} onNodeOpen={() => {}} />);
+      renderer = create(<MapView graph={graph} onFocusIssue={onFocusIssue} />);
     });
     try {
-      const texts = renderer!.root.findAllByType("text").flatMap((node) => collectText(node));
-      expect(texts).toContain("b2ce6");
-      expect(texts).not.toContain(longId);
-      expect(texts.join(" ")).not.toContain(longId);
+      const buttons = renderer!.root.findAll(
+        (node) => node.type === "g" && node.props.role === "button",
+      );
+      const inert = renderer!.root.findAll(
+        (node) => node.type === "g" && node.props.role === "img",
+      );
+
+      expect(buttons.map((node) => node.props["aria-label"])).toEqual([
+        "Near ticket - Doing",
+        "Far ticket - Doing",
+      ]);
+      expect(inert.map((node) => node.props["aria-label"])).toEqual([
+        "Centre ticket - Doing - this ticket",
+        "1 more outside",
+      ]);
+      act(() => buttons[0]!.props.onClick());
+      act(() => buttons[1]!.props.onKeyDown({ key: " ", preventDefault: () => {} }));
+      act(() => buttons[1]!.props.onKeyDown({ key: "a", preventDefault: () => {} }));
+      expect(onFocusIssue.mock.calls).toEqual([["def34-near"], ["ghi56-far"]]);
     } finally {
       act(() => renderer!.unmount());
     }

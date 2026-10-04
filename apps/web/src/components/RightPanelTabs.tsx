@@ -24,9 +24,8 @@ import {
   Plus,
   SquareKanban,
   TerminalSquare,
-  Volume2,
-  VolumeOff,
 } from "lucide-react";
+import { Volume2, VolumeOff } from "lucide";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -45,6 +44,7 @@ import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { Button } from "~/components/ui/button";
+import { MorphIcon } from "~/components/MorphIcon";
 import { AndroidIcon, AppleIcon } from "~/components/Icons";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
@@ -184,6 +184,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
+  board: "Available when a project is open.",
   device: "Available from a thread.",
 } as const;
 
@@ -323,6 +324,7 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
+  onAddBoard: () => void;
   onAddDevice: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
@@ -330,6 +332,7 @@ function RightPanelEmptyState(props: {
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
+  boardAvailable: boolean;
   deviceAvailable: boolean;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
@@ -392,6 +395,14 @@ function RightPanelEmptyState(props: {
       available: props.deviceAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
       onClick: props.onAddDevice,
+    },
+    {
+      label: "Todo Board",
+      icon: SquareKanban,
+      shortcut: "O",
+      available: props.boardAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.board,
+      onClick: props.onAddBoard,
     },
   ] as const;
 
@@ -601,7 +612,7 @@ function surfaceTitle(
     case "pull-requests":
       return "Pull requests";
     case "board":
-      return "Board";
+      return "Todo Board";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
     case "preview": {
@@ -890,20 +901,20 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       onClick: props.onAddPullRequests,
     },
     {
-      label: "Board",
-      icon: SquareKanban,
-      shortcut: "O",
-      available: props.boardAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.board,
-      onClick: props.onAddBoard,
-    },
-    {
       label: "Device",
       icon: Smartphone,
       shortcut: "M",
       available: props.deviceAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.device,
       onClick: props.onAddDevice,
+    },
+    {
+      label: "Todo Board",
+      icon: SquareKanban,
+      shortcut: "O",
+      available: props.boardAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.board,
+      onClick: props.onAddBoard,
     },
   ] as const;
 
@@ -1165,11 +1176,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                                 .catch(() => undefined);
                             }}
                           >
-                            {audio === "muted" ? (
-                              <VolumeOff className="size-3" />
-                            ) : (
-                              <Volume2 className="size-3" />
-                            )}
+                            <MorphIcon
+                              className="size-3"
+                              icon={audio === "muted" ? VolumeOff : Volume2}
+                            />
                           </button>
                         }
                       />
@@ -1387,6 +1397,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
+            onAddBoard={props.onAddBoard}
             onAddDevice={props.onAddDevice}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
@@ -1394,6 +1405,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
+            boardAvailable={props.boardAvailable}
             deviceAvailable={props.deviceAvailable}
           />
         ) : (

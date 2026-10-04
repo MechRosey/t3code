@@ -41,7 +41,7 @@ export function MermaidView({ source }: { readonly source: string }) {
   if (state.kind === "failed") {
     return (
       <div className="flex flex-col gap-1">
-        <pre className="overflow-x-auto rounded-md bg-muted/60 p-2 font-mono text-xs text-muted-foreground">
+        <pre className="overflow-x-auto rounded-md bg-foreground/10 p-2 font-mono text-xs text-muted-foreground">
           {source}
         </pre>
         <span className="text-xs text-red-500">Diagram failed to render</span>
@@ -51,7 +51,7 @@ export function MermaidView({ source }: { readonly source: string }) {
   if (state.kind === "pending") return null;
   return (
     <div
-      className="max-w-full overflow-x-auto [&_svg]:max-w-full"
+      className="max-w-full overflow-x-auto rounded-md bg-white p-3 [&_svg]:max-w-full"
       dangerouslySetInnerHTML={{ __html: state.svg }}
     />
   );
