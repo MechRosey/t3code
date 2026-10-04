@@ -184,6 +184,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
+  board: "Available when a project is open.",
   device: "Available from a thread.",
 } as const;
 
@@ -323,6 +324,7 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
+  onAddBoard: () => void;
   onAddDevice: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
@@ -330,6 +332,7 @@ function RightPanelEmptyState(props: {
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   pullRequestsAvailable: boolean;
+  boardAvailable: boolean;
   deviceAvailable: boolean;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
@@ -392,6 +395,14 @@ function RightPanelEmptyState(props: {
       available: props.deviceAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
       onClick: props.onAddDevice,
+    },
+    {
+      label: "Todo Board",
+      icon: SquareKanban,
+      shortcut: "O",
+      available: props.boardAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.board,
+      onClick: props.onAddBoard,
     },
   ] as const;
 
@@ -890,20 +901,20 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       onClick: props.onAddPullRequests,
     },
     {
-      label: "Board",
-      icon: SquareKanban,
-      shortcut: "O",
-      available: props.boardAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.board,
-      onClick: props.onAddBoard,
-    },
-    {
       label: "Device",
       icon: Smartphone,
       shortcut: "M",
       available: props.deviceAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.device,
       onClick: props.onAddDevice,
+    },
+    {
+      label: "Todo Board",
+      icon: SquareKanban,
+      shortcut: "O",
+      available: props.boardAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.board,
+      onClick: props.onAddBoard,
     },
   ] as const;
 
@@ -1387,6 +1398,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
+            onAddBoard={props.onAddBoard}
             onAddDevice={props.onAddDevice}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
@@ -1394,6 +1406,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
+            boardAvailable={props.boardAvailable}
             deviceAvailable={props.deviceAvailable}
           />
         ) : (
