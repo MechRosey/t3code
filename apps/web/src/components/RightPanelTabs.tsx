@@ -612,7 +612,7 @@ function surfaceTitle(
     case "pull-requests":
       return "Pull requests";
     case "board":
-      return "Board";
+      return "Todo Board";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
     case "preview": {
