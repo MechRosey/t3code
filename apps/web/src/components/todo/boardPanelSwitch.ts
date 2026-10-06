@@ -2,6 +2,7 @@ import type { EnvironmentId, ProjectId, ScopedThreadRef, ThreadId } from "@t3too
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 
 import { buildThreadRouteParams } from "../../threadRoutes";
+import type { BoardDispatchOrigin } from "./boardDispatch.logic";
 
 export interface BoardPanelSwitchSearch {
   readonly environmentId?: EnvironmentId | undefined;
@@ -129,17 +130,36 @@ function resolveExactCwdThread(
   return latest;
 }
 
+function resolveBoardThread(
+  search: BoardPanelSwitchSearch,
+  projects: readonly BoardPanelSwitchProject[],
+  threads: readonly BoardPanelSwitchThread[],
+): BoardPanelSwitchThread | null {
+  const projectsById = new Map(
+    projects.map((project) => [projectKey(project.environmentId, project.id), project]),
+  );
+  return (
+    resolveOriginThread(search, threads, projectsById) ??
+    resolveExactCwdThread(search, threads, projectsById)
+  );
+}
+
+export function resolveBoardOrigin(
+  search: BoardPanelSwitchSearch,
+  projects: readonly BoardPanelSwitchProject[],
+  threads: readonly BoardPanelSwitchThread[],
+): BoardDispatchOrigin | null {
+  const thread = resolveBoardThread(search, projects, threads);
+  if (thread === null) return null;
+  return { projectId: thread.projectId, worktreePath: thread.worktreePath };
+}
+
 export function resolveBoardPanelSwitch(
   search: BoardPanelSwitchSearch,
   projects: readonly BoardPanelSwitchProject[],
   threads: readonly BoardPanelSwitchThread[],
 ): BoardPanelSwitchTarget | null {
-  const projectsById = new Map(
-    projects.map((project) => [projectKey(project.environmentId, project.id), project]),
-  );
-  const thread =
-    resolveOriginThread(search, threads, projectsById) ??
-    resolveExactCwdThread(search, threads, projectsById);
+  const thread = resolveBoardThread(search, projects, threads);
   if (thread === null) return null;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   return {

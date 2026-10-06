@@ -24,6 +24,16 @@ export interface BoardProjectCandidate {
   readonly workspaceRoot: string;
 }
 
+export interface BoardDispatchOrigin {
+  readonly projectId: string;
+  readonly worktreePath: string | null;
+}
+
+export interface BoardDispatchTarget<P extends BoardProjectCandidate> {
+  readonly project: P;
+  readonly worktreePath: string | null;
+}
+
 export interface BoardProjectOption {
   readonly id: string;
   readonly label: string;
@@ -82,6 +92,34 @@ export function resolveBoardDispatchProject<P extends BoardProjectCandidate>(
     return inEnvironment.find((candidate) => candidate.id === target.chosenProjectId) ?? null;
   }
   return inEnvironment.find((candidate) => candidate.workspaceRoot === target.cwd) ?? null;
+}
+
+function resolveOriginTarget<P extends BoardProjectCandidate>(
+  projects: ReadonlyArray<P>,
+  environmentId: string,
+  origin: BoardDispatchOrigin,
+): BoardDispatchTarget<P> | null {
+  const project = projects.find(
+    (candidate) => candidate.environmentId === environmentId && candidate.id === origin.projectId,
+  );
+  if (project === undefined) return null;
+  return { project, worktreePath: hasText(origin.worktreePath) ? origin.worktreePath : null };
+}
+
+export function resolveBoardDispatchTarget<P extends BoardProjectCandidate>(
+  projects: ReadonlyArray<P>,
+  target: {
+    readonly environmentId: string;
+    readonly cwd: string;
+    readonly chosenProjectId: string | null;
+    readonly origin: BoardDispatchOrigin | null;
+  },
+): BoardDispatchTarget<P> | null {
+  if (target.chosenProjectId === null && target.origin !== null) {
+    return resolveOriginTarget(projects, target.environmentId, target.origin);
+  }
+  const project = resolveBoardDispatchProject(projects, target);
+  return project === null ? null : { project, worktreePath: null };
 }
 
 export function listBoardProjectOptions(
