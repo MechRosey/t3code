@@ -8868,12 +8868,12 @@ export default function ChatView(props: ChatViewProps) {
     );
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
-    // FORK CHANGE (t3todo): sending past the resume banner no longer compacts first. Upstream
-    // auto-compacts on send, but /compact is a full uncached pass over the history plus detail
-    // loss, so compaction here is opt-in only (the banner's Compact button, or typing /compact).
-    // Kept as commented-out lines rather than deleted so upstream merges in this area stay small.
-    // When merging upstream: keep compactBeforeSend false; do not restore the original condition.
-    // Ticket 126dd-resume-compaction-banner.
+    // FORK CHANGE (t3todo): sending past the resume banner does not compact first. /compact is a
+    // full uncached pass over the history plus detail loss, so it is opt-in only (the banner's
+    // Compact button, or typing /compact). Upstream compacts here.
+    // When merging upstream: keep compactBeforeSend false and do not restore the original condition.
+    // The `as boolean` and the uses below (turnDispatchMode, shouldQueueBehindActiveRun, the
+    // /compact startThreadTurn block) are intentionally left inert; do not simplify or delete them.
     // const compactBeforeSend =
     //   resumeCompactionBannerItem !== null &&
     //   !compactDisabled &&
