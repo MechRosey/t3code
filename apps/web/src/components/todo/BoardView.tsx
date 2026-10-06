@@ -89,7 +89,6 @@ import {
   type BoardDropSpeed,
 } from "./boardDrop.logic";
 import {
-  addAttemptFingerprint,
   BOARD_DISPATCH_FAILURE_CODE,
   BOARD_DISPATCH_STARTED,
   boardDispatchFailureLogFields,
@@ -99,9 +98,8 @@ import {
   isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
-  recordAddAttemptOutcome,
   resolveBoardDispatchTarget,
-  selectAddAttemptIds,
+  runAddAttempt,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
   shouldOfferProjectPicker,
@@ -349,17 +347,15 @@ function BoardAddTaskDialog({
     chosenProjectId,
   });
   const confirmAttempt = async (): Promise<BoardDispatchResult> => {
-    const fingerprint = addAttemptFingerprint({ prompt: prompt ?? "", projectId: chosenProjectId });
-    const ids = selectAddAttemptIds(lastAttempt.current, fingerprint, mintAddAttemptIds);
-    const result = await onConfirm({ idea, projectId: chosenProjectId, threadId, ...ids });
-    if (result.status === "failed") {
-      lastAttempt.current = recordAddAttemptOutcome({
-        previous: lastAttempt.current,
-        used: { ...ids, fingerprint },
-        failure: result,
-      });
-    }
-    return result;
+    const outcome = await runAddAttempt({
+      previous: lastAttempt.current,
+      prompt: prompt ?? "",
+      projectId: chosenProjectId,
+      mint: mintAddAttemptIds,
+      send: (ids) => onConfirm({ idea, projectId: chosenProjectId, threadId, ...ids }),
+    });
+    lastAttempt.current = outcome.attempt;
+    return outcome.result;
   };
   const submit = async () => {
     setSubmitting(true);
