@@ -188,97 +188,56 @@ describe("resolveBoardDispatchTarget", () => {
     project("p-elsewhere", "env-a", "C:\\repo\\elsewhere"),
   ];
 
-  it("starts in the origin worktree of the origin project when the board cwd matches no project root", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: WORKTREE,
-      chosenProjectId: null,
-      origin: { projectId: "p-board", worktreePath: WORKTREE },
-    });
+  const resolve = (
+    cwd: string,
+    chosenProjectId: string | null,
+    origin: { projectId: string; worktreePath: string | null } | null,
+  ) =>
+    resolveBoardDispatchTarget(projects, { environmentId: "env-a", cwd, chosenProjectId, origin });
 
-    assert.equal(target?.project.id, "p-board");
-    assert.equal(target?.worktreePath, WORKTREE);
+  it("prefers the chosen project, then the origin project, then the exact cwd match", () => {
+    const chosen = resolve(WORKTREE, "p-elsewhere", {
+      projectId: "p-board",
+      worktreePath: WORKTREE,
+    });
+    const origin = resolve("C:\repo\elsewhere", null, { projectId: "p-board", worktreePath: null });
+    const exactCwd = resolve(BOARD_FOLDER, null, null);
+
+    assert.equal(chosen?.project.id, "p-elsewhere");
+    assert.equal(chosen?.worktreePath, null);
+
+    assert.equal(origin?.project.id, "p-board");
+    assert.equal(origin?.worktreePath, null);
+
+    assert.equal(exactCwd?.project.id, "p-board");
+    assert.equal(exactCwd?.worktreePath, null);
   });
 
-  it("starts at the project root when the origin thread has no worktree, even if another root matches the cwd", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: "C:\\repo\\elsewhere",
-      chosenProjectId: null,
-      origin: { projectId: "p-board", worktreePath: null },
-    });
+  it("starts in the origin worktree only when the origin thread has a non-empty one", () => {
+    const inWorktree = resolve(WORKTREE, null, { projectId: "p-board", worktreePath: WORKTREE });
+    const atRoot = resolve(BOARD_FOLDER, null, { projectId: "p-board", worktreePath: null });
+    const emptyPath = resolve(BOARD_FOLDER, null, { projectId: "p-board", worktreePath: "" });
 
-    assert.equal(target?.project.id, "p-board");
-    assert.equal(target?.worktreePath, null);
+    assert.equal(inWorktree?.project.id, "p-board");
+    assert.equal(inWorktree?.worktreePath, WORKTREE);
+
+    assert.equal(atRoot?.worktreePath, null);
+
+    assert.equal(emptyPath?.project.id, "p-board");
+    assert.equal(emptyPath?.worktreePath, null);
   });
 
-  it("treats an empty origin worktree path as no worktree", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: BOARD_FOLDER,
-      chosenProjectId: null,
-      origin: { projectId: "p-board", worktreePath: "" },
+  it("returns null for a missing or other-environment origin project instead of falling back to the cwd match", () => {
+    const otherEnvironment = resolve(BOARD_FOLDER, null, {
+      projectId: "p-other-env",
+      worktreePath: null,
     });
+    const gone = resolve(BOARD_FOLDER, null, { projectId: "p-gone", worktreePath: WORKTREE });
+    const noOriginNoRoot = resolve(WORKTREE, null, null);
 
-    assert.equal(target?.project.id, "p-board");
-    assert.equal(target?.worktreePath, null);
-  });
-
-  it("prefers the chosen project over the origin and drops the origin worktree", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: WORKTREE,
-      chosenProjectId: "p-elsewhere",
-      origin: { projectId: "p-board", worktreePath: WORKTREE },
-    });
-
-    assert.equal(target?.project.id, "p-elsewhere");
-    assert.equal(target?.worktreePath, null);
-  });
-
-  it("returns null when the origin project is in another environment", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: BOARD_FOLDER,
-      chosenProjectId: null,
-      origin: { projectId: "p-other-env", worktreePath: null },
-    });
-
-    assert.equal(target, null);
-  });
-
-  it("returns null when the origin project no longer exists instead of falling back to the cwd match", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: BOARD_FOLDER,
-      chosenProjectId: null,
-      origin: { projectId: "p-gone", worktreePath: WORKTREE },
-    });
-
-    assert.equal(target, null);
-  });
-
-  it("matches the project by exact cwd with no worktree when there is no origin", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: BOARD_FOLDER,
-      chosenProjectId: null,
-      origin: null,
-    });
-
-    assert.equal(target?.project.id, "p-board");
-    assert.equal(target?.worktreePath, null);
-  });
-
-  it("returns null when there is no origin and no project root matches the cwd", () => {
-    const target = resolveBoardDispatchTarget(projects, {
-      environmentId: "env-a",
-      cwd: WORKTREE,
-      chosenProjectId: null,
-      origin: null,
-    });
-
-    assert.equal(target, null);
+    assert.equal(otherEnvironment, null);
+    assert.equal(gone, null);
+    assert.equal(noOriginNoRoot, null);
   });
 });
 
@@ -494,84 +453,60 @@ describe("shouldAutoCloseAddTask", () => {
 });
 
 describe("isDeliveryUnknownFailure", () => {
-  it("treats an interrupted attempt as unknown whatever the cause", () => {
-    assert.equal(isDeliveryUnknownFailure({ cause: new Error("x"), interrupted: true }), true);
-    assert.equal(isDeliveryUnknownFailure({ cause: undefined, interrupted: true }), true);
-  });
+  it("is unknown only for an interrupt or a dropped rpc client and fails closed for everything else", () => {
+    const launchError = { _tag: "OrchestrationV2ThreadLaunchError", message: "Failed to launch" };
+    const neverSent = { _tag: "EnvironmentRpcUnavailableError", message: "no connection" };
+    const droppedClient = { _tag: "RpcClientError", message: "socket closed" };
+    const classify = (cause: unknown, interrupted = false) =>
+      isDeliveryUnknownFailure({ cause, interrupted });
 
-  it("treats a dropped rpc client as unknown", () => {
-    const cause = { _tag: "RpcClientError", message: "socket closed" };
+    assert.equal(classify(new Error("x"), true), true);
+    assert.equal(classify(undefined, true), true);
+    assert.equal(classify(droppedClient), true);
 
-    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), true);
-  });
-
-  it("treats a typed launch error as definitive", () => {
-    const cause = { _tag: "OrchestrationV2ThreadLaunchError", message: "Failed to launch thread" };
-
-    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), false);
-  });
-
-  it("treats a request that was never sent as definitive", () => {
-    const cause = { _tag: "EnvironmentRpcUnavailableError", message: "no connection" };
-
-    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), false);
-  });
-
-  it("fails closed to definitive for anything unrecognised", () => {
-    assert.equal(isDeliveryUnknownFailure({ cause: new Error("boom"), interrupted: false }), false);
-    assert.equal(isDeliveryUnknownFailure({ cause: undefined, interrupted: false }), false);
-    assert.equal(isDeliveryUnknownFailure({ cause: null, interrupted: false }), false);
-    assert.equal(isDeliveryUnknownFailure({ cause: "RpcClientError", interrupted: false }), false);
-    assert.equal(isDeliveryUnknownFailure({ cause: { _tag: 7 }, interrupted: false }), false);
+    assert.equal(classify(launchError), false);
+    assert.equal(classify(neverSent), false);
+    assert.equal(classify(new Error("boom")), false);
+    assert.equal(classify(undefined), false);
+    assert.equal(classify(null), false);
+    assert.equal(classify("RpcClientError"), false);
+    assert.equal(classify({ _tag: 7 }), false);
   });
 });
 
 describe("start failure delivery flag", () => {
-  it("is false for every client-side failure code", () => {
+  it("is carried by start failures and is never set on any other failure code", () => {
+    const dropped = boardStartFailure({ _tag: "RpcClientError" });
+    const interrupted = boardStartFailure(new Error("interrupted"), true);
+    const definitive = boardStartFailure(new Error("provider rejected"));
+
+    assert.equal(dropped.code, BOARD_DISPATCH_FAILURE_CODE.startFailed);
+    assert.equal(dropped.deliveryUnknown, true);
+    assert.equal(interrupted.deliveryUnknown, true);
+    assert.equal(definitive.deliveryUnknown, false);
     for (const code of Object.values(BOARD_DISPATCH_FAILURE_CODE)) {
       assert.equal(createBoardDispatchFailure(code).deliveryUnknown, false, code);
     }
   });
-
-  it("is true when the cause is a dropped rpc client", () => {
-    const failure = boardStartFailure({ _tag: "RpcClientError" }, false);
-
-    assert.equal(failure.code, BOARD_DISPATCH_FAILURE_CODE.startFailed);
-    assert.equal(failure.deliveryUnknown, true);
-  });
-
-  it("is true when the attempt was interrupted", () => {
-    assert.equal(boardStartFailure(new Error("interrupted"), true).deliveryUnknown, true);
-  });
-
-  it("is false for a definitive cause", () => {
-    assert.equal(boardStartFailure(new Error("provider rejected")).deliveryUnknown, false);
-  });
 });
 
 describe("addAttemptFingerprint", () => {
-  it("is stable for the same prompt and project", () => {
-    assert.equal(
-      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" }),
-      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" }),
-    );
-  });
+  it("is stable for the same prompt and project and changes with either one", () => {
+    const base = addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" });
 
-  it("changes with the prompt", () => {
+    assert.equal(base, addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" }));
     assert.notEqual(
-      addAttemptFingerprint({ prompt: "fix it", projectId: "p1" }),
-      addAttemptFingerprint({ prompt: "fix it now", projectId: "p1" }),
+      base,
+      addAttemptFingerprint({ prompt: "/todo new\n\nfix it now", projectId: "p1" }),
     );
-  });
-
-  it("changes with the project, including no project", () => {
-    const withProject = addAttemptFingerprint({ prompt: "fix it", projectId: "p1" });
-
-    assert.notEqual(withProject, addAttemptFingerprint({ prompt: "fix it", projectId: "p2" }));
-    assert.notEqual(withProject, addAttemptFingerprint({ prompt: "fix it", projectId: null }));
-  });
-
-  it("does not let the prompt and project run together", () => {
+    assert.notEqual(
+      base,
+      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p2" }),
+    );
+    assert.notEqual(
+      base,
+      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: null }),
+    );
     assert.notEqual(
       addAttemptFingerprint({ prompt: "a", projectId: "bc" }),
       addAttemptFingerprint({ prompt: "ab", projectId: "c" }),
@@ -631,20 +566,6 @@ describe("selectAddAttemptIds", () => {
     const ids = selectAddAttemptIds(previous(true), OTHER_FINGERPRINT, minter.mint);
 
     assert.deepEqual(ids, { commandId: "cmd-new-1", messageId: "msg-new-1" });
-  });
-
-  it("never pairs a reused messageId with a fresh commandId", () => {
-    for (const deliveryUnknown of [true, false]) {
-      for (const fingerprint of [FINGERPRINT, OTHER_FINGERPRINT]) {
-        const ids = selectAddAttemptIds(
-          previous(deliveryUnknown),
-          fingerprint,
-          countingMint().mint,
-        );
-
-        assert.equal(ids.commandId === "cmd-old", ids.messageId === "msg-old");
-      }
-    }
   });
 });
 

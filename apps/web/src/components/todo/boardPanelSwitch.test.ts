@@ -175,45 +175,38 @@ describe("resolveBoardPanelSwitch", () => {
 });
 
 describe("resolveBoardOrigin", () => {
-  it("returns the project and worktree of the origin thread carried in the search params", () => {
-    const origin = resolveBoardOrigin(
+  it("maps the origin thread to its project and worktree, falling back to the exact-cwd thread", () => {
+    const carried = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/repo/.worktrees/wt", threadId: "thread-9" as ThreadId },
       [project()],
       [thread({ id: "thread-9", worktreePath: "C:/repo/.worktrees/wt" })],
     );
-    assert.deepEqual(origin, { projectId: "proj-1", worktreePath: "C:/repo/.worktrees/wt" });
-  });
-
-  it("returns a null worktree for an origin thread running at the project root", () => {
-    const origin = resolveBoardOrigin(
+    const atRoot = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/repo", threadId: "thread-1" as ThreadId },
       [project()],
       [thread()],
     );
-    assert.deepEqual(origin, { projectId: "proj-1", worktreePath: null });
-  });
-
-  it("falls back to the exact-cwd thread when the search has no origin threadId", () => {
-    const origin = resolveBoardOrigin(
+    const byCwd = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/wt" },
       [project()],
       [thread({ id: "thread-1" }), thread({ id: "thread-2", worktreePath: "C:/wt" })],
     );
-    assert.deepEqual(origin, { projectId: "proj-1", worktreePath: "C:/wt" });
+
+    assert.deepEqual(carried, { projectId: "proj-1", worktreePath: "C:/repo/.worktrees/wt" });
+    assert.deepEqual(atRoot, { projectId: "proj-1", worktreePath: null });
+    assert.deepEqual(byCwd, { projectId: "proj-1", worktreePath: "C:/wt" });
   });
 
-  it("returns null when the origin thread is archived and no other thread matches the cwd", () => {
-    const origin = resolveBoardOrigin(
+  it("returns null when no live thread is identified by the search", () => {
+    const archived = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/repo", threadId: "thread-1" as ThreadId },
       [project()],
       [thread({ archivedAt: "2026-09-02T00:00:00.000Z" })],
     );
-    assert.equal(origin, null);
-  });
+    const empty = resolveBoardOrigin({}, [project()], [thread()]);
 
-  it("returns null when nothing in the search identifies a thread", () => {
-    const origin = resolveBoardOrigin({}, [project()], [thread()]);
-    assert.equal(origin, null);
+    assert.equal(archived, null);
+    assert.equal(empty, null);
   });
 });
 
