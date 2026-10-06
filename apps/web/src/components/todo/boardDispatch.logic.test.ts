@@ -1,6 +1,8 @@
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  type BoardAddAttempt,
+  type BoardDispatchResult,
   BOARD_DISPATCH_FAILURE_CODE,
   BOARD_DISPATCH_STARTED,
   boardDispatchFailureLogFields,
@@ -15,6 +17,7 @@ import {
   recordAddAttemptOutcome,
   resolveBoardDispatchProject,
   resolveBoardDispatchTarget,
+  runAddAttempt,
   selectAddAttemptIds,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
@@ -684,5 +687,107 @@ describe("recordAddAttemptOutcome", () => {
       assert.equal(recordAddAttemptOutcome({ previous: earlier, used, failure }), earlier, code);
       assert.equal(recordAddAttemptOutcome({ previous: null, used, failure }), null, code);
     }
+  });
+});
+
+describe("runAddAttempt", () => {
+  const PROMPT = "/todo new\n\nrotate the signing keys";
+  const lostResponse = () => boardStartFailure({ _tag: "RpcClientError" });
+  const rejected = () => boardStartFailure(new Error("provider rejected"));
+  const noProject = () => createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.noProject);
+
+  function addAttemptRig(results: ReadonlyArray<BoardDispatchResult>) {
+    let minted = 0;
+    const sent: Array<{ commandId: string; messageId: string }> = [];
+    return {
+      sent,
+      mintedCount: () => minted,
+      mint: () => {
+        minted += 1;
+        return { commandId: `cmd-${minted}`, messageId: `msg-${minted}` };
+      },
+      send: async (ids: { commandId: string; messageId: string }) => {
+        sent.push(ids);
+        return results[sent.length - 1] ?? BOARD_DISPATCH_STARTED;
+      },
+    };
+  }
+
+  it("replays the same id pair after a lost response and re-mints both after a definitive failure", async () => {
+    const rig = addAttemptRig([lostResponse(), rejected(), BOARD_DISPATCH_STARTED]);
+    const submit = (previous: BoardAddAttempt<string, string> | null) =>
+      runAddAttempt({ previous, prompt: PROMPT, projectId: "p1", mint: rig.mint, send: rig.send });
+
+    const first = await submit(null);
+    const second = await submit(first.attempt);
+    const third = await submit(second.attempt);
+
+    assert.deepEqual(rig.sent, [
+      { commandId: "cmd-1", messageId: "msg-1" },
+      { commandId: "cmd-1", messageId: "msg-1" },
+      { commandId: "cmd-2", messageId: "msg-2" },
+    ]);
+    assert.equal(rig.mintedCount(), 2);
+    assert.equal(first.attempt?.deliveryUnknown, true);
+    assert.equal(second.attempt?.deliveryUnknown, false);
+    assert.equal(third.result.status, "started");
+  });
+
+  it("leaves the earlier record untouched when a client-side failure falls between two requests", async () => {
+    const rig = addAttemptRig([lostResponse(), noProject(), BOARD_DISPATCH_STARTED]);
+    const submit = (previous: BoardAddAttempt<string, string> | null) =>
+      runAddAttempt({ previous, prompt: PROMPT, projectId: "p1", mint: rig.mint, send: rig.send });
+
+    const first = await submit(null);
+    const clientSide = await submit(first.attempt);
+    const retry = await submit(clientSide.attempt);
+
+    assert.equal(clientSide.result.status, "failed");
+    assert.equal(clientSide.attempt, first.attempt);
+    assert.deepEqual(rig.sent, [
+      { commandId: "cmd-1", messageId: "msg-1" },
+      { commandId: "cmd-1", messageId: "msg-1" },
+      { commandId: "cmd-1", messageId: "msg-1" },
+    ]);
+    assert.equal(rig.mintedCount(), 1);
+    assert.equal(retry.result.status, "started");
+  });
+
+  it("returns the started result without needing a record", async () => {
+    const rig = addAttemptRig([BOARD_DISPATCH_STARTED]);
+
+    const outcome = await runAddAttempt({
+      previous: null,
+      prompt: PROMPT,
+      projectId: null,
+      mint: rig.mint,
+      send: rig.send,
+    });
+
+    assert.equal(outcome.result, BOARD_DISPATCH_STARTED);
+    assert.equal(outcome.attempt, null);
+    assert.deepEqual(rig.sent, [{ commandId: "cmd-1", messageId: "msg-1" }]);
+  });
+
+  it("re-mints both ids when the text or the project changes after a lost response", async () => {
+    const rig = addAttemptRig([lostResponse(), lostResponse(), lostResponse(), lostResponse()]);
+    const submit = (
+      previous: BoardAddAttempt<string, string> | null,
+      prompt: string,
+      projectId: string | null,
+    ) => runAddAttempt({ previous, prompt, projectId, mint: rig.mint, send: rig.send });
+
+    const first = await submit(null, PROMPT, "p1");
+    const edited = await submit(first.attempt, `${PROMPT} today`, "p1");
+    const moved = await submit(edited.attempt, `${PROMPT} today`, "p2");
+    await submit(moved.attempt, `${PROMPT} today`, "p2");
+
+    assert.deepEqual(rig.sent, [
+      { commandId: "cmd-1", messageId: "msg-1" },
+      { commandId: "cmd-2", messageId: "msg-2" },
+      { commandId: "cmd-3", messageId: "msg-3" },
+      { commandId: "cmd-3", messageId: "msg-3" },
+    ]);
+    assert.equal(rig.mintedCount(), 3);
   });
 });
