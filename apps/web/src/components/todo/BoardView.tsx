@@ -90,6 +90,7 @@ import {
   boardDispatchFailureToast,
   boardStartFailure,
   createBoardDispatchFailure,
+  isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
   resolveBoardDispatchProject,
@@ -329,12 +330,16 @@ function BoardAddTaskDialog({
   });
   const submit = async () => {
     setSubmitting(true);
-    const result = await onConfirm({ idea, projectId: chosenProjectId, threadId });
-    setSubmitting(false);
-    setFailure(result.status === "failed" ? result : null);
+    try {
+      const result = await onConfirm({ idea, projectId: chosenProjectId, threadId });
+      setFailure(result.status === "failed" ? result : null);
+    } finally {
+      setSubmitting(false);
+    }
   };
+  const dismissBlocked = isAddTaskDismissBlocked(submitting);
   return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+    <Dialog open onOpenChange={(open) => (open || dismissBlocked ? undefined : onClose())}>
       <DialogPopup className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base">Add a task</DialogTitle>
@@ -365,7 +370,7 @@ function BoardAddTaskDialog({
           ) : null}
         </DialogPanel>
         <DialogFooter>
-          <Button size="compact" variant="ghost-muted" onClick={onClose}>
+          <Button size="compact" variant="ghost-muted" disabled={dismissBlocked} onClick={onClose}>
             Cancel
           </Button>
           <Button size="compact" disabled={submitDisabled} onClick={() => void submit()}>
@@ -477,7 +482,10 @@ export function BoardView({
   const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
-  const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const startTurn = useAtomCommand(threadEnvironment.startTurn, {
+    reportFailure: false,
+    reportDefect: false,
+  });
   const settings = useEnvironmentSettings(environmentId);
   const projects = useProjects();
   const providers =
