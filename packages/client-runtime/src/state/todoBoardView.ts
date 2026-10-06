@@ -163,7 +163,15 @@ export function parseTagSpec(spec: string): Array<string> {
 export function matchesTagSpec(tags: ReadonlyArray<string>, terms: ReadonlyArray<string>): boolean {
   if (terms.length === 0) return true;
   const lowered = tags.map((tag) => tag.toLowerCase());
-  return terms.some((term) => lowered.includes(term.toLowerCase()));
+  return terms.every((term) => lowered.includes(term.toLowerCase()));
+}
+
+export function matchesEpicFilter(tags: ReadonlyArray<string>, epic: string): boolean {
+  return epic.length === 0 || matchesTagSpec(tags, [epic]);
+}
+
+export function toggleEpicFilter(epic: string, currentEpic: string): string {
+  return epic.toLowerCase() === currentEpic.toLowerCase() ? "" : epic;
 }
 
 export function matchesIssueFreeText(issue: TodoIssue, query: string): boolean {
@@ -185,15 +193,25 @@ export function toggleTagSpecTerm(term: string, spec: string): string {
 export function isBoardFilterActive(uiState: {
   readonly tagSpec: string;
   readonly query: string;
+  readonly epic?: string;
 }): boolean {
-  return parseTagSpec(uiState.tagSpec).length > 0 || uiState.query.trim().length > 0;
+  return (
+    parseTagSpec(uiState.tagSpec).length > 0 ||
+    uiState.query.trim().length > 0 ||
+    (uiState.epic ?? "").length > 0
+  );
 }
 
 export function isQuickFilterActive(
   label: string,
-  uiState: { readonly tagSpec?: string | null; readonly query?: string },
+  uiState: {
+    readonly tagSpec?: string | null;
+    readonly query?: string;
+    readonly epic?: string;
+  },
 ): boolean {
   const needle = label.toLowerCase();
+  if ((uiState.epic ?? "").toLowerCase() === needle) return true;
   if (parseTagSpec(uiState.tagSpec ?? "").some((term) => term.toLowerCase() === needle)) {
     return true;
   }
@@ -366,6 +384,7 @@ export interface BoardFilterUiState {
   readonly tag?: string | null;
   readonly tagSpec?: string | null;
   readonly query?: string;
+  readonly epic?: string;
 }
 
 export function buildBoardViewModel(
@@ -380,7 +399,9 @@ export function buildBoardViewModel(
     expandTagFilterAncestors(
       filterIssuesByTag(snapshot.issues, uiState.tag).filter(
         (issue) =>
-          matchesTagSpec(issue.tags, specTerms) && matchesIssueFreeText(issue, uiState.query ?? ""),
+          matchesEpicFilter(issue.tags, uiState.epic ?? "") &&
+          matchesTagSpec(issue.tags, specTerms) &&
+          matchesIssueFreeText(issue, uiState.query ?? ""),
       ),
       issuesById,
     ),

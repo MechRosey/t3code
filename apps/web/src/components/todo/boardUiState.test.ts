@@ -44,6 +44,7 @@ describe("board UI state persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     };
     writeBoardUiState(storage, ROOT_A, state);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), state);
@@ -59,6 +60,7 @@ describe("board UI state persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
     assert.deepEqual(readBoardUiState(storage, ROOT_B), DEFAULT_BOARD_UI_STATE);
     assert.deepEqual(readBoardUiState(storage, ROOT_A), {
@@ -69,6 +71,7 @@ describe("board UI state persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
   });
 
@@ -100,6 +103,7 @@ describe("board UI state persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
     assert.deepEqual(readBoardUiState(storage, ""), DEFAULT_BOARD_UI_STATE);
   });
@@ -128,6 +132,7 @@ describe("board view toggle persistence", () => {
         drawerMode: "full",
         tagSpec: "ui,board",
         query: "10eb",
+        epic: "",
       }),
     });
     assert.deepEqual(readBoardUiState(retiredMap, ROOT_A), {
@@ -138,6 +143,7 @@ describe("board view toggle persistence", () => {
       drawerMode: "full",
       tagSpec: "ui,board",
       query: "10eb",
+      epic: "",
     });
   });
 
@@ -151,6 +157,7 @@ describe("board view toggle persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).view, "archive");
     assert.equal(readBoardUiState(storage, ROOT_B).view, "columns");
@@ -172,6 +179,7 @@ describe("board view toggle persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
   });
 
@@ -204,6 +212,7 @@ describe("board drawer mode persistence", () => {
       drawerMode: "full",
       tagSpec: "",
       query: "",
+      epic: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).drawerMode, "full");
     assert.equal(readBoardUiState(storage, ROOT_B).drawerMode, "normal");
@@ -226,6 +235,7 @@ describe("board drawer mode persistence", () => {
         drawerMode: "collapsed",
         tagSpec: "",
         query: "",
+        epic: "",
       }),
     });
     assert.equal(readBoardUiState(wrongKind, ROOT_A).drawerMode, "normal");
@@ -250,6 +260,7 @@ describe("board filter spec and query persistence", () => {
       drawerMode: "normal",
       tagSpec: "ui,board",
       query: "10eb",
+      epic: "",
     });
     const read = readBoardUiState(storage, ROOT_A);
     assert.equal(read.tagSpec, "ui,board");
@@ -311,6 +322,7 @@ describe("board drop hint persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
     assert.equal(readBoardUiState(storage, ROOT_A).dropHintDismissed, true);
     assert.equal(readBoardUiState(storage, ROOT_B).dropHintDismissed, false);
@@ -328,6 +340,7 @@ describe("board drop hint persistence", () => {
       drawerMode: "normal",
       tagSpec: "",
       query: "",
+      epic: "",
     });
   });
 

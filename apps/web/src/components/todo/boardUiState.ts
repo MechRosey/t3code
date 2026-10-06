@@ -42,6 +42,7 @@ export interface BoardUiState {
   readonly drawerMode: BoardDrawerMode;
   readonly tagSpec: string;
   readonly query: string;
+  readonly epic: string;
 }
 
 export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
@@ -52,6 +53,7 @@ export const DEFAULT_BOARD_UI_STATE: BoardUiState = {
   drawerMode: DEFAULT_BOARD_DRAWER_MODE,
   tagSpec: "",
   query: "",
+  epic: "",
 };
 
 const BoundedTag = Schema.String.check(Schema.isMaxLength(200));
@@ -65,6 +67,7 @@ const BoardUiStateSchema = Schema.Struct({
   ),
   tagSpec: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   query: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  epic: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 
 const decodeBoardUiState = Schema.decodeUnknownOption(BoardUiStateSchema);
@@ -89,12 +92,12 @@ export function readBoardUiState(
     if (!raw) return DEFAULT_BOARD_UI_STATE;
     const decoded = decodeBoardUiState(JSON.parse(raw));
     if (decoded._tag !== "Some") return DEFAULT_BOARD_UI_STATE;
-    const { tag, sort, dropHintDismissed, drawerMode, tagSpec, query } = decoded.value;
+    const { tag, sort, dropHintDismissed, drawerMode, tagSpec, query, epic } = decoded.value;
     const view = withoutRetiredView(decoded.value.view);
     if (!isBoardSortOrder(sort)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardViewKind(view)) return DEFAULT_BOARD_UI_STATE;
     if (!isBoardDrawerMode(drawerMode)) return DEFAULT_BOARD_UI_STATE;
-    return { tag, sort, dropHintDismissed, view, drawerMode, tagSpec, query };
+    return { tag, sort, dropHintDismissed, view, drawerMode, tagSpec, query, epic };
   } catch {
     return DEFAULT_BOARD_UI_STATE;
   }
