@@ -1,3 +1,5 @@
+import { isTemporaryWorktreeBranch } from "@t3tools/shared/git";
+
 export const BOARD_DISPATCH_FAILURE_CODE = {
   inFlight: "in_flight",
   noProject: "no_project",
@@ -28,11 +30,13 @@ export interface BoardProjectCandidate {
 export interface BoardDispatchOrigin {
   readonly projectId: string;
   readonly worktreePath: string | null;
+  readonly branch: string | null;
 }
 
 export interface BoardDispatchTarget<P extends BoardProjectCandidate> {
   readonly project: P;
   readonly worktreePath: string | null;
+  readonly branch: string | null;
 }
 
 export interface BoardProjectOption {
@@ -175,6 +179,23 @@ export function resolveBoardDispatchProject<P extends BoardProjectCandidate>(
   return inEnvironment.find((candidate) => candidate.workspaceRoot === target.cwd) ?? null;
 }
 
+const PROJECT_ROOT_LAUNCH = { worktreePath: null, branch: null } as const;
+
+function keepBranchUnlessTemporary(branch: string | null): string | null {
+  return hasText(branch) && !isTemporaryWorktreeBranch(branch) ? branch : null;
+}
+
+function resolveOriginLaunch(origin: BoardDispatchOrigin): {
+  readonly worktreePath: string | null;
+  readonly branch: string | null;
+} {
+  if (!hasText(origin.worktreePath)) return PROJECT_ROOT_LAUNCH;
+  return {
+    worktreePath: origin.worktreePath,
+    branch: keepBranchUnlessTemporary(origin.branch),
+  };
+}
+
 function resolveOriginTarget<P extends BoardProjectCandidate>(
   projects: ReadonlyArray<P>,
   environmentId: string,
@@ -184,7 +205,7 @@ function resolveOriginTarget<P extends BoardProjectCandidate>(
     (candidate) => candidate.environmentId === environmentId && candidate.id === origin.projectId,
   );
   if (project === undefined) return null;
-  return { project, worktreePath: hasText(origin.worktreePath) ? origin.worktreePath : null };
+  return { project, ...resolveOriginLaunch(origin) };
 }
 
 export function resolveBoardDispatchTarget<P extends BoardProjectCandidate>(
@@ -200,7 +221,7 @@ export function resolveBoardDispatchTarget<P extends BoardProjectCandidate>(
     return resolveOriginTarget(projects, target.environmentId, target.origin);
   }
   const project = resolveBoardDispatchProject(projects, target);
-  return project === null ? null : { project, worktreePath: null };
+  return project === null ? null : { project, ...PROJECT_ROOT_LAUNCH };
 }
 
 export function listBoardProjectOptions(

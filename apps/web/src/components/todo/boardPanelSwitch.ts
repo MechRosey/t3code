@@ -15,6 +15,7 @@ export interface BoardPanelSwitchThread {
   readonly projectId: ProjectId;
   readonly environmentId: EnvironmentId;
   readonly worktreePath: string | null;
+  readonly branch: string | null;
   readonly archivedAt: string | null;
   readonly updatedAt: string;
 }
@@ -151,7 +152,11 @@ export function resolveBoardOrigin(
 ): BoardDispatchOrigin | null {
   const thread = resolveBoardThread(search, projects, threads);
   if (thread === null) return null;
-  return { projectId: thread.projectId, worktreePath: thread.worktreePath };
+  return {
+    projectId: thread.projectId,
+    worktreePath: thread.worktreePath,
+    branch: thread.branch,
+  };
 }
 
 export function resolveBoardPanelSwitch(
@@ -171,6 +176,10 @@ export function resolveBoardPanelSwitch(
   };
 }
 
+function runsAtProjectRoot(thread: BoardPanelSwitchThread): boolean {
+  return thread.worktreePath === null || thread.worktreePath.length === 0;
+}
+
 export function resolveProjectBoardEntry(
   project: BoardPanelSwitchProject,
   threads: readonly BoardPanelSwitchThread[],
@@ -178,7 +187,7 @@ export function resolveProjectBoardEntry(
   if (project.workspaceRoot.length === 0) return null;
   let latest: BoardPanelSwitchThread | null = null;
   for (const thread of threads) {
-    if (thread.archivedAt !== null) continue;
+    if (thread.archivedAt !== null || !runsAtProjectRoot(thread)) continue;
     if (thread.environmentId !== project.environmentId || thread.projectId !== project.id) continue;
     if (
       latest === null ||
