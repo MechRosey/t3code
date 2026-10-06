@@ -4116,6 +4116,14 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  const activeThreadProjectId = activeThread?.projectId ?? null;
+  const boardOrigin = useMemo(
+    () =>
+      activeThreadProjectId === null
+        ? undefined
+        : { projectId: activeThreadProjectId, worktreePath: activeThreadWorktreePath },
+    [activeThreadProjectId, activeThreadWorktreePath],
+  );
   useLayoutEffect(() => {
     if (
       threadDetailLoading ||
@@ -10626,6 +10634,7 @@ export default function ChatView(props: ChatViewProps) {
           key={`${activeThread.environmentId}:${activeWorkspaceRoot ?? ""}`}
           environmentId={activeThread.environmentId}
           cwd={activeWorkspaceRoot ?? ""}
+          origin={boardOrigin}
           onOpenFullPage={() => {
             writeStoredBoardOpenStyle("page");
             void navigate({

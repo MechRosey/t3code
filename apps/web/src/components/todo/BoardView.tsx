@@ -93,11 +93,12 @@ import {
   isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
-  resolveBoardDispatchProject,
+  resolveBoardDispatchTarget,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
   shouldOfferProjectPicker,
   type BoardDispatchFailure,
+  type BoardDispatchOrigin,
   type BoardDispatchResult,
   type BoardProjectOption,
 } from "./boardDispatch.logic";
@@ -129,6 +130,7 @@ import { buildFocusGraph } from "./mapView.logic";
 export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
   readonly cwd: string;
+  readonly origin?: BoardDispatchOrigin | undefined;
   readonly onOpenFullPage?: (() => void) | undefined;
   readonly onOpenInPanel?: (() => void) | undefined;
   readonly className?: string;
@@ -461,6 +463,7 @@ function BoardFilteredEmpty({ onClearFilters }: { readonly onClearFilters: () =>
 export function BoardView({
   environmentId,
   cwd,
+  origin,
   onOpenFullPage,
   onOpenInPanel,
   className,
@@ -671,10 +674,16 @@ export function BoardView({
     if (dispatchInFlight.has(dispatchKey)) {
       return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.inFlight);
     }
-    const project = resolveBoardDispatchProject(projects, { environmentId, cwd, chosenProjectId });
-    if (project === null) {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId,
+      cwd,
+      chosenProjectId,
+      origin: origin ?? null,
+    });
+    if (target === null) {
       return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.noProject);
     }
+    const { project, worktreePath } = target;
     const resolvedSettings = resolveProjectSettings(settings, project.id, project);
     const modelSelection =
       resolvedSettings.settings.defaultModelSelection ??
@@ -706,7 +715,7 @@ export function BoardView({
             runtimeMode,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
             branch: null,
-            worktreePath: null,
+            worktreePath,
             createdAt,
           },
         },

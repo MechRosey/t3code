@@ -7,6 +7,7 @@ import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../components/Work
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { BoardView } from "../components/todo/BoardView";
 import {
+  resolveBoardOrigin,
   resolveBoardPanelSwitch,
   writeStoredBoardOpenStyle,
 } from "../components/todo/boardPanelSwitch";
@@ -52,6 +53,10 @@ function BoardRouteView() {
     () => resolveBoardPanelSwitch(search, projects, threads),
     [projects, search, threads],
   );
+  const origin = useMemo(
+    () => resolveBoardOrigin(search, projects, threads) ?? undefined,
+    [projects, search, threads],
+  );
   const environmentId = project?.environmentId ?? search.environmentId;
   const cwd = project?.workspaceRoot ?? search.cwd ?? null;
   const breadcrumbLabel =
@@ -77,6 +82,7 @@ function BoardRouteView() {
           <BoardView
             environmentId={environmentId}
             cwd={cwd ?? ""}
+            origin={origin}
             onOpenInPanel={
               panelSwitchTarget === null
                 ? undefined
