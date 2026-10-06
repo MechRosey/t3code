@@ -720,7 +720,7 @@ export function BoardView({
     if (target === null) {
       return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.noProject);
     }
-    const { project, worktreePath } = target;
+    const { project, worktreePath, branch } = target;
     const resolvedSettings = resolveProjectSettings(settings, project.id, project);
     const modelSelection =
       resolvedSettings.settings.defaultModelSelection ??
@@ -752,7 +752,7 @@ export function BoardView({
             modelSelection,
             runtimeMode,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-            branch: null,
+            branch,
             worktreePath,
             createdAt,
           },

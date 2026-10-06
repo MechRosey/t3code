@@ -4117,12 +4117,18 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const activeThreadProjectId = activeThread?.projectId ?? null;
+  const activeThreadWorktreeBranch =
+    activeThreadWorktreePath === null ? null : (activeThread?.branch ?? null);
   const boardOrigin = useMemo(
     () =>
       activeThreadProjectId === null
         ? undefined
-        : { projectId: activeThreadProjectId, worktreePath: activeThreadWorktreePath },
-    [activeThreadProjectId, activeThreadWorktreePath],
+        : {
+            projectId: activeThreadProjectId,
+            worktreePath: activeThreadWorktreePath,
+            branch: activeThreadWorktreeBranch,
+          },
+    [activeThreadProjectId, activeThreadWorktreePath, activeThreadWorktreeBranch],
   );
   useLayoutEffect(() => {
     if (
@@ -8862,15 +8868,19 @@ export default function ChatView(props: ChatViewProps) {
     );
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
-    // Sending past the resume banner compacts first so the turn does not resend the stale
-    // history. The message queues behind the /compact run; steering into it is rejected,
-    // and a held queue would strand it.
-    const compactBeforeSend =
-      resumeCompactionBannerItem !== null &&
-      !compactDisabled &&
-      !hasHeldQueuedRuns &&
-      multipleModelSelections === null &&
-      messageTextForSend.toLowerCase() !== "/compact";
+    // FORK CHANGE (t3todo): sending past the resume banner no longer compacts first. Upstream
+    // auto-compacts on send, but /compact is a full uncached pass over the history plus detail
+    // loss, so compaction here is opt-in only (the banner's Compact button, or typing /compact).
+    // Kept as commented-out lines rather than deleted so upstream merges in this area stay small.
+    // When merging upstream: keep compactBeforeSend false; do not restore the original condition.
+    // Ticket 126dd-resume-compaction-banner.
+    // const compactBeforeSend =
+    //   resumeCompactionBannerItem !== null &&
+    //   !compactDisabled &&
+    //   !hasHeldQueuedRuns &&
+    //   multipleModelSelections === null &&
+    //   messageTextForSend.toLowerCase() !== "/compact";
+    const compactBeforeSend = false as boolean;
     const turnDispatchMode = compactBeforeSend ? "queue" : dispatchMode;
     const shouldQueueBehindActiveRun =
       compactBeforeSend || (phase === "running" && dispatchMode === "queue");
