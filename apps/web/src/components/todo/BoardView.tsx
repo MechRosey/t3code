@@ -123,6 +123,7 @@ import {
   EMPTY_BOARD_SNAPSHOT,
   isBoardFilterActive,
   isQuickFilterActive,
+  toggleEpicFilter,
   toggleTagSpecTerm,
   type BoardSortOrder,
 } from "@t3tools/client-runtime/state/todo-board-view";
@@ -451,11 +452,13 @@ function BoardFilterChip({
   label,
   hue,
   active,
+  dimmed,
   onClick,
 }: {
   readonly label: string;
   readonly hue: number | null;
   readonly active: boolean;
+  readonly dimmed: boolean;
   readonly onClick: () => void;
 }) {
   return (
@@ -468,7 +471,8 @@ function BoardFilterChip({
       className={cn(
         "cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-[.625rem] leading-4 transition-colors",
         hue === null ? "border-border bg-muted text-muted-foreground" : "board-filter-chip-hued",
-        active && "outline-[1.5px] outline-solid outline-foreground/60 -outline-offset-1",
+        active && "font-semibold outline-2 outline-solid outline-foreground -outline-offset-1",
+        dimmed && "opacity-45 hover:opacity-100",
       )}
     >
       {label}
@@ -580,7 +584,13 @@ export function BoardView({
   const handleToggleTagSpecTerm = (term: string) => {
     updateUiState({ tagSpec: toggleTagSpecTerm(term, uiState.tagSpec) });
   };
-  const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "" });
+  const handleToggleEpic = (epic: string) => {
+    updateUiState({ epic: toggleEpicFilter(epic, uiState.epic) });
+  };
+  const epicRowFiltered = model?.epics.some((e) => isQuickFilterActive(e.epic, uiState)) ?? false;
+  const tagRowFiltered =
+    model?.commonTags.some((tag) => isQuickFilterActive(tag, uiState)) ?? false;
+  const clearFilters = () => updateUiState({ tag: null, tagSpec: "", query: "", epic: "" });
   const changeDrawerMode = (mode: BoardDrawerMode) => updateUiState({ drawerMode: mode });
 
   const rollupAfterStatus = async (issue: TodoIssue, status: string) => {
@@ -1105,7 +1115,8 @@ export function BoardView({
                   label={epicFilter.epic}
                   hue={epicFilter.hue}
                   active={isQuickFilterActive(epicFilter.epic, uiState)}
-                  onClick={() => handleToggleTagSpecTerm(epicFilter.epic)}
+                  dimmed={epicRowFiltered && !isQuickFilterActive(epicFilter.epic, uiState)}
+                  onClick={() => handleToggleEpic(epicFilter.epic)}
                 />
               ))}
             </div>
@@ -1118,6 +1129,7 @@ export function BoardView({
                   label={tag}
                   hue={null}
                   active={isQuickFilterActive(tag, uiState)}
+                  dimmed={tagRowFiltered && !isQuickFilterActive(tag, uiState)}
                   onClick={() => handleToggleTagSpecTerm(tag)}
                 />
               ))}

@@ -11,9 +11,10 @@ import { cn } from "../../lib/cn";
 export interface BoardFilterState {
   readonly tagSpec: string;
   readonly query: string;
+  readonly epic: string;
 }
 
-export const EMPTY_BOARD_FILTER_STATE: BoardFilterState = { tagSpec: "", query: "" };
+export const EMPTY_BOARD_FILTER_STATE: BoardFilterState = { tagSpec: "", query: "", epic: "" };
 
 export function BoardFilterStrip(props: {
   readonly epics: ReadonlyArray<BoardEpicQuickFilter>;
@@ -21,6 +22,7 @@ export function BoardFilterStrip(props: {
   readonly filter: BoardFilterState;
   readonly onQueryChange: (query: string) => void;
   readonly onToggleTerm: (term: string) => void;
+  readonly onToggleEpic: (epic: string) => void;
   readonly onClear: () => void;
 }) {
   const { filter } = props;
@@ -62,7 +64,7 @@ export function BoardFilterStrip(props: {
               label={epicFilter.epic}
               hue={epicFilter.hue}
               active={isQuickFilterActive(epicFilter.epic, filter)}
-              onPress={() => props.onToggleTerm(epicFilter.epic)}
+              onPress={() => props.onToggleEpic(epicFilter.epic)}
             />
           ))}
           {props.commonTags.map((tag) => (

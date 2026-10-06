@@ -3,6 +3,7 @@ import { EnvironmentId } from "@t3tools/contracts";
 import {
   buildBoardViewModel,
   isBoardFilterActive,
+  toggleEpicFilter,
   toggleTagSpecTerm,
   type BoardCardViewModel,
   type BoardColumnViewModel,
@@ -67,6 +68,7 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
             sort: "updated-desc" as const,
             tagSpec: filter.tagSpec,
             query: filter.query,
+            epic: filter.epic,
           }),
     [snapshot, filter],
   );
@@ -77,6 +79,11 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
   const handleFilterToggleTerm = useCallback(
     (term: string) =>
       setFilter((current) => ({ ...current, tagSpec: toggleTagSpecTerm(term, current.tagSpec) })),
+    [],
+  );
+  const handleFilterToggleEpic = useCallback(
+    (epic: string) =>
+      setFilter((current) => ({ ...current, epic: toggleEpicFilter(epic, current.epic) })),
     [],
   );
   const handleFilterClear = useCallback(() => setFilter(EMPTY_BOARD_FILTER_STATE), []);
@@ -126,6 +133,7 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
           filter={filter}
           onQueryChange={handleFilterQueryChange}
           onToggleTerm={handleFilterToggleTerm}
+          onToggleEpic={handleFilterToggleEpic}
           onClear={handleFilterClear}
         />
         {filterHidesEverything ? (
