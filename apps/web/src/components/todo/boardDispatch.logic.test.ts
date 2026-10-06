@@ -11,6 +11,7 @@ import {
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
   resolveBoardDispatchProject,
+  resolveBoardDispatchTarget,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
   shouldOfferProjectPicker,
@@ -169,6 +170,108 @@ describe("resolveBoardDispatchProject", () => {
     });
 
     assert.equal(resolved, null);
+  });
+});
+
+describe("resolveBoardDispatchTarget", () => {
+  const WORKTREE = "C:\\repo\\board\\.worktrees\\feature";
+  const projects = [
+    project("p-other-env", "env-b", BOARD_FOLDER),
+    project("p-board", "env-a", BOARD_FOLDER),
+    project("p-elsewhere", "env-a", "C:\\repo\\elsewhere"),
+  ];
+
+  it("starts in the origin worktree of the origin project when the board cwd matches no project root", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: WORKTREE,
+      chosenProjectId: null,
+      origin: { projectId: "p-board", worktreePath: WORKTREE },
+    });
+
+    assert.equal(target?.project.id, "p-board");
+    assert.equal(target?.worktreePath, WORKTREE);
+  });
+
+  it("starts at the project root when the origin thread has no worktree, even if another root matches the cwd", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: "C:\\repo\\elsewhere",
+      chosenProjectId: null,
+      origin: { projectId: "p-board", worktreePath: null },
+    });
+
+    assert.equal(target?.project.id, "p-board");
+    assert.equal(target?.worktreePath, null);
+  });
+
+  it("treats an empty origin worktree path as no worktree", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: BOARD_FOLDER,
+      chosenProjectId: null,
+      origin: { projectId: "p-board", worktreePath: "" },
+    });
+
+    assert.equal(target?.project.id, "p-board");
+    assert.equal(target?.worktreePath, null);
+  });
+
+  it("prefers the chosen project over the origin and drops the origin worktree", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: WORKTREE,
+      chosenProjectId: "p-elsewhere",
+      origin: { projectId: "p-board", worktreePath: WORKTREE },
+    });
+
+    assert.equal(target?.project.id, "p-elsewhere");
+    assert.equal(target?.worktreePath, null);
+  });
+
+  it("returns null when the origin project is in another environment", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: BOARD_FOLDER,
+      chosenProjectId: null,
+      origin: { projectId: "p-other-env", worktreePath: null },
+    });
+
+    assert.equal(target, null);
+  });
+
+  it("returns null when the origin project no longer exists instead of falling back to the cwd match", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: BOARD_FOLDER,
+      chosenProjectId: null,
+      origin: { projectId: "p-gone", worktreePath: WORKTREE },
+    });
+
+    assert.equal(target, null);
+  });
+
+  it("matches the project by exact cwd with no worktree when there is no origin", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: BOARD_FOLDER,
+      chosenProjectId: null,
+      origin: null,
+    });
+
+    assert.equal(target?.project.id, "p-board");
+    assert.equal(target?.worktreePath, null);
+  });
+
+  it("returns null when there is no origin and no project root matches the cwd", () => {
+    const target = resolveBoardDispatchTarget(projects, {
+      environmentId: "env-a",
+      cwd: WORKTREE,
+      chosenProjectId: null,
+      origin: null,
+    });
+
+    assert.equal(target, null);
   });
 });
 
