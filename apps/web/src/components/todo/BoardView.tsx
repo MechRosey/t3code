@@ -2,14 +2,19 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  type CommandId,
   type EnvironmentId,
+  type MessageId,
   type ServerProvider,
   type ThreadId,
   type TodoIssue,
 } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
 import { DndContext, useDroppable, type DragEndEvent } from "@dnd-kit/core";
 import { useSensor, useSensors } from "@dnd-kit/core";
@@ -35,7 +40,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
-import { newMessageId, newThreadId } from "~/lib/utils";
+import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { resolveAppModelSelectionState } from "~/modelSelection";
 import { NO_PROVIDER_MODEL_SELECTION } from "~/providerInstances";
 import { useRightPanelStore } from "../../rightPanelStore";
@@ -84,6 +89,7 @@ import {
   type BoardDropSpeed,
 } from "./boardDrop.logic";
 import {
+  addAttemptFingerprint,
   BOARD_DISPATCH_FAILURE_CODE,
   BOARD_DISPATCH_STARTED,
   boardDispatchFailureLogFields,
@@ -93,10 +99,14 @@ import {
   isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
+  recordAddAttemptOutcome,
   resolveBoardDispatchTarget,
+  selectAddAttemptIds,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
   shouldOfferProjectPicker,
+  type BoardAddAttempt,
+  type BoardAddAttemptIds,
   type BoardDispatchFailure,
   type BoardDispatchOrigin,
   type BoardDispatchResult,
@@ -264,6 +274,8 @@ interface BoardAddTaskSubmission {
   readonly idea: string;
   readonly projectId: string | null;
   readonly threadId: ThreadId;
+  readonly commandId: CommandId;
+  readonly messageId: MessageId;
 }
 
 function BoardProjectPicker({
@@ -301,6 +313,11 @@ function BoardProjectPicker({
   );
 }
 
+const mintAddAttemptIds = (): BoardAddAttemptIds<CommandId, MessageId> => ({
+  commandId: newCommandId(),
+  messageId: newMessageId(),
+});
+
 function BoardAddTaskDialog({
   pending,
   projectOptions,
@@ -314,6 +331,7 @@ function BoardAddTaskDialog({
 }) {
   const [idea, setIdea] = useState("");
   const [threadId] = useState(newThreadId);
+  const lastAttempt = useRef<BoardAddAttempt<CommandId, MessageId> | null>(null);
   const [chosenProjectId, setChosenProjectId] = useState<string | null>(null);
   const [failure, setFailure] = useState<BoardDispatchFailure | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -330,10 +348,23 @@ function BoardAddTaskDialog({
     pickerShown,
     chosenProjectId,
   });
+  const confirmAttempt = async (): Promise<BoardDispatchResult> => {
+    const fingerprint = addAttemptFingerprint({ prompt: prompt ?? "", projectId: chosenProjectId });
+    const ids = selectAddAttemptIds(lastAttempt.current, fingerprint, mintAddAttemptIds);
+    const result = await onConfirm({ idea, projectId: chosenProjectId, threadId, ...ids });
+    if (result.status === "failed") {
+      lastAttempt.current = recordAddAttemptOutcome({
+        previous: lastAttempt.current,
+        used: { ...ids, fingerprint },
+        failure: result,
+      });
+    }
+    return result;
+  };
   const submit = async () => {
     setSubmitting(true);
     try {
-      const result = await onConfirm({ idea, projectId: chosenProjectId, threadId });
+      const result = await confirmAttempt();
       setFailure(result.status === "failed" ? result : null);
     } finally {
       setSubmitting(false);
@@ -667,10 +698,20 @@ export function BoardView({
     readonly threadTitle: string;
     readonly prompt: string;
     readonly chosenProjectId: string | null;
+    readonly commandId?: CommandId;
+    readonly messageId?: MessageId;
     readonly recordAssociation?: () => void;
   }): Promise<BoardDispatchResult> => {
-    const { dispatchKey, threadId, threadTitle, prompt, chosenProjectId, recordAssociation } =
-      params;
+    const {
+      dispatchKey,
+      threadId,
+      threadTitle,
+      prompt,
+      chosenProjectId,
+      commandId,
+      messageId,
+      recordAssociation,
+    } = params;
     if (dispatchInFlight.has(dispatchKey)) {
       return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.inFlight);
     }
@@ -698,9 +739,10 @@ export function BoardView({
     const result = await startTurn({
       environmentId,
       input: {
+        ...(commandId === undefined ? {} : { commandId }),
         threadId,
         message: {
-          messageId: newMessageId(),
+          messageId: messageId ?? newMessageId(),
           role: "user",
           text: prompt,
           attachments: [],
@@ -728,7 +770,7 @@ export function BoardView({
       delete next[dispatchKey];
       return next;
     });
-    return boardStartFailure(squashAtomCommandFailure(result));
+    return boardStartFailure(squashAtomCommandFailure(result), isAtomCommandInterrupted(result));
   };
 
   const logBoardDispatchResult = (
@@ -799,6 +841,8 @@ export function BoardView({
     idea,
     projectId,
     threadId,
+    commandId,
+    messageId,
   }: BoardAddTaskSubmission): Promise<BoardDispatchResult> => {
     const prompt = composeBoardNewTaskPrompt(idea);
     if (prompt === null) {
@@ -813,6 +857,8 @@ export function BoardView({
       threadTitle: composeBoardNewTaskTitle(idea),
       prompt,
       chosenProjectId: projectId,
+      commandId,
+      messageId,
     });
   };
 
