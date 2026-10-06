@@ -6,12 +6,16 @@ import {
   boardDispatchFailureLogFields,
   boardDispatchFailureToast,
   boardStartFailure,
+  addAttemptFingerprint,
   createBoardDispatchFailure,
   isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
+  isDeliveryUnknownFailure,
   listBoardProjectOptions,
+  recordAddAttemptOutcome,
   resolveBoardDispatchProject,
   resolveBoardDispatchTarget,
+  selectAddAttemptIds,
   shouldAutoCloseAddTask,
   shouldCloseAddTaskDialog,
   shouldOfferProjectPicker,
@@ -483,5 +487,202 @@ describe("shouldAutoCloseAddTask", () => {
       shouldAutoCloseAddTask({ wasBootstrap: true, boardBootstrap: false, hasSnapshot: false }),
       false,
     );
+  });
+});
+
+describe("isDeliveryUnknownFailure", () => {
+  it("treats an interrupted attempt as unknown whatever the cause", () => {
+    assert.equal(isDeliveryUnknownFailure({ cause: new Error("x"), interrupted: true }), true);
+    assert.equal(isDeliveryUnknownFailure({ cause: undefined, interrupted: true }), true);
+  });
+
+  it("treats a dropped rpc client as unknown", () => {
+    const cause = { _tag: "RpcClientError", message: "socket closed" };
+
+    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), true);
+  });
+
+  it("treats a typed launch error as definitive", () => {
+    const cause = { _tag: "OrchestrationV2ThreadLaunchError", message: "Failed to launch thread" };
+
+    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), false);
+  });
+
+  it("treats a request that was never sent as definitive", () => {
+    const cause = { _tag: "EnvironmentRpcUnavailableError", message: "no connection" };
+
+    assert.equal(isDeliveryUnknownFailure({ cause, interrupted: false }), false);
+  });
+
+  it("fails closed to definitive for anything unrecognised", () => {
+    assert.equal(isDeliveryUnknownFailure({ cause: new Error("boom"), interrupted: false }), false);
+    assert.equal(isDeliveryUnknownFailure({ cause: undefined, interrupted: false }), false);
+    assert.equal(isDeliveryUnknownFailure({ cause: null, interrupted: false }), false);
+    assert.equal(isDeliveryUnknownFailure({ cause: "RpcClientError", interrupted: false }), false);
+    assert.equal(isDeliveryUnknownFailure({ cause: { _tag: 7 }, interrupted: false }), false);
+  });
+});
+
+describe("start failure delivery flag", () => {
+  it("is false for every client-side failure code", () => {
+    for (const code of Object.values(BOARD_DISPATCH_FAILURE_CODE)) {
+      assert.equal(createBoardDispatchFailure(code).deliveryUnknown, false, code);
+    }
+  });
+
+  it("is true when the cause is a dropped rpc client", () => {
+    const failure = boardStartFailure({ _tag: "RpcClientError" }, false);
+
+    assert.equal(failure.code, BOARD_DISPATCH_FAILURE_CODE.startFailed);
+    assert.equal(failure.deliveryUnknown, true);
+  });
+
+  it("is true when the attempt was interrupted", () => {
+    assert.equal(boardStartFailure(new Error("interrupted"), true).deliveryUnknown, true);
+  });
+
+  it("is false for a definitive cause", () => {
+    assert.equal(boardStartFailure(new Error("provider rejected")).deliveryUnknown, false);
+  });
+});
+
+describe("addAttemptFingerprint", () => {
+  it("is stable for the same prompt and project", () => {
+    assert.equal(
+      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" }),
+      addAttemptFingerprint({ prompt: "/todo new\n\nfix it", projectId: "p1" }),
+    );
+  });
+
+  it("changes with the prompt", () => {
+    assert.notEqual(
+      addAttemptFingerprint({ prompt: "fix it", projectId: "p1" }),
+      addAttemptFingerprint({ prompt: "fix it now", projectId: "p1" }),
+    );
+  });
+
+  it("changes with the project, including no project", () => {
+    const withProject = addAttemptFingerprint({ prompt: "fix it", projectId: "p1" });
+
+    assert.notEqual(withProject, addAttemptFingerprint({ prompt: "fix it", projectId: "p2" }));
+    assert.notEqual(withProject, addAttemptFingerprint({ prompt: "fix it", projectId: null }));
+  });
+
+  it("does not let the prompt and project run together", () => {
+    assert.notEqual(
+      addAttemptFingerprint({ prompt: "a", projectId: "bc" }),
+      addAttemptFingerprint({ prompt: "ab", projectId: "c" }),
+    );
+  });
+});
+
+describe("selectAddAttemptIds", () => {
+  const FINGERPRINT = "fingerprint-a";
+  const OTHER_FINGERPRINT = "fingerprint-b";
+  const previous = (deliveryUnknown: boolean) => ({
+    fingerprint: FINGERPRINT,
+    commandId: "cmd-old",
+    messageId: "msg-old",
+    deliveryUnknown,
+  });
+  const countingMint = () => {
+    let calls = 0;
+    return {
+      mint: () => {
+        calls += 1;
+        return { commandId: `cmd-new-${calls}`, messageId: `msg-new-${calls}` };
+      },
+      calls: () => calls,
+    };
+  };
+
+  it("mints once when there is no previous attempt", () => {
+    const minter = countingMint();
+
+    const ids = selectAddAttemptIds(null, FINGERPRINT, minter.mint);
+
+    assert.deepEqual(ids, { commandId: "cmd-new-1", messageId: "msg-new-1" });
+    assert.equal(minter.calls(), 1);
+  });
+
+  it("reuses both ids without minting when delivery was unknown and the text is unchanged", () => {
+    const minter = countingMint();
+
+    const ids = selectAddAttemptIds(previous(true), FINGERPRINT, minter.mint);
+
+    assert.deepEqual(ids, { commandId: "cmd-old", messageId: "msg-old" });
+    assert.equal(minter.calls(), 0);
+  });
+
+  it("re-mints both ids after a definitive failure so a stored rejection is never replayed", () => {
+    const minter = countingMint();
+
+    const ids = selectAddAttemptIds(previous(false), FINGERPRINT, minter.mint);
+
+    assert.deepEqual(ids, { commandId: "cmd-new-1", messageId: "msg-new-1" });
+  });
+
+  it("re-mints both ids when the text changed after an unknown delivery", () => {
+    const minter = countingMint();
+
+    const ids = selectAddAttemptIds(previous(true), OTHER_FINGERPRINT, minter.mint);
+
+    assert.deepEqual(ids, { commandId: "cmd-new-1", messageId: "msg-new-1" });
+  });
+
+  it("never pairs a reused messageId with a fresh commandId", () => {
+    for (const deliveryUnknown of [true, false]) {
+      for (const fingerprint of [FINGERPRINT, OTHER_FINGERPRINT]) {
+        const ids = selectAddAttemptIds(
+          previous(deliveryUnknown),
+          fingerprint,
+          countingMint().mint,
+        );
+
+        assert.equal(ids.commandId === "cmd-old", ids.messageId === "msg-old");
+      }
+    }
+  });
+});
+
+describe("recordAddAttemptOutcome", () => {
+  const used = { fingerprint: "fp", commandId: "cmd-1", messageId: "msg-1" };
+  const earlier = {
+    fingerprint: "fp-earlier",
+    commandId: "cmd-0",
+    messageId: "msg-0",
+    deliveryUnknown: true,
+  };
+
+  it("records an unknown delivery so the next retry can reuse the ids", () => {
+    const failure = boardStartFailure({ _tag: "RpcClientError" }, false);
+
+    const recorded = recordAddAttemptOutcome({ previous: null, used, failure });
+
+    assert.deepEqual(recorded, { ...used, deliveryUnknown: true });
+  });
+
+  it("records a definitive failure as not unknown, replacing the earlier attempt", () => {
+    const failure = boardStartFailure(new Error("provider rejected"));
+
+    const recorded = recordAddAttemptOutcome({ previous: earlier, used, failure });
+
+    assert.deepEqual(recorded, { ...used, deliveryUnknown: false });
+  });
+
+  it("keeps the earlier attempt when the failure made no request", () => {
+    const clientSideCodes = [
+      BOARD_DISPATCH_FAILURE_CODE.noProject,
+      BOARD_DISPATCH_FAILURE_CODE.noProvider,
+      BOARD_DISPATCH_FAILURE_CODE.inFlight,
+      BOARD_DISPATCH_FAILURE_CODE.emptyPrompt,
+    ];
+
+    for (const code of clientSideCodes) {
+      const failure = createBoardDispatchFailure(code);
+
+      assert.equal(recordAddAttemptOutcome({ previous: earlier, used, failure }), earlier, code);
+      assert.equal(recordAddAttemptOutcome({ previous: null, used, failure }), null, code);
+    }
   });
 });
