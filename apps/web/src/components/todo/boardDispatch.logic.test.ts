@@ -7,6 +7,7 @@ import {
   boardDispatchFailureToast,
   boardStartFailure,
   createBoardDispatchFailure,
+  isAddTaskDismissBlocked,
   isAddTaskSubmitDisabled,
   listBoardProjectOptions,
   resolveBoardDispatchProject,
@@ -342,6 +343,13 @@ describe("isAddTaskSubmitDisabled", () => {
       isAddTaskSubmitDisabled({ ...ready, pickerShown: true, chosenProjectId: "p1" }),
       false,
     );
+  });
+});
+
+describe("isAddTaskDismissBlocked", () => {
+  it("blocks dismissal while a submit is in flight and allows it otherwise", () => {
+    assert.equal(isAddTaskDismissBlocked(true), true);
+    assert.equal(isAddTaskDismissBlocked(false), false);
   });
 });
 

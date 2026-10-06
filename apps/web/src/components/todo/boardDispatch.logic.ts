@@ -140,6 +140,10 @@ export function isAddTaskSubmitDisabled(input: {
   return input.pickerShown && input.chosenProjectId === null;
 }
 
+export function isAddTaskDismissBlocked(_submitting: boolean): boolean {
+  return false;
+}
+
 export function shouldAutoCloseAddTask(input: {
   readonly wasBootstrap: boolean;
   readonly boardBootstrap: boolean;
