@@ -13,6 +13,7 @@ export interface BoardDispatchFailure {
   readonly status: "failed";
   readonly code: BoardDispatchFailureCode;
   readonly message: string;
+  readonly deliveryUnknown: boolean;
 }
 
 export type BoardDispatchResult = { readonly status: "started" } | BoardDispatchFailure;
@@ -64,17 +65,80 @@ function hasText(value: string | null | undefined): value is string {
 export function createBoardDispatchFailure(
   code: BoardDispatchFailureCode,
   detail?: string | null,
+  deliveryUnknown = false,
 ): BoardDispatchFailure {
   const message =
     code === BOARD_DISPATCH_FAILURE_CODE.startFailed && hasText(detail)
       ? detail
       : BOARD_DISPATCH_FAILURE_MESSAGE[code];
-  return { status: "failed", code, message };
+  return { status: "failed", code, message, deliveryUnknown };
 }
 
-export function boardStartFailure(cause: unknown): BoardDispatchFailure {
+const RPC_CLIENT_ERROR_TAG = "RpcClientError";
+
+function errorTag(cause: unknown): string | null {
+  if (typeof cause !== "object" || cause === null || !("_tag" in cause)) return null;
+  return typeof cause._tag === "string" ? cause._tag : null;
+}
+
+export function isDeliveryUnknownFailure(input: {
+  readonly cause: unknown;
+  readonly interrupted: boolean;
+}): boolean {
+  return input.interrupted || errorTag(input.cause) === RPC_CLIENT_ERROR_TAG;
+}
+
+export function boardStartFailure(cause: unknown, interrupted = false): BoardDispatchFailure {
   const detail = cause instanceof Error ? cause.message : null;
-  return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.startFailed, detail);
+  return createBoardDispatchFailure(
+    BOARD_DISPATCH_FAILURE_CODE.startFailed,
+    detail,
+    isDeliveryUnknownFailure({ cause, interrupted }),
+  );
+}
+
+export interface BoardAddAttemptIds<C, M> {
+  readonly commandId: C;
+  readonly messageId: M;
+}
+
+export interface BoardAddAttempt<C, M> extends BoardAddAttemptIds<C, M> {
+  readonly fingerprint: string;
+  readonly deliveryUnknown: boolean;
+}
+
+export function addAttemptFingerprint(input: {
+  readonly prompt: string;
+  readonly projectId: string | null;
+}): string {
+  return JSON.stringify([input.prompt, input.projectId]);
+}
+
+export function selectAddAttemptIds<C, M>(
+  previous: BoardAddAttempt<C, M> | null,
+  fingerprint: string,
+  mint: () => BoardAddAttemptIds<C, M>,
+): BoardAddAttemptIds<C, M> {
+  if (previous !== null && previous.deliveryUnknown && previous.fingerprint === fingerprint) {
+    return { commandId: previous.commandId, messageId: previous.messageId };
+  }
+  return mint();
+}
+
+const CLIENT_SIDE_FAILURE_CODES: ReadonlySet<BoardDispatchFailureCode> = new Set([
+  BOARD_DISPATCH_FAILURE_CODE.noProject,
+  BOARD_DISPATCH_FAILURE_CODE.noProvider,
+  BOARD_DISPATCH_FAILURE_CODE.inFlight,
+  BOARD_DISPATCH_FAILURE_CODE.emptyPrompt,
+]);
+
+export function recordAddAttemptOutcome<C, M>(input: {
+  readonly previous: BoardAddAttempt<C, M> | null;
+  readonly used: BoardAddAttemptIds<C, M> & { readonly fingerprint: string };
+  readonly failure: BoardDispatchFailure;
+}): BoardAddAttempt<C, M> | null {
+  if (CLIENT_SIDE_FAILURE_CODES.has(input.failure.code)) return input.previous;
+  return { ...input.used, deliveryUnknown: input.failure.deliveryUnknown };
 }
 
 export function resolveBoardDispatchProject<P extends BoardProjectCandidate>(
