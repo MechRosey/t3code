@@ -1,3 +1,4 @@
+import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
@@ -188,51 +189,108 @@ describe("resolveBoardDispatchTarget", () => {
     project("p-elsewhere", "env-a", "C:\\repo\\elsewhere"),
   ];
 
+  const FEATURE_BRANCH = "feature/board-dispatch";
+
   const resolve = (
     cwd: string,
     chosenProjectId: string | null,
-    origin: { projectId: string; worktreePath: string | null } | null,
+    origin: { projectId: string; worktreePath: string | null; branch: string | null } | null,
   ) =>
     resolveBoardDispatchTarget(projects, { environmentId: "env-a", cwd, chosenProjectId, origin });
 
-  it("prefers the chosen project, then the origin project, then the exact cwd match", () => {
+  it("prefers the chosen project, then the origin project, then the exact cwd match, and only the origin carries a branch", () => {
     const chosen = resolve(WORKTREE, "p-elsewhere", {
       projectId: "p-board",
       worktreePath: WORKTREE,
+      branch: FEATURE_BRANCH,
     });
-    const origin = resolve("C:\repo\elsewhere", null, { projectId: "p-board", worktreePath: null });
+    const origin = resolve("C:\\repo\\elsewhere", null, {
+      projectId: "p-board",
+      worktreePath: null,
+      branch: null,
+    });
     const exactCwd = resolve(BOARD_FOLDER, null, null);
 
     assert.equal(chosen?.project.id, "p-elsewhere");
-    assert.equal(chosen?.worktreePath, null);
+    assert.strictEqual(chosen?.worktreePath, null);
+    assert.strictEqual(chosen?.branch, null);
 
     assert.equal(origin?.project.id, "p-board");
-    assert.equal(origin?.worktreePath, null);
+    assert.strictEqual(origin?.worktreePath, null);
+    assert.strictEqual(origin?.branch, null);
 
     assert.equal(exactCwd?.project.id, "p-board");
-    assert.equal(exactCwd?.worktreePath, null);
+    assert.strictEqual(exactCwd?.worktreePath, null);
+    assert.strictEqual(exactCwd?.branch, null);
   });
 
-  it("starts in the origin worktree only when the origin thread has a non-empty one", () => {
-    const inWorktree = resolve(WORKTREE, null, { projectId: "p-board", worktreePath: WORKTREE });
-    const atRoot = resolve(BOARD_FOLDER, null, { projectId: "p-board", worktreePath: null });
-    const emptyPath = resolve(BOARD_FOLDER, null, { projectId: "p-board", worktreePath: "" });
+  it("starts in the origin worktree on its branch only when the origin thread has a non-empty worktree", () => {
+    const inWorktree = resolve(WORKTREE, null, {
+      projectId: "p-board",
+      worktreePath: WORKTREE,
+      branch: FEATURE_BRANCH,
+    });
+    const detached = resolve(WORKTREE, null, {
+      projectId: "p-board",
+      worktreePath: WORKTREE,
+      branch: null,
+    });
+    const atRoot = resolve(BOARD_FOLDER, null, {
+      projectId: "p-board",
+      worktreePath: null,
+      branch: "main",
+    });
+    const emptyPath = resolve(BOARD_FOLDER, null, {
+      projectId: "p-board",
+      worktreePath: "",
+      branch: "main",
+    });
 
     assert.equal(inWorktree?.project.id, "p-board");
-    assert.equal(inWorktree?.worktreePath, WORKTREE);
+    assert.strictEqual(inWorktree?.worktreePath, WORKTREE);
+    assert.strictEqual(inWorktree?.branch, FEATURE_BRANCH);
 
-    assert.equal(atRoot?.worktreePath, null);
+    assert.strictEqual(detached?.worktreePath, WORKTREE);
+    assert.strictEqual(detached?.branch, null);
+
+    assert.strictEqual(atRoot?.worktreePath, null);
+    assert.strictEqual(atRoot?.branch, null);
 
     assert.equal(emptyPath?.project.id, "p-board");
-    assert.equal(emptyPath?.worktreePath, null);
+    assert.strictEqual(emptyPath?.worktreePath, null);
+    assert.strictEqual(emptyPath?.branch, null);
+  });
+
+  it("keeps the worktree but sends no branch when the origin branch is a temporary worktree name the server would rename", () => {
+    const temporaryBranch = buildTemporaryWorktreeBranchName(() => "deadbeef");
+
+    const temporary = resolve(WORKTREE, null, {
+      projectId: "p-board",
+      worktreePath: WORKTREE,
+      branch: temporaryBranch,
+    });
+    const named = resolve(WORKTREE, null, {
+      projectId: "p-board",
+      worktreePath: WORKTREE,
+      branch: FEATURE_BRANCH,
+    });
+
+    assert.strictEqual(temporary?.worktreePath, WORKTREE);
+    assert.strictEqual(temporary?.branch, null);
+    assert.strictEqual(named?.branch, FEATURE_BRANCH);
   });
 
   it("returns null for a missing or other-environment origin project instead of falling back to the cwd match", () => {
     const otherEnvironment = resolve(BOARD_FOLDER, null, {
       projectId: "p-other-env",
       worktreePath: null,
+      branch: null,
     });
-    const gone = resolve(BOARD_FOLDER, null, { projectId: "p-gone", worktreePath: WORKTREE });
+    const gone = resolve(BOARD_FOLDER, null, {
+      projectId: "p-gone",
+      worktreePath: WORKTREE,
+      branch: FEATURE_BRANCH,
+    });
     const noOriginNoRoot = resolve(WORKTREE, null, null);
 
     assert.equal(otherEnvironment, null);

@@ -33,6 +33,7 @@ function thread(
     projectId?: string;
     environmentId?: EnvironmentId;
     worktreePath?: string | null;
+    branch?: string | null;
     archivedAt?: string | null;
     updatedAt?: string;
   } = {},
@@ -42,6 +43,7 @@ function thread(
     projectId: (overrides.projectId ?? "proj-1") as ProjectId,
     environmentId: overrides.environmentId ?? ENV,
     worktreePath: overrides.worktreePath ?? null,
+    branch: overrides.branch ?? null,
     archivedAt: overrides.archivedAt ?? null,
     updatedAt: overrides.updatedAt ?? "2026-09-01T00:00:00.000Z",
   };
@@ -175,11 +177,11 @@ describe("resolveBoardPanelSwitch", () => {
 });
 
 describe("resolveBoardOrigin", () => {
-  it("maps the origin thread to its project and worktree, falling back to the exact-cwd thread", () => {
+  it("maps the origin thread to its project, worktree and branch, falling back to the exact-cwd thread", () => {
     const carried = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/repo/.worktrees/wt", threadId: "thread-9" as ThreadId },
       [project()],
-      [thread({ id: "thread-9", worktreePath: "C:/repo/.worktrees/wt" })],
+      [thread({ id: "thread-9", worktreePath: "C:/repo/.worktrees/wt", branch: "feature/x" })],
     );
     const atRoot = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/repo", threadId: "thread-1" as ThreadId },
@@ -189,12 +191,19 @@ describe("resolveBoardOrigin", () => {
     const byCwd = resolveBoardOrigin(
       { environmentId: ENV, cwd: "C:/wt" },
       [project()],
-      [thread({ id: "thread-1" }), thread({ id: "thread-2", worktreePath: "C:/wt" })],
+      [
+        thread({ id: "thread-1" }),
+        thread({ id: "thread-2", worktreePath: "C:/wt", branch: "feature/y" }),
+      ],
     );
 
-    assert.deepEqual(carried, { projectId: "proj-1", worktreePath: "C:/repo/.worktrees/wt" });
-    assert.deepEqual(atRoot, { projectId: "proj-1", worktreePath: null });
-    assert.deepEqual(byCwd, { projectId: "proj-1", worktreePath: "C:/wt" });
+    assert.deepEqual(carried, {
+      projectId: "proj-1",
+      worktreePath: "C:/repo/.worktrees/wt",
+      branch: "feature/x",
+    });
+    assert.deepEqual(atRoot, { projectId: "proj-1", worktreePath: null, branch: null });
+    assert.deepEqual(byCwd, { projectId: "proj-1", worktreePath: "C:/wt", branch: "feature/y" });
   });
 
   it("returns null when no live thread is identified by the search", () => {
@@ -247,11 +256,31 @@ describe("resolveProjectBoardEntry", () => {
     );
   });
 
-  it("resolves a worktree thread of the project even though its thread root is the worktree path", () => {
-    const target = resolveProjectBoardEntry(project(), [
-      thread({ id: "thread-3", worktreePath: "C:/repo/.worktrees/wt" }),
+  it("only ever resolves a thread at the project root, never a worktree thread", () => {
+    const rootBehindWorktree = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-root", updatedAt: "2026-09-01T00:00:00.000Z" }),
+      thread({
+        id: "thread-wt",
+        worktreePath: "C:/repo/.worktrees/wt",
+        updatedAt: "2026-09-09T00:00:00.000Z",
+      }),
     ]);
-    assert.deepEqual(target?.threadRef, { environmentId: ENV, threadId: "thread-3" });
+    const onlyWorktrees = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-wt", worktreePath: "C:/repo/.worktrees/wt" }),
+    ]);
+    const emptyWorktreePath = resolveProjectBoardEntry(project(), [
+      thread({ id: "thread-empty", worktreePath: "" }),
+    ]);
+
+    assert.deepEqual(rootBehindWorktree?.threadRef, {
+      environmentId: ENV,
+      threadId: "thread-root",
+    });
+    assert.equal(onlyWorktrees, null);
+    assert.deepEqual(emptyWorktreePath?.threadRef, {
+      environmentId: ENV,
+      threadId: "thread-empty",
+    });
   });
 
   it("degrades to null on an empty workspace root so the caller uses the full-page fallback", () => {
