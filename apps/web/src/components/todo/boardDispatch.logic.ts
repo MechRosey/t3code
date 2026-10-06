@@ -38,76 +38,112 @@ export interface BoardDispatchToast {
 
 export const BOARD_DISPATCH_STARTED: BoardDispatchResult = { status: "started" };
 
-export function createBoardDispatchFailure(
-  _code: BoardDispatchFailureCode,
-  _detail?: string | null,
-): BoardDispatchFailure {
-  throw new Error("not implemented");
+const BOARD_DISPATCH_FAILURE_MESSAGE: Record<BoardDispatchFailureCode, string> = {
+  [BOARD_DISPATCH_FAILURE_CODE.inFlight]:
+    "Wait for the current dispatch to settle before running it again.",
+  [BOARD_DISPATCH_FAILURE_CODE.noProject]: "No project matches the board's folder.",
+  [BOARD_DISPATCH_FAILURE_CODE.noProvider]: "No provider is available to run the session.",
+  [BOARD_DISPATCH_FAILURE_CODE.startFailed]: "The session did not start.",
+  [BOARD_DISPATCH_FAILURE_CODE.emptyPrompt]: "Describe the task before dispatching.",
+};
+
+function hasText(value: string | null | undefined): value is string {
+  return value !== null && value !== undefined && value.length > 0;
 }
 
-export function boardStartFailure(_cause: unknown): BoardDispatchFailure {
-  throw new Error("not implemented");
+export function createBoardDispatchFailure(
+  code: BoardDispatchFailureCode,
+  detail?: string | null,
+): BoardDispatchFailure {
+  const message =
+    code === BOARD_DISPATCH_FAILURE_CODE.startFailed && hasText(detail)
+      ? detail
+      : BOARD_DISPATCH_FAILURE_MESSAGE[code];
+  return { status: "failed", code, message };
+}
+
+export function boardStartFailure(cause: unknown): BoardDispatchFailure {
+  const detail = cause instanceof Error ? cause.message : null;
+  return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.startFailed, detail);
 }
 
 export function resolveBoardDispatchProject<P extends BoardProjectCandidate>(
-  _projects: ReadonlyArray<P>,
-  _target: {
+  projects: ReadonlyArray<P>,
+  target: {
     readonly environmentId: string;
     readonly cwd: string;
     readonly chosenProjectId: string | null;
   },
 ): P | null {
-  throw new Error("not implemented");
+  const inEnvironment = projects.filter(
+    (candidate) => candidate.environmentId === target.environmentId,
+  );
+  if (target.chosenProjectId !== null) {
+    return inEnvironment.find((candidate) => candidate.id === target.chosenProjectId) ?? null;
+  }
+  return inEnvironment.find((candidate) => candidate.workspaceRoot === target.cwd) ?? null;
 }
 
 export function listBoardProjectOptions(
-  _projects: ReadonlyArray<BoardProjectCandidate>,
-  _environmentId: string,
+  projects: ReadonlyArray<BoardProjectCandidate>,
+  environmentId: string,
 ): ReadonlyArray<BoardProjectOption> {
-  throw new Error("not implemented");
+  return projects
+    .filter((candidate) => candidate.environmentId === environmentId)
+    .map((candidate) => ({
+      id: candidate.id,
+      label: candidate.title,
+      path: candidate.workspaceRoot,
+    }));
 }
 
-export function boardDispatchFailureLogFields(_input: {
+export function boardDispatchFailureLogFields(input: {
   readonly failure: BoardDispatchFailure;
   readonly cwd: string;
   readonly dispatchKey: string;
 }): Record<string, string> {
-  throw new Error("not implemented");
+  return { code: input.failure.code, cwd: input.cwd, dispatchKey: input.dispatchKey };
 }
 
 export function boardDispatchFailureToast(
-  _subject: string,
-  _failure: BoardDispatchFailure,
+  subject: string,
+  failure: BoardDispatchFailure,
 ): BoardDispatchToast {
-  throw new Error("not implemented");
+  if (failure.code === BOARD_DISPATCH_FAILURE_CODE.inFlight) {
+    return { type: "info", title: `${subject} is already running`, description: failure.message };
+  }
+  return { type: "error", title: `Could not dispatch ${subject}`, description: failure.message };
 }
 
-export function shouldCloseAddTaskDialog(_result: BoardDispatchResult): boolean {
-  throw new Error("not implemented");
+export function shouldCloseAddTaskDialog(result: BoardDispatchResult): boolean {
+  return result.status === "started";
 }
 
-export function shouldOfferProjectPicker(_input: {
+export function shouldOfferProjectPicker(input: {
   readonly failure: BoardDispatchFailure | null;
   readonly chosenProjectId: string | null;
   readonly optionCount: number;
 }): boolean {
-  throw new Error("not implemented");
+  if (input.optionCount === 0) return false;
+  if (input.chosenProjectId !== null) return true;
+  return input.failure?.code === BOARD_DISPATCH_FAILURE_CODE.noProject;
 }
 
-export function isAddTaskSubmitDisabled(_input: {
+export function isAddTaskSubmitDisabled(input: {
   readonly hasPrompt: boolean;
   readonly pending: boolean;
   readonly submitting: boolean;
   readonly pickerShown: boolean;
   readonly chosenProjectId: string | null;
 }): boolean {
-  throw new Error("not implemented");
+  if (!input.hasPrompt || input.pending || input.submitting) return true;
+  return input.pickerShown && input.chosenProjectId === null;
 }
 
-export function shouldAutoCloseAddTask(_input: {
+export function shouldAutoCloseAddTask(input: {
   readonly wasBootstrap: boolean;
   readonly boardBootstrap: boolean;
   readonly hasSnapshot: boolean;
 }): boolean {
-  throw new Error("not implemented");
+  return input.wasBootstrap && !input.boardBootstrap && input.hasSnapshot;
 }
