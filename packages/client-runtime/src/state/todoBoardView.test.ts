@@ -25,6 +25,7 @@ import {
   matchesTagSpec,
   parseTagSpec,
   sortBoardIssues,
+  toggleEpicFilter,
   toggleTagSpecTerm,
 } from "./todoBoardView.ts";
 
@@ -180,7 +181,7 @@ describe("common-tag recency ranking", () => {
   });
 });
 
-describe("tag-spec comma-OR matching", () => {
+describe("tag-spec comma-AND matching", () => {
   it("splits on commas and drops blank terms", () => {
     assert.deepEqual(parseTagSpec("board, todo-skill,, "), ["board", "todo-skill"]);
     assert.deepEqual(parseTagSpec(""), []);
@@ -192,10 +193,11 @@ describe("tag-spec comma-OR matching", () => {
     assert.equal(matchesTagSpec([], []), true);
   });
 
-  it("matches a single term and OR-semantics across terms", () => {
+  it("matches a single term and requires every term to be present", () => {
     assert.equal(matchesTagSpec(["board"], ["board"]), true);
     assert.equal(matchesTagSpec(["board"], ["todo-skill"]), false);
-    assert.equal(matchesTagSpec(["todo-skill"], ["board", "todo-skill"]), true);
+    assert.equal(matchesTagSpec(["todo-skill"], ["board", "todo-skill"]), false);
+    assert.equal(matchesTagSpec(["todo-skill", "board", "ui"], ["board", "todo-skill"]), true);
     assert.equal(matchesTagSpec(["unrelated"], ["board", "todo-skill"]), false);
   });
 
@@ -226,6 +228,21 @@ describe("tag-spec term toggling", () => {
 
   it("re-joins the remaining terms with commas after a removal", () => {
     assert.equal(toggleTagSpecTerm("board", "board,todo-skill,ui"), "todo-skill,ui");
+  });
+});
+
+describe("epic filter toggling", () => {
+  it("selects an epic when none is live", () => {
+    assert.equal(toggleEpicFilter("found", ""), "found");
+  });
+
+  it("clears the epic when the same one is toggled, case-insensitively", () => {
+    assert.equal(toggleEpicFilter("found", "found"), "");
+    assert.equal(toggleEpicFilter("FOUND", "found"), "");
+  });
+
+  it("replaces the live epic instead of adding a second", () => {
+    assert.equal(toggleEpicFilter("t3-todo", "found"), "t3-todo");
   });
 });
 
@@ -300,6 +317,19 @@ describe("quick-filter active state", () => {
   it("is inactive without any spec term or query match", () => {
     assert.equal(isQuickFilterActive("ui", {}), false);
     assert.equal(isQuickFilterActive("ui", { tagSpec: "", query: "" }), false);
+  });
+
+  it("is active when the label is the live epic, case-insensitively", () => {
+    assert.equal(isQuickFilterActive("found", { epic: "found" }), true);
+    assert.equal(isQuickFilterActive("Found", { epic: "found" }), true);
+    assert.equal(isQuickFilterActive("t3-todo", { epic: "found" }), false);
+  });
+});
+
+describe("epic filter board activity", () => {
+  it("counts a live epic as an active board filter", () => {
+    assert.equal(isBoardFilterActive({ tagSpec: "", query: "", epic: "found" }), true);
+    assert.equal(isBoardFilterActive({ tagSpec: "", query: "", epic: "" }), false);
   });
 });
 
@@ -1039,23 +1069,40 @@ describe("tag-filter ancestor expansion", () => {
 });
 
 describe("spec and free-text filters through the pipeline", () => {
-  it("OR-matches any comma-OR term and still expands ancestors of the matches", () => {
+  it("requires every spec term and still expands ancestors of the matches", () => {
     const root = issue({ id: "root", title: "root" });
     const child = issue({
       id: "child",
       title: "child",
       parentId: "root",
       depth: 1,
-      tags: ["ui"],
+      tags: ["ui", "board"],
     });
-    const other = issue({ id: "other", title: "other", tags: ["board"] });
+    const uiOnly = issue({ id: "uionly", title: "uionly", tags: ["ui"] });
     const stranger = issue({ id: "stranger", title: "stranger", tags: ["unrelated"] });
-    const model = buildBoardViewModel(snapshot([root, child, other, stranger]), {
+    const model = buildBoardViewModel(snapshot([root, child, uiOnly, stranger]), {
       tag: null,
       sort: "id-asc",
       tagSpec: "ui,board",
     });
-    assert.deepEqual(visibleIds(model), ["child", "other", "root"]);
+    assert.deepEqual(visibleIds(model), ["child", "root"]);
+  });
+
+  it("narrows to the live epic and then to the selected tags", () => {
+    const inFoundUi = issue({ id: "a", title: "a", tags: ["found", "ui"] });
+    const inFoundOnly = issue({ id: "b", title: "b", tags: ["found"] });
+    const otherEpicUi = issue({ id: "c", title: "c", tags: ["t3-todo", "ui"] });
+    const snap = snapshot([inFoundUi, inFoundOnly, otherEpicUi]);
+    assert.deepEqual(
+      visibleIds(buildBoardViewModel(snap, { tag: null, sort: "id-asc", epic: "found" })),
+      ["a", "b"],
+    );
+    assert.deepEqual(
+      visibleIds(
+        buildBoardViewModel(snap, { tag: null, sort: "id-asc", epic: "found", tagSpec: "ui" }),
+      ),
+      ["a"],
+    );
   });
 
   it("intersects the dropdown tag with the spec terms instead of unifying them", () => {

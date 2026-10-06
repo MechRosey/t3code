@@ -257,6 +257,23 @@ describe("board filter spec and query persistence", () => {
     assert.equal(readBoardUiState(storage, ROOT_B).tagSpec, "");
   });
 
+  it("round-trips the live epic per resolved root and defaults it to empty", () => {
+    const storage = memoryStorage();
+    assert.equal(DEFAULT_BOARD_UI_STATE.epic, "");
+    writeBoardUiState(storage, ROOT_A, { ...DEFAULT_BOARD_UI_STATE, epic: "found" });
+    assert.equal(readBoardUiState(storage, ROOT_A).epic, "found");
+    assert.equal(readBoardUiState(storage, ROOT_B).epic, "");
+  });
+
+  it("reads persisted JSON written before the epic field existed as no epic", () => {
+    const legacy = memoryStorage({
+      [boardUiStorageKey(ROOT_A)]: JSON.stringify({ tag: null, sort: "id-asc", tagSpec: "ui" }),
+    });
+    const read = readBoardUiState(legacy, ROOT_A);
+    assert.equal(read.epic, "");
+    assert.equal(read.tagSpec, "ui");
+  });
+
   it("resets persisted JSON written before the filter fields existed to empty", () => {
     const legacy = memoryStorage({
       [boardUiStorageKey(ROOT_A)]: JSON.stringify({ tag: null, sort: "id-asc" }),
