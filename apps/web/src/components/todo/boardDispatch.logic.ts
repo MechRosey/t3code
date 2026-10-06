@@ -125,20 +125,37 @@ export function selectAddAttemptIds<C, M>(
   return mint();
 }
 
-const CLIENT_SIDE_FAILURE_CODES: ReadonlySet<BoardDispatchFailureCode> = new Set([
-  BOARD_DISPATCH_FAILURE_CODE.noProject,
-  BOARD_DISPATCH_FAILURE_CODE.noProvider,
-  BOARD_DISPATCH_FAILURE_CODE.inFlight,
-  BOARD_DISPATCH_FAILURE_CODE.emptyPrompt,
-]);
-
 export function recordAddAttemptOutcome<C, M>(input: {
   readonly previous: BoardAddAttempt<C, M> | null;
   readonly used: BoardAddAttemptIds<C, M> & { readonly fingerprint: string };
   readonly failure: BoardDispatchFailure;
 }): BoardAddAttempt<C, M> | null {
-  if (CLIENT_SIDE_FAILURE_CODES.has(input.failure.code)) return input.previous;
+  if (input.failure.code !== BOARD_DISPATCH_FAILURE_CODE.startFailed) return input.previous;
   return { ...input.used, deliveryUnknown: input.failure.deliveryUnknown };
+}
+
+export interface BoardAddAttemptOutcome<C, M> {
+  readonly result: BoardDispatchResult;
+  readonly attempt: BoardAddAttempt<C, M> | null;
+}
+
+export async function runAddAttempt<C, M>(input: {
+  readonly previous: BoardAddAttempt<C, M> | null;
+  readonly prompt: string;
+  readonly projectId: string | null;
+  readonly mint: () => BoardAddAttemptIds<C, M>;
+  readonly send: (ids: BoardAddAttemptIds<C, M>) => Promise<BoardDispatchResult>;
+}): Promise<BoardAddAttemptOutcome<C, M>> {
+  const fingerprint = addAttemptFingerprint({ prompt: input.prompt, projectId: input.projectId });
+  const ids = selectAddAttemptIds(input.previous, fingerprint, input.mint);
+  const result = await input.send(ids);
+  if (result.status !== "failed") return { result, attempt: input.previous };
+  const attempt = recordAddAttemptOutcome({
+    previous: input.previous,
+    used: { ...ids, fingerprint },
+    failure: result,
+  });
+  return { result, attempt };
 }
 
 export function resolveBoardDispatchProject<P extends BoardProjectCandidate>(
