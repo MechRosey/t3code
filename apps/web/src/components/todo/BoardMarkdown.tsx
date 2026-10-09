@@ -1,7 +1,7 @@
 import { memo, useMemo, type ComponentProps } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import { BOARD_MARKDOWN_REHYPE_PLUGINS } from "@t3tools/shared/markdownPipeline";
 import type { Content, Root } from "mdast";
 
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
@@ -22,8 +22,6 @@ function remarkHtmlAsText() {
 }
 
 const BOARD_MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkHtmlAsText];
-
-const BOARD_MARKDOWN_REHYPE_PLUGINS = [rehypeSanitize];
 
 const BOARD_MARKDOWN_COMPONENTS = {
   h1: (props: ComponentProps<"h1">) => <h1 className="text-base font-semibold" {...props} />,

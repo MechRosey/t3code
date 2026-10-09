@@ -11,7 +11,7 @@ import * as Path from "effect/Path";
 
 import { TodoBoardError } from "@t3tools/contracts";
 import { HostProcessHome } from "@t3tools/shared/hostProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ProcessRunner from "../processRunner.ts";
 import { fixturesRoot } from "./fixtures.ts";
