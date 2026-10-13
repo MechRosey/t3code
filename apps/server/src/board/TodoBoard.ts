@@ -22,7 +22,7 @@ import {
   TodoBoardError,
 } from "@t3tools/contracts";
 import type { TodoArchiveGroup, TodoArchiveReadResult } from "@t3tools/contracts";
-import { HostProcessHome, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import {
   regenerationArtifacts,
@@ -584,14 +584,14 @@ export const make = Effect.gen(function* () {
     });
 
   const resolveSkillScript: Effect.Effect<string, TodoBoardError> = Effect.gen(function* () {
-    const platform = yield* HostProcessPlatform;
+    const platform = yield* HostProcess.Platform;
     if (platform !== "win32") {
       return yield* toError(
         "operation_failed",
         "Todo board regeneration requires a Windows host: the todo skill script is PowerShell-only.",
       );
     }
-    const scriptPath = todoSkillScriptPath(yield* HostProcessHome);
+    const scriptPath = todoSkillScriptPath(yield* HostProcess.HomeDirectory);
     const info = yield* Effect.option(statInfo(scriptPath));
     if (Option.isNone(info) || info.value.type !== "File") {
       return yield* toError(

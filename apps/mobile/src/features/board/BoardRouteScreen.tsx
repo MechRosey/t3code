@@ -14,18 +14,13 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Markdown } from "react-native-nitro-markdown";
-
 import { AppText as Text } from "../../components/AppText";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { cn } from "../../lib/cn";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
-import {
-  hasNativeSelectableMarkdownText,
-  SelectableMarkdownText,
-} from "../../native/SelectableMarkdownText";
+import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { todoBoard } from "../../state/todoBoard";
@@ -344,22 +339,11 @@ function BoardDetail(props: {
           </Text>
         ))}
         {card.issue.body.length > 0 ? (
-          hasNativeSelectableMarkdownText() ? (
-            <SelectableMarkdownText
-              markdown={card.issue.body}
-              textStyle={styles.nativeTextStyle}
-              onLinkPress={onLinkPress}
-            />
-          ) : (
-            <Markdown
-              options={{ gfm: true }}
-              renderers={styles.renderers}
-              styles={styles.styles}
-              theme={styles.theme}
-            >
-              {card.issue.body}
-            </Markdown>
-          )
+          <SelectableMarkdownText
+            markdown={card.issue.body}
+            textStyle={styles.nativeTextStyle}
+            onLinkPress={onLinkPress}
+          />
         ) : null}
       </ScrollView>
     </View>

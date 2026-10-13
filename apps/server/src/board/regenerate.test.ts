@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
 import { TodoBoardError } from "@t3tools/contracts";
-import { HostProcessHome } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -277,7 +277,7 @@ describe("TodoBoard.regenerate with the real skill script", () => {
         Effect.provide(
           TodoBoard.layer
             .pipe(Layer.provideMerge(NodeServices.layer))
-            .pipe(Layer.merge(Layer.succeed(HostProcessHome, "C:\\no-skill-home"))),
+            .pipe(Layer.merge(Layer.succeed(HostProcess.HomeDirectory, "C:\\no-skill-home"))),
         ),
       ),
     { timeout: 120_000 },
