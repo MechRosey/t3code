@@ -102,9 +102,10 @@ export function sparklinePoints(
   chunks: readonly number[],
   visibleCount: number = chunks.length,
 ): SparklinePoint[] {
-  const tallest = Math.max(0, ...chunks);
+  const visible = chunks.slice(0, visibleCount);
+  const tallest = Math.max(0, ...visible);
   if (tallest <= 0) return [];
-  return chunks.slice(0, visibleCount).map((value, index) => ({
+  return visible.map((value, index) => ({
     x: index + 0.5,
     y: SPARKLINE_HEIGHT_PX - (value / tallest) * SPARKLINE_HEIGHT_PX,
   }));
@@ -159,11 +160,16 @@ export function poolSparkline(
 ): Sparkline | null {
   const first = pool.members[0];
   if (first === undefined || !isSparklineWindow(first.window)) return null;
-  const grid = gridFor(pool.members, now);
+  const memberSamples = pool.members.map((member) =>
+    samplesFor(member.account.key, member.window.id),
+  );
+  const effectiveNow = Math.max(
+    now,
+    ...memberSamples.map((samples) => samples.at(-1)?.checkedAtMs ?? 0),
+  );
+  const grid = gridFor(pool.members, effectiveNow);
   const chunks = meanChunks(
-    pool.members.map((member) =>
-      chunkUsage(samplesFor(member.account.key, member.window.id), grid.startMs, grid.chunkCount),
-    ),
+    memberSamples.map((samples) => chunkUsage(samples, grid.startMs, grid.chunkCount)),
   );
   const points = sparklinePoints(chunks, grid.visibleCount);
   return points.length === 0 ? null : { points, chunkCount: grid.chunkCount };
