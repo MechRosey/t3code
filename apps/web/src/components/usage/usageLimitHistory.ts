@@ -6,6 +6,7 @@ const CHUNK_MINUTES = 5;
 
 export const CHUNK_MS = CHUNK_MINUTES * MINUTE_MS;
 export const SPARKLINE_HEIGHT_PX = 50;
+export const USED_PERCENT_RESET_TOLERANCE = 1;
 
 export interface UsageSample {
   readonly checkedAtMs: number;
@@ -47,11 +48,12 @@ export function appendSample(
   retainMs: number,
 ): readonly UsageSample[] {
   const last = samples.at(-1);
-  if (last !== undefined) {
-    if (sample.checkedAtMs <= last.checkedAtMs) return samples;
-    if (sample.usedPercent < last.usedPercent) return [sample];
-  }
-  return retainedSince([...samples, sample], sample.checkedAtMs - retainMs);
+  if (last === undefined) return retainedSince([sample], sample.checkedAtMs - retainMs);
+  if (sample.checkedAtMs <= last.checkedAtMs) return samples;
+  const fall = last.usedPercent - sample.usedPercent;
+  if (fall > USED_PERCENT_RESET_TOLERANCE) return [sample];
+  const held = fall > 0 ? { ...sample, usedPercent: last.usedPercent } : sample;
+  return retainedSince([...samples, held], sample.checkedAtMs - retainMs);
 }
 
 function spreadRise(
