@@ -34,6 +34,7 @@ import {
   resetCreditsSummary,
   useResetCredit,
 } from "./UsageLimits";
+import { UsageSparkline } from "./UsageSparkline";
 
 /** `someone@example.com` → `SE`: enough to tell accounts apart, too little to identify one. */
 function accountInitials(email: string): string {
@@ -483,6 +484,7 @@ function PoolBar({
           ) : null,
         )}
       </div>
+      <UsageSparkline pool={pool} color={color} now={now} />
     </div>
   );
 }
