@@ -1,3 +1,10 @@
+import {
+  EnvironmentId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  type ServerProvider,
+} from "@t3tools/contracts";
+import { collectLimitAccounts, collectLimitPools } from "@t3tools/shared/usageLimits";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -8,12 +15,15 @@ import {
   chunkUsage,
   meanChunks,
   poolSparkline,
+  recordPresentations,
+  recordedSamples,
   sparklinePoints,
   type UsageSample,
 } from "./usageLimitHistory";
 
 const MINUTE_MS = 60_000;
 const SESSION_MINUTES = 300;
+const PRESENTATION_NOW_MS = Date.parse("2026-09-03T12:00:00.000Z");
 const BASE_MS = 400 * CHUNK_MS;
 
 const sample = (minutes: number, usedPercent: number): UsageSample => ({
@@ -174,6 +184,68 @@ describe("sparklinePoints", () => {
 
   it("plots nothing when every visible chunk is zero even if a hidden one is not", () => {
     expect(sparklinePoints([0, 0, 9], 2)).toEqual([]);
+  });
+});
+
+describe("recordPresentations", () => {
+  const checkedAtOf = (minutesBeforeNow: number) =>
+    new Date(PRESENTATION_NOW_MS - minutesBeforeNow * MINUTE_MS).toISOString();
+  const claude = ProviderDriverKind.make("claudeAgent");
+  const presentationsAt = (checkedAt: string, usedPercent: number) =>
+    new Map(
+      ["env-pool-a", "env-pool-b"].map((environmentId) => [
+        EnvironmentId.make(environmentId),
+        {
+          entry: { target: { label: environmentId } },
+          serverConfig: {
+            providers: [
+              {
+                instanceId: ProviderInstanceId.make("claude-pool"),
+                driver: claude,
+                enabled: true,
+                installed: true,
+                version: null,
+                status: "ready",
+                auth: { status: "authenticated", email: "pool@example.com" },
+                checkedAt,
+                models: [],
+                slashCommands: [],
+                skills: [],
+                usageLimits: {
+                  checkedAt,
+                  windows: [
+                    {
+                      id: "five_hour",
+                      kind: "session",
+                      label: "Session",
+                      usedPercent,
+                      windowDurationMins: SESSION_MINUTES,
+                    },
+                  ],
+                },
+              } satisfies ServerProvider,
+            ],
+          },
+        },
+      ]),
+    );
+  const sparklineFor = (presentations: ReturnType<typeof presentationsAt>) => {
+    const pool = collectLimitPools(collectLimitAccounts(presentations), PRESENTATION_NOW_MS)[0];
+    return poolSparkline(pool!.windows[0]!, recordedSamples, PRESENTATION_NOW_MS);
+  };
+
+  it("resolves one account's samples through the unfiltered set and through either environment alone", () => {
+    const everything = presentationsAt(checkedAtOf(10), 10);
+    const later = presentationsAt(checkedAtOf(5), 20);
+
+    recordPresentations(everything);
+    recordPresentations(later);
+
+    const expected = [SPARKLINE_HEIGHT_PX];
+    for (const presentations of [later, new Map([[...later][0]!]), new Map([[...later][1]!])]) {
+      const heights = sparklineFor(presentations)?.points.map(heightOf) ?? [];
+      expect(heights.filter((height) => height > 0)).toEqual(expected);
+    }
   });
 });
 
