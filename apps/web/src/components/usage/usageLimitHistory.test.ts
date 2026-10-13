@@ -165,6 +165,16 @@ describe("sparklinePoints", () => {
 
     expect(points.map(heightOf)).toEqual([25, SPARKLINE_HEIGHT_PX]);
   });
+
+  it("normalises by the tallest visible chunk and ignores hidden ones", () => {
+    const points = sparklinePoints([1, 2, 40, 0], 2);
+
+    expect(points.map(heightOf)).toEqual([SPARKLINE_HEIGHT_PX / 2, SPARKLINE_HEIGHT_PX]);
+  });
+
+  it("plots nothing when every visible chunk is zero even if a hidden one is not", () => {
+    expect(sparklinePoints([0, 0, 9], 2)).toEqual([]);
+  });
 });
 
 describe("poolSparkline", () => {
@@ -207,6 +217,33 @@ describe("poolSparkline", () => {
     expect(heights[57]).toBe(SPARKLINE_HEIGHT_PX);
     expect(heights[58]).toBeCloseTo(SPARKLINE_HEIGHT_PX / 6, 9);
     expect(heights[56]).toBe(0);
+  });
+
+  it("keeps samples recorded after the page's now: the rolling grid extends to the newest sample", () => {
+    const pool = { members: [member("a", "five_hour"), member("b", "five_hour")] };
+    const history = historyOf({
+      "a|five_hour": [sample(0, 0), sample(5, 10), sample(10, 15)],
+      "b|five_hour": [sample(0, 0), sample(5, 10), sample(10, 15)],
+    });
+
+    const sparkline = poolSparkline(pool, history, BASE_MS);
+
+    const heights = sparkline?.points.map(heightOf) ?? [];
+    expect(heights.slice(-3)).toEqual([SPARKLINE_HEIGHT_PX, SPARKLINE_HEIGHT_PX / 2, 0]);
+  });
+
+  it("shows aligned chunks for samples newer than the page's now and normalises over them", () => {
+    const resetsAt = new Date(BASE_MS + SESSION_MINUTES * MINUTE_MS).toISOString();
+    const pool = { members: [member("a", "five_hour", { resetsAt })] };
+    const history = historyOf({ "a|five_hour": [sample(0, 0), sample(5, 10), sample(10, 15)] });
+
+    const sparkline = poolSparkline(pool, history, BASE_MS + MINUTE_MS);
+
+    expect(sparkline?.points.map(heightOf)).toEqual([
+      SPARKLINE_HEIGHT_PX,
+      SPARKLINE_HEIGHT_PX / 2,
+      0,
+    ]);
   });
 
   it("finds each member's history under its own window id", () => {
