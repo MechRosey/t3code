@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   CHUNK_MS,
   SPARKLINE_HEIGHT_PX,
+  USED_PERCENT_RESET_TOLERANCE,
   appendSample,
   chunkUsage,
   meanChunks,
@@ -36,6 +37,40 @@ describe("appendSample", () => {
     expect(duplicate).toBe(first);
     expect(rising).toEqual([sample(0, 10), sample(5, 14)]);
     expect(afterReset).toEqual([sample(10, 2)]);
+  });
+
+  it("treats a fall within tolerance as jitter: keeps the series at the high-water mark and counts no phantom rise", () => {
+    const retainMs = SESSION_MINUTES * MINUTE_MS;
+    const jittered = 57 - USED_PERCENT_RESET_TOLERANCE / 2;
+    let samples: readonly UsageSample[] = [];
+
+    samples = appendSample(samples, sample(0, 40), retainMs);
+    samples = appendSample(samples, sample(5, 57), retainMs);
+    samples = appendSample(samples, sample(10, jittered), retainMs);
+    samples = appendSample(samples, sample(15, 57), retainMs);
+    samples = appendSample(samples, sample(20, 60), retainMs);
+
+    expect(samples).toEqual([
+      sample(0, 40),
+      sample(5, 57),
+      sample(10, 57),
+      sample(15, 57),
+      sample(20, 60),
+    ]);
+    expect(sum(chunkUsage(samples, BASE_MS, 5))).toBeCloseTo(20, 9);
+  });
+
+  it("restarts the series when usedPercent falls by more than the tolerance", () => {
+    const retainMs = SESSION_MINUTES * MINUTE_MS;
+    const start = appendSample([], sample(0, 40), retainMs);
+
+    const afterReset = appendSample(
+      start,
+      sample(5, 40 - USED_PERCENT_RESET_TOLERANCE - 1),
+      retainMs,
+    );
+
+    expect(afterReset).toEqual([sample(5, 40 - USED_PERCENT_RESET_TOLERANCE - 1)]);
   });
 
   it("drops samples older than the retention except the one that anchors the oldest rise", () => {
