@@ -2,6 +2,7 @@ import type { LimitPoolWindow } from "@t3tools/shared/usageLimits";
 import { useSyncExternalStore } from "react";
 
 import {
+  CHUNK_MINUTES,
   SPARKLINE_HEIGHT_PX,
   limitHistoryVersion,
   poolSparkline,
@@ -26,7 +27,7 @@ export function UsageSparkline({
   return (
     <svg
       role="img"
-      aria-label="Quota used per 5 minutes"
+      aria-label={`Quota used per ${CHUNK_MINUTES} minutes`}
       viewBox={`0 0 ${sparkline.chunkCount} ${SPARKLINE_HEIGHT_PX}`}
       preserveAspectRatio="none"
       className="mt-2 w-full overflow-visible"

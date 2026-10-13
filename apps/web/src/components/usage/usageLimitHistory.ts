@@ -6,8 +6,9 @@ import {
 } from "@t3tools/shared/usageLimits";
 
 const MINUTE_MS = 60_000;
-const CHUNK_MINUTES = 5;
+const CHUNK_CENTRE_OFFSET = 0.5;
 
+export const CHUNK_MINUTES = 5;
 export const CHUNK_MS = CHUNK_MINUTES * MINUTE_MS;
 export const SPARKLINE_HEIGHT_PX = 50;
 export const USED_PERCENT_RESET_TOLERANCE = 1;
@@ -110,7 +111,7 @@ export function sparklinePoints(
   const tallest = Math.max(0, ...visible);
   if (tallest <= 0) return [];
   return visible.map((value, index) => ({
-    x: index + 0.5,
+    x: index + CHUNK_CENTRE_OFFSET,
     y: SPARKLINE_HEIGHT_PX - (value / tallest) * SPARKLINE_HEIGHT_PX,
   }));
 }

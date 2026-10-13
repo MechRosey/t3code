@@ -8,16 +8,20 @@ import { collectLimitAccounts, collectLimitPools } from "@t3tools/shared/usageLi
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  CHUNK_MINUTES,
   CHUNK_MS,
   SPARKLINE_HEIGHT_PX,
   USED_PERCENT_RESET_TOLERANCE,
   appendSample,
   chunkUsage,
   meanChunks,
+  limitHistoryVersion,
   poolSparkline,
+  recordLimitAccounts,
   recordPresentations,
   recordedSamples,
   sparklinePoints,
+  subscribeLimitHistory,
   type UsageSample,
 } from "./usageLimitHistory";
 
@@ -25,6 +29,14 @@ const MINUTE_MS = 60_000;
 const SESSION_MINUTES = 300;
 const PRESENTATION_NOW_MS = Date.parse("2026-09-03T12:00:00.000Z");
 const BASE_MS = 400 * CHUNK_MS;
+const CHUNKS_PER_SESSION = SESSION_MINUTES / CHUNK_MINUTES;
+const PAGE_NOW_MINUTES = 12;
+const PAGE_NOW_MS = BASE_MS + PAGE_NOW_MINUTES * MINUTE_MS;
+
+const rollingIndexOf = (minutes: number) =>
+  CHUNKS_PER_SESSION -
+  1 -
+  (Math.floor(PAGE_NOW_MINUTES / CHUNK_MINUTES) - Math.floor(minutes / CHUNK_MINUTES));
 
 const sample = (minutes: number, usedPercent: number): UsageSample => ({
   checkedAtMs: BASE_MS + minutes * MINUTE_MS,
@@ -110,7 +122,7 @@ describe("chunkUsage", () => {
     ];
     const rises = 3 + 6 + 11 + 1.5 + 18.5;
 
-    const chunks = chunkUsage(samples, BASE_MS, SESSION_MINUTES / 5);
+    const chunks = chunkUsage(samples, BASE_MS, CHUNKS_PER_SESSION);
 
     expect(sum(chunks)).toBeCloseTo(rises, 9);
   });
@@ -184,6 +196,61 @@ describe("sparklinePoints", () => {
 
   it("plots nothing when every visible chunk is zero even if a hidden one is not", () => {
     expect(sparklinePoints([0, 0, 9], 2)).toEqual([]);
+  });
+});
+
+describe("recordLimitAccounts", () => {
+  const usageWindow = (
+    id: string,
+    usedPercent: number,
+    kind: "session" | "weekly" = "session",
+  ) => ({
+    id,
+    kind,
+    label: id,
+    usedPercent,
+    windowDurationMins: SESSION_MINUTES,
+  });
+  const account = (key: string, checkedAt: string, windows: ReturnType<typeof usageWindow>[]) => ({
+    key,
+    limits: { checkedAt, windows },
+  });
+  const checkedAtOf = (minutes: number) => new Date(BASE_MS + minutes * MINUTE_MS).toISOString();
+
+  it("records session windows per account and window id, and skips weekly windows and unparsable times", () => {
+    recordLimitAccounts([
+      account("store-a", checkedAtOf(0), [
+        usageWindow("five_hour", 10),
+        usageWindow("seven_day", 5, "weekly"),
+      ]),
+      account("store-b", checkedAtOf(0), [usageWindow("five_hour", 20), usageWindow("opus", 30)]),
+      account("store-bad-time", "not a date", [usageWindow("five_hour", 40)]),
+    ]);
+    recordLimitAccounts([account("store-a", checkedAtOf(5), [usageWindow("five_hour", 15)])]);
+
+    expect(recordedSamples("store-a", "five_hour")).toEqual([sample(0, 10), sample(5, 15)]);
+    expect(recordedSamples("store-a", "seven_day")).toEqual([]);
+    expect(recordedSamples("store-b", "five_hour")).toEqual([sample(0, 20)]);
+    expect(recordedSamples("store-b", "opus")).toEqual([sample(0, 30)]);
+    expect(recordedSamples("store-bad-time", "five_hour")).toEqual([]);
+  });
+
+  it("bumps the version and notifies listeners only when a sample was added", () => {
+    const notifications: number[] = [];
+    const unsubscribe = subscribeLimitHistory(() => notifications.push(limitHistoryVersion()));
+    const startVersion = limitHistoryVersion();
+
+    recordLimitAccounts([account("notify-a", checkedAtOf(0), [usageWindow("five_hour", 10)])]);
+    recordLimitAccounts([account("notify-a", checkedAtOf(0), [usageWindow("five_hour", 10)])]);
+    recordLimitAccounts([account("notify-a", checkedAtOf(-5), [usageWindow("five_hour", 12)])]);
+    recordLimitAccounts([
+      account("notify-weekly", checkedAtOf(0), [usageWindow("seven_day", 1, "weekly")]),
+    ]);
+    unsubscribe();
+    recordLimitAccounts([account("notify-a", checkedAtOf(5), [usageWindow("five_hour", 20)])]);
+
+    expect(notifications).toEqual([startVersion + 1]);
+    expect(limitHistoryVersion()).toBe(startVersion + 2);
   });
 });
 
@@ -268,9 +335,9 @@ describe("poolSparkline", () => {
     const pool = { members: [member("a", "five_hour", { resetsAt })] };
     const history = historyOf({ "a|five_hour": [sample(0, 0), sample(5, 10), sample(10, 15)] });
 
-    const sparkline = poolSparkline(pool, history, BASE_MS + 12 * MINUTE_MS);
+    const sparkline = poolSparkline(pool, history, PAGE_NOW_MS);
 
-    expect(sparkline?.chunkCount).toBe(SESSION_MINUTES / 5);
+    expect(sparkline?.chunkCount).toBe(CHUNKS_PER_SESSION);
     expect(sparkline?.points.map(heightOf)).toEqual([SPARKLINE_HEIGHT_PX, 25, 0]);
   });
 
@@ -281,14 +348,14 @@ describe("poolSparkline", () => {
       "b|five_hour": [sample(0, 0), sample(5, 20), sample(10, 20)],
     });
 
-    const sparkline = poolSparkline(pool, history, BASE_MS + 12 * MINUTE_MS);
+    const sparkline = poolSparkline(pool, history, PAGE_NOW_MS);
 
-    expect(sparkline?.chunkCount).toBe(SESSION_MINUTES / 5);
-    expect(sparkline?.points).toHaveLength(SESSION_MINUTES / 5);
+    expect(sparkline?.chunkCount).toBe(CHUNKS_PER_SESSION);
+    expect(sparkline?.points).toHaveLength(CHUNKS_PER_SESSION);
     const heights = sparkline?.points.map(heightOf) ?? [];
-    expect(heights[57]).toBe(SPARKLINE_HEIGHT_PX);
-    expect(heights[58]).toBeCloseTo(SPARKLINE_HEIGHT_PX / 6, 9);
-    expect(heights[56]).toBe(0);
+    expect(heights[rollingIndexOf(0)]).toBe(SPARKLINE_HEIGHT_PX);
+    expect(heights[rollingIndexOf(CHUNK_MINUTES)]).toBeCloseTo(SPARKLINE_HEIGHT_PX / 6, 9);
+    expect(heights[rollingIndexOf(0) - 1]).toBe(0);
   });
 
   it("keeps samples recorded after the page's now: the rolling grid extends to the newest sample", () => {
@@ -325,7 +392,7 @@ describe("poolSparkline", () => {
       "b|secondary": [sample(0, 0), sample(5, 10)],
     });
 
-    const sparkline = poolSparkline(pool, history, BASE_MS + 12 * MINUTE_MS);
+    const sparkline = poolSparkline(pool, history, PAGE_NOW_MS);
 
     expect(sparkline?.points.map(heightOf).filter((height) => height > 0)).toEqual([
       SPARKLINE_HEIGHT_PX,
@@ -335,7 +402,7 @@ describe("poolSparkline", () => {
   it("returns nothing without activity, without a window length, or for a weekly window", () => {
     const quiet = historyOf({ "a|five_hour": [sample(0, 5), sample(5, 5)] });
     const busy = historyOf({ "a|five_hour": [sample(0, 5), sample(5, 9)] });
-    const now = BASE_MS + 12 * MINUTE_MS;
+    const now = PAGE_NOW_MS;
 
     expect(poolSparkline({ members: [member("a", "five_hour")] }, quiet, now)).toBeNull();
     expect(
