@@ -1,5 +1,9 @@
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
-import type { LimitAccount } from "@t3tools/shared/usageLimits";
+import {
+  collectLimitAccounts,
+  type LimitAccount,
+  type LimitPresentations,
+} from "@t3tools/shared/usageLimits";
 
 const MINUTE_MS = 60_000;
 const CHUNK_MINUTES = 5;
@@ -210,6 +214,14 @@ export function recordLimitAccounts(accounts: readonly Pick<LimitAccount, "key" 
   if (!changed) return;
   version += 1;
   for (const listener of listeners) listener();
+}
+
+export function recordPresentations(presentations: LimitPresentations) {
+  recordLimitAccounts(
+    [...presentations].flatMap(([environmentId, presentation]) =>
+      collectLimitAccounts(new Map([[environmentId, presentation]])),
+    ),
+  );
 }
 
 export function subscribeLimitHistory(listener: () => void): () => void {
