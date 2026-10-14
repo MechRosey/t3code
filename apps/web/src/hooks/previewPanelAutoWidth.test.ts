@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   COMFORTABLE_TEXT_MAX_REM,
+  DEFAULT_REM_PIXELS,
   WIDE_TEXT_MAX_REM,
   resolveAutoPreviewPanelWidth,
 } from "./previewPanelAutoWidth";
@@ -21,6 +22,7 @@ function panelWidthForWindow(windowWidth: number, chatWidth: ChatWidth, gitCardS
     rowWidth,
     chatWidth,
     gitCardShown,
+    remPixels: DEFAULT_REM_PIXELS,
     minWidth: MIN_WIDTH,
     defaultWidth: DEFAULT_WIDTH,
     maxWidth: getPreviewPanelMaxWidth(windowWidth, rowWidth),
@@ -86,6 +88,7 @@ describe("resolveAutoPreviewPanelWidth", () => {
           rowWidth,
           chatWidth: "comfortable",
           gitCardShown,
+          remPixels: DEFAULT_REM_PIXELS,
           minWidth: MIN_WIDTH,
           defaultWidth: DEFAULT_WIDTH,
           maxWidth: Number.MAX_SAFE_INTEGER,
@@ -103,6 +106,7 @@ describe("resolveAutoPreviewPanelWidth", () => {
         rowWidth,
         chatWidth: "comfortable",
         gitCardShown: true,
+        remPixels: DEFAULT_REM_PIXELS,
         minWidth: MIN_WIDTH,
         defaultWidth: DEFAULT_WIDTH,
         maxWidth: Number.MAX_SAFE_INTEGER,
@@ -113,11 +117,33 @@ describe("resolveAutoPreviewPanelWidth", () => {
     expect(Math.abs(widthAt(boundary - 1) - widthAt(boundary))).toBeLessThanOrEqual(1);
   });
 
+  it("scales the conversation cap with the root font size", () => {
+    const PIXELS_PER_REM = 20;
+    const widthFor = (remPixels: number) =>
+      resolveAutoPreviewPanelWidth({
+        rowWidth: 2_304,
+        chatWidth: "comfortable",
+        gitCardShown: false,
+        remPixels,
+        minWidth: MIN_WIDTH,
+        defaultWidth: DEFAULT_WIDTH,
+        maxWidth: Number.MAX_SAFE_INTEGER,
+      });
+    const laneBeyondText =
+      COMFORTABLE_CAP_WITHOUT_CARD - COMFORTABLE_TEXT_MAX_REM * DEFAULT_REM_PIXELS;
+
+    expect(widthFor(DEFAULT_REM_PIXELS)).toBe(2_304 - COMFORTABLE_CAP_WITHOUT_CARD);
+    expect(widthFor(PIXELS_PER_REM)).toBe(
+      2_304 - (COMFORTABLE_TEXT_MAX_REM * PIXELS_PER_REM + laneBeyondText),
+    );
+  });
+
   it("clamps to the maximum panel width", () => {
     const panel = resolveAutoPreviewPanelWidth({
       rowWidth: 2_304,
       chatWidth: "comfortable",
       gitCardShown: false,
+      remPixels: DEFAULT_REM_PIXELS,
       minWidth: MIN_WIDTH,
       defaultWidth: DEFAULT_WIDTH,
       maxWidth: 1_000,
@@ -133,6 +159,7 @@ describe("resolveAutoPreviewPanelWidth", () => {
         rowWidth,
         chatWidth: "comfortable",
         gitCardShown: true,
+        remPixels: DEFAULT_REM_PIXELS,
         minWidth: MIN_WIDTH,
         defaultWidth: DEFAULT_WIDTH,
         maxWidth: 1_000,

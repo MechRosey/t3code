@@ -9,7 +9,7 @@ import {
   THREAD_DETAILS_CARD_WIDTH,
 } from "../components/chat/threadDetailsCardLayout";
 
-const CSS_REM_PIXELS = 16;
+export const DEFAULT_REM_PIXELS = 16;
 export const COMFORTABLE_TEXT_MAX_REM = 46;
 export const WIDE_TEXT_MAX_REM = 72;
 const CHAT_TEXT_MAX_REM_BY_WIDTH: Record<ChatWidth, number | null> = {
@@ -24,6 +24,7 @@ export interface AutoPreviewPanelWidthInput {
   readonly rowWidth: number;
   readonly chatWidth: ChatWidth;
   readonly gitCardShown: boolean;
+  readonly remPixels?: number | undefined;
   readonly minWidth: number;
   readonly defaultWidth: number;
   readonly maxWidth: number;
@@ -37,7 +38,7 @@ export function resolveAutoPreviewPanelWidth(input: AutoPreviewPanelWidthInput):
   const textMaxRem = CHAT_TEXT_MAX_REM_BY_WIDTH[chatWidth];
   const capBasisRem = textMaxRem ?? COMFORTABLE_TEXT_MAX_REM;
   const conversationCap =
-    capBasisRem * CSS_REM_PIXELS +
+    capBasisRem * DEFAULT_REM_PIXELS +
     CHAT_CANVAS_LANE_PADDING +
     (gitCardShown ? DETAILS_CARD_RESERVED_WIDTH : CHAT_CANVAS_LANE_PADDING);
   const widthBeyondCap = rowWidth - conversationCap;
