@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - Drives the real shell installer through a PTY and a gated HTTP fixture.
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
@@ -9,13 +9,13 @@ import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 // util-linux's script gives the real installer a terminal without a browser or extra packages.
-describe.skipIf(HostProcessPlatform.defaultValue() !== "linux")("installer terminal", () => {
+describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer terminal", () => {
   it.each([false, true])(
     "preserves download and install behavior (HTTP failure: %s)",
     async (fail) => {
       const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-install-progress-"));
       const version = "1.2.3";
-      const stem = `t3-${version}-linux-${HostProcessArchitecture.defaultValue()}`;
+      const stem = `t3-${version}-linux-${HostProcess.Architecture.defaultValue()}`;
       const archiveName = `${stem}.tar.gz`;
       let resumeDownload: (() => void) | undefined;
       let sawPartialProgress = false;
@@ -61,7 +61,7 @@ describe.skipIf(HostProcessPlatform.defaultValue() !== "linux")("installer termi
           TERM: "xterm",
           NO_COLOR: "1",
           T3CODE_VERSION: version,
-          T3CODE_HOME: NodePath.join(root, "home"),
+          T3TODO_HOME: NodePath.join(root, "home"),
           T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
           T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
         },

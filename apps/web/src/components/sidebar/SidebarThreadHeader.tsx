@@ -10,7 +10,7 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { FolderPlusIcon, SearchIcon, SquareKanbanIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -21,8 +21,7 @@ import {
 
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { SidebarMenuButton } from "../ui/sidebar";
+import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface SidebarThreadHeaderProps {
@@ -32,6 +31,8 @@ export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   /** The project scope combobox, rendered as the first icon of the group. */
   projectScope: ReactNode;
+  /** Opens the active project's board; absent when no project is scoped or none has a board. */
+  onOpenBoard?: (() => void) | undefined;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
   onNewThread: (event: ReactMouseEvent) => void;
@@ -54,6 +55,7 @@ export function SidebarThreadHeader({
   searchFieldRef,
   hasProjects,
   projectScope,
+  onOpenBoard,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -84,11 +86,10 @@ export function SidebarThreadHeader({
         ref={searchFieldRef}
         className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
       >
-        <SearchIcon className="size-4 shrink-0 text-[var(--sidebar-icon-color)]" />
-        <Input
+        <SearchIcon className="size-4 shrink-0 text-(--sidebar-icon-color)" />
+        <SidebarInput
           ref={searchInputRef}
           nativeInput
-          unstyled
           type="search"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
@@ -104,14 +105,14 @@ export function SidebarThreadHeader({
               ? `sidebar-thread-search-result-${activeSearchResultIndex}`
               : undefined
           }
-          className="min-w-0 flex-1 [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:p-0 [&_[data-slot=input]]:leading-normal [&_[data-slot=input]]:text-sm [&_[data-slot=input]]:font-medium [&_[data-slot=input]]:text-sidebar-foreground [&_[data-slot=input]]:placeholder:text-[var(--sidebar-icon-color)]"
+          className="min-w-0 flex-1"
         />
         {isSearching ? (
           <Button
             type="button"
             size="icon-micro"
-            variant="ghost"
-            className="shrink-0 text-sidebar-muted-foreground hover:bg-sidebar-control-surface hover:text-sidebar-foreground"
+            variant="ghost-muted"
+            className="shrink-0"
             aria-label="Clear thread search"
             onClick={() => {
               onClearSearch();
@@ -129,7 +130,12 @@ export function SidebarThreadHeader({
         {hasProjects ? (
           <>
             {projectScope}
-            <SidebarHeaderIconButton label="New project" onClick={onNewProject}>
+            {onOpenBoard ? (
+              <SidebarHeaderIconButton label="Board" onClick={onOpenBoard}>
+                <SquareKanbanIcon />
+              </SidebarHeaderIconButton>
+            ) : null}
+            <SidebarHeaderIconButton label="Add project" onClick={onNewProject}>
               <FolderPlusIcon />
             </SidebarHeaderIconButton>
           </>
@@ -189,10 +195,7 @@ export function SidebarHeaderIconButton({
             type="button"
             aria-label={label}
             {...rest}
-            className={cn(
-              "relative size-7 shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
-              className,
-            )}
+            className={cn("relative size-7 shrink-0", className)}
           />
         }
       >

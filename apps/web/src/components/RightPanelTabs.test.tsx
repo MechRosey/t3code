@@ -1,6 +1,8 @@
 import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
 import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
+import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -89,6 +91,55 @@ function overlay(
   };
 }
 
+function tabsProps(
+  overrides: Partial<ComponentProps<typeof RightPanelTabs>> = {},
+): ComponentProps<typeof RightPanelTabs> {
+  return {
+    mode: "inline",
+    keybindings: DEFAULT_RESOLVED_KEYBINDINGS,
+    getShortcutContext: () => ({
+      terminalFocus: false,
+      terminalOpen: false,
+      previewFocus: false,
+      previewOpen: false,
+      isWeb: true,
+      isDesktop: false,
+    }),
+    surfaces: [],
+    environmentId: null,
+    activeSurfaceId: null,
+    pendingSurfaceIds: new Set(),
+    previewSessions: sessions,
+    desktopByTabId: {},
+    terminalLabelsById: new Map(),
+    onActivate: () => undefined,
+    onCloseSurface: () => undefined,
+    onCloseOtherSurfaces: () => undefined,
+    onCloseSurfacesToRight: () => undefined,
+    onCloseAllSurfaces: () => undefined,
+    onCopyFilePath: () => undefined,
+    onAddBrowser: () => undefined,
+    onAddBrowserInProfile: () => undefined,
+    onAddTerminal: () => undefined,
+    onAddPullRequest: () => undefined,
+    onAddPullRequests: () => undefined,
+    onAddBoard: () => undefined,
+    onAddDiff: () => undefined,
+    onAddFiles: () => undefined,
+    onAddDevice: () => undefined,
+    browserAvailable: true,
+    terminalAvailable: false,
+    diffAvailable: false,
+    filesAvailable: false,
+    pullRequestAvailable: false,
+    pullRequestsAvailable: false,
+    boardAvailable: true,
+    deviceAvailable: false,
+    children: <div>content</div>,
+    ...overrides,
+  };
+}
+
 function renderTabs(
   first: DesktopPreviewFavicon | null,
   second?: DesktopPreviewFavicon,
@@ -97,45 +148,22 @@ function renderTabs(
 ) {
   return renderToStaticMarkup(
     <RightPanelTabs
-      mode="inline"
-      surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
-      environmentId={null}
-      activeSurfaceId={previewSurface.id}
-      pendingSurfaceIds={new Set()}
-      previewSessions={sessions}
-      desktopByTabId={{
-        "tab-1": overlay(first, audio),
-        ...(second ? { "tab-2": overlay(second) } : {}),
-      }}
-      {...(previewRuntimeTabId ? { previewRuntimeTabId } : {})}
-      terminalLabelsById={new Map()}
-      onActivate={() => undefined}
-      onCloseSurface={() => undefined}
-      onCloseOtherSurfaces={() => undefined}
-      onCloseSurfacesToRight={() => undefined}
-      onCloseAllSurfaces={() => undefined}
-      onCopyFilePath={() => undefined}
-      onAddBrowser={() => undefined}
-      onAddBrowserInProfile={() => undefined}
-      onAddTerminal={() => undefined}
-      onAddPullRequest={() => undefined}
-      onAddPullRequests={() => undefined}
-      onAddDiff={() => undefined}
-      onAddFiles={() => undefined}
-      onAddAgents={() => undefined}
-      onAddDevice={() => undefined}
-      liveAgentCount={0}
-      browserAvailable
-      terminalAvailable={false}
-      diffAvailable={false}
-      filesAvailable={false}
-      pullRequestAvailable={false}
-      pullRequestsAvailable={false}
-      agentsAvailable={false}
-      deviceAvailable={false}
-    >
-      <div>content</div>
-    </RightPanelTabs>,
+      {...tabsProps({
+        surfaces: second ? [previewSurface, secondSurface] : [previewSurface],
+        activeSurfaceId: previewSurface.id,
+        desktopByTabId: {
+          "tab-1": overlay(first, audio),
+          ...(second ? { "tab-2": overlay(second) } : {}),
+        },
+        ...(previewRuntimeTabId ? { previewRuntimeTabId } : {}),
+      })}
+    />,
+  );
+}
+
+function renderLauncher(overrides: Partial<ComponentProps<typeof RightPanelTabs>> = {}) {
+  return renderToStaticMarkup(
+    <RightPanelTabs {...tabsProps({ browserAvailable: false, ...overrides })} />,
   );
 }
 
@@ -159,6 +187,33 @@ describe("RightPanelTabs preview favicon", () => {
   it("hides a capture while the server session still describes another origin", () => {
     const html = renderTabs(favicon("data:image/png;base64,AAAA", "https://example.com/"));
     expect(html).not.toContain("data:image/png;base64,AAAA");
+  });
+});
+
+describe("empty-panel launcher", () => {
+  it("lists the todo board with its shortcut only while a project is open", () => {
+    const available = renderLauncher({ boardAvailable: true });
+    expect(available).toContain("Todo Board");
+    expect(available).toContain('data-surface-launcher-keys="O"');
+
+    const unavailable = renderLauncher({ boardAvailable: false });
+    expect(unavailable).toContain("Todo Board");
+    expect(unavailable).toContain('data-surface-launcher-keys=""');
+  });
+});
+
+describe("board tab", () => {
+  it("is titled Todo Board", () => {
+    const html = renderToStaticMarkup(
+      <RightPanelTabs
+        {...tabsProps({
+          surfaces: [{ id: "board", kind: "board" }],
+          activeSurfaceId: "board",
+        })}
+      />,
+    );
+
+    expect(html).toContain("Todo Board");
   });
 });
 

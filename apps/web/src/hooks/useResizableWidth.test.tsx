@@ -2,12 +2,19 @@ import { act, useLayoutEffect, type PointerEvent } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { useResizableWidth } from "./useResizableWidth";
+import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "./useResizableWidth";
 
 let renderer: ReactTestRenderer;
 let result: ReturnType<typeof useResizableWidth>;
 let captured = false;
+const hostStyle = new Map<string, string>();
 const target = {
+  parentElement: {
+    style: {
+      setProperty: (property: string, value: string) => hostStyle.set(property, value),
+      removeProperty: (property: string) => hostStyle.delete(property),
+    },
+  },
   setPointerCapture: () => {
     captured = true;
   },
@@ -26,6 +33,7 @@ const style = {
 };
 const savedWidths = new Map<string, string>();
 const setItem = vi.fn((key: string, value: string) => savedWidths.set(key, value));
+const removeItem = vi.fn((key: string) => savedWidths.delete(key));
 const cancelAnimationFrame = vi.fn();
 let events: EventTarget;
 let frame: FrameRequestCallback | undefined;
@@ -45,10 +53,12 @@ function Panel({
   edge = "left",
   maxWidth = 800,
   storageKey = "test-panel-width",
+  autoWidth,
 }: {
   edge?: "left" | "right";
   maxWidth?: number;
   storageKey?: string;
+  autoWidth?: number;
 }) {
   const resize = useResizableWidth({
     storageKey,
@@ -56,6 +66,7 @@ function Panel({
     minWidth: 200,
     maxWidth,
     edge,
+    autoWidth,
   });
   useLayoutEffect(() => {
     result = resize;
@@ -65,6 +76,7 @@ function Panel({
 
 beforeEach(async () => {
   savedWidths.clear();
+  hostStyle.clear();
   captured = false;
   frame = undefined;
   style.cursor = "";
@@ -74,7 +86,7 @@ beforeEach(async () => {
   vi.stubGlobal("window", {
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
-    localStorage: { getItem: (key: string) => savedWidths.get(key) ?? null, setItem },
+    localStorage: { getItem: (key: string) => savedWidths.get(key) ?? null, setItem, removeItem },
   });
   vi.stubGlobal("document", { body: { style } });
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -102,7 +114,9 @@ describe("panel resize cleanup", () => {
         result.handlers.onPointerMove(pointer(50));
       });
       await act(() => frame?.(0));
-      expect(result.width).toBe(450);
+      expect(hostStyle.get(RESIZABLE_WIDTH_PROPERTY)).toBe("450px");
+      expect(hostStyle.get("transition-property")).toBe("none");
+      expect(result.width).toBe(400);
       // Queue another move to check that interruption cancels pending work too.
       await act(() => result.handlers.onPointerMove(pointer(25)));
       expect(style.cursor).toBe("col-resize");
@@ -116,6 +130,7 @@ describe("panel resize cleanup", () => {
       expect(style.cursor).toBe("");
       expect(style.userSelect).toBe("");
       expect(captured).toBe(false);
+      expect(hostStyle.has("transition-property")).toBe(false);
       expect(cancelAnimationFrame).toHaveBeenCalledWith(42);
       if (reason === "unmount") {
         expect(setItem).not.toHaveBeenCalled();
@@ -151,11 +166,11 @@ describe("panel resize cleanup", () => {
       result.handlers.onPointerMove(pointer(-200));
     });
     await act(() => frame?.(0));
-    expect(result.width).toBe(Math.min(700, initialMax));
+    expect(hostStyle.get(RESIZABLE_WIDTH_PROPERTY)).toBe(`${Math.min(700, initialMax)}px`);
     await act(() => renderer.update(<Panel maxWidth={nextMax} />));
     await act(() => result.handlers.onPointerMove(pointer(-250)));
     await act(() => frame?.(0));
-    expect(result.width).toBe(Math.min(750, nextMax));
+    expect(hostStyle.get(RESIZABLE_WIDTH_PROPERTY)).toBe(`${Math.min(750, nextMax)}px`);
     await act(() => result.handlers.onPointerUp(pointer(-300)));
     expect(result.width).toBe(nextMax);
     expect(setItem).toHaveBeenCalledExactlyOnceWith("test-panel-width", String(nextMax));
@@ -225,10 +240,11 @@ describe("panel width storage changes", () => {
       result.handlers.onPointerMove(pointer(50));
     });
     await act(() => frame?.(0));
-    expect(result.width).toBe(450);
+    expect(hostStyle.get(RESIZABLE_WIDTH_PROPERTY)).toBe("450px");
     await act(() => result.handlers.onPointerMove(pointer(25)));
     await act(() => renderer.update(<Panel storageKey="thread-b" />));
     expect(result.width).toBe(650);
+    expect(hostStyle.get(RESIZABLE_WIDTH_PROPERTY)).toBe("650px");
     expect(captured).toBe(false);
     expect(style.cursor).toBe("");
     await act(() => {
@@ -239,5 +255,71 @@ describe("panel width storage changes", () => {
     expect(setItem).not.toHaveBeenCalled();
     await act(() => renderer.update(<Panel />));
     expect(result.width).toBe(400);
+  });
+});
+
+describe("panel auto width", () => {
+  it("leaves panels without an auto width on the default and without a double-click reset", () => {
+    expect(result.width).toBe(400);
+    expect(result.handlers.onDoubleClick).toBeUndefined();
+  });
+
+  it("follows the auto width until the user drags, then keeps the dragged width", async () => {
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel autoWidth={520} />));
+    expect(result.width).toBe(520);
+    await act(() => renderer.update(<Panel autoWidth={900} />));
+    expect(result.width).toBe(800);
+    expect(setItem).not.toHaveBeenCalled();
+
+    await act(() => renderer.update(<Panel autoWidth={520} />));
+    await act(() => {
+      result.handlers.onPointerDown(pointer());
+      result.handlers.onPointerMove(pointer(50));
+      result.handlers.onPointerUp(pointer(50));
+    });
+    expect(result.width).toBe(570);
+    expect(setItem).toHaveBeenCalledExactlyOnceWith("test-panel-width", "570");
+    await act(() => renderer.update(<Panel autoWidth={600} />));
+    expect(result.width).toBe(570);
+  });
+
+  it("keeps following the auto width after a click on the handle without a drag", async () => {
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    await act(() => {
+      result.handlers.onPointerDown(pointer());
+      result.handlers.onPointerUp(pointer());
+    });
+    expect(setItem).not.toHaveBeenCalled();
+    expect(result.width).toBe(500);
+
+    await act(() => renderer.update(<Panel autoWidth={620} />));
+    expect(result.width).toBe(620);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("uses a stored width over the auto width and the auto width where nothing is stored", async () => {
+    savedWidths.set("thread-stored", "450");
+    await act(() => renderer.update(<Panel storageKey="thread-stored" autoWidth={500} />));
+    expect(result.width).toBe(450);
+    await act(() => renderer.update(<Panel storageKey="thread-empty" autoWidth={500} />));
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel storageKey="thread-stored" autoWidth={500} />));
+    expect(result.width).toBe(450);
+  });
+
+  it("clears the stored width on double-click and returns to the auto width", async () => {
+    savedWidths.set("test-panel-width", "450");
+    await act(() => renderer.update(<Panel storageKey="other" autoWidth={500} />));
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    expect(result.width).toBe(450);
+
+    await act(() => result.handlers.onDoubleClick?.());
+    expect(removeItem).toHaveBeenCalledExactlyOnceWith("test-panel-width");
+    expect(savedWidths.has("test-panel-width")).toBe(false);
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel autoWidth={620} />));
+    expect(result.width).toBe(620);
   });
 });

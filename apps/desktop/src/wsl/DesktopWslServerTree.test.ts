@@ -16,7 +16,7 @@ import * as DesktopWslServerTree from "./DesktopWslServerTree.ts";
 // Electron) fs, so a plain directory named server.asar exercises the full
 // extraction path under plain Node.
 
-const environmentLayer = (input: {
+const layerEnvironment = (input: {
   readonly baseDir: string;
   readonly resourcesPath: string;
   readonly appVersion?: string;
@@ -37,7 +37,7 @@ const environmentLayer = (input: {
       Layer.mergeAll(
         NodeServices.layer,
         DesktopConfig.layerTest({
-          T3CODE_HOME: input.baseDir,
+          T3TODO_HOME: input.baseDir,
           T3CODE_MODE: "desktop",
         }),
       ),
@@ -69,7 +69,7 @@ const ensureWith = (input: {
     const tree = yield* DesktopWslServerTree.DesktopWslServerTree;
     return yield* tree.ensure;
   }).pipe(
-    Effect.provide(DesktopWslServerTree.layer.pipe(Layer.provideMerge(environmentLayer(input)))),
+    Effect.provide(DesktopWslServerTree.layer.pipe(Layer.provideMerge(layerEnvironment(input)))),
   );
 
 describe("DesktopWslServerTree", () => {
@@ -182,7 +182,7 @@ describe("DesktopWslServerTree", () => {
         }).pipe(
           Effect.provide(
             DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
+              Layer.provideMerge(layerEnvironment({ baseDir: tempDir, resourcesPath })),
             ),
           ),
         );
@@ -243,7 +243,7 @@ describe("DesktopWslServerTree", () => {
         });
         yield* fileSystem.writeFileString(path.join(serverRoot, "apps/server/dist/bin.mjs"), "x");
 
-        // T3CODE_HOME is set to tempDir, so the desktop state dir resolves to
+        // T3TODO_HOME is set to tempDir, so the desktop state dir resolves to
         // <tempDir>/userdata (no .t3 segment).
         const treeRoot = path.join(tempDir, "userdata", "wsl-server-tree");
         yield* fileSystem.makeDirectory(path.join(treeRoot, "1.0.0"), { recursive: true });
@@ -313,7 +313,7 @@ describe("DesktopWslServerTree", () => {
         }).pipe(
           Effect.provide(
             DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
+              Layer.provideMerge(layerEnvironment({ baseDir: tempDir, resourcesPath })),
             ),
           ),
         );
@@ -340,7 +340,7 @@ describe("DesktopWslServerTree", () => {
         const treeRoot = path.dirname(versionDir);
         const extractedEntryPath = path.join(versionDir, "apps/server/dist/bin.mjs");
         let cleanupFailed = false;
-        const partialCleanupFileSystem = Layer.effect(
+        const layerPartialCleanupFileSystem = Layer.effect(
           FileSystem.FileSystem,
           Effect.gen(function* () {
             const realFileSystem = yield* FileSystem.FileSystem;
@@ -371,8 +371,8 @@ describe("DesktopWslServerTree", () => {
         }).pipe(
           Effect.provide(
             DesktopWslServerTree.layer.pipe(
-              Layer.provideMerge(environmentLayer({ baseDir: tempDir, resourcesPath })),
-              Layer.provideMerge(partialCleanupFileSystem),
+              Layer.provideMerge(layerEnvironment({ baseDir: tempDir, resourcesPath })),
+              Layer.provideMerge(layerPartialCleanupFileSystem),
             ),
           ),
         );
