@@ -33,6 +33,7 @@ const style = {
 };
 const savedWidths = new Map<string, string>();
 const setItem = vi.fn((key: string, value: string) => savedWidths.set(key, value));
+const removeItem = vi.fn((key: string) => savedWidths.delete(key));
 const cancelAnimationFrame = vi.fn();
 let events: EventTarget;
 let frame: FrameRequestCallback | undefined;
@@ -52,10 +53,12 @@ function Panel({
   edge = "left",
   maxWidth = 800,
   storageKey = "test-panel-width",
+  autoWidth,
 }: {
   edge?: "left" | "right";
   maxWidth?: number;
   storageKey?: string;
+  autoWidth?: number;
 }) {
   const resize = useResizableWidth({
     storageKey,
@@ -63,6 +66,7 @@ function Panel({
     minWidth: 200,
     maxWidth,
     edge,
+    autoWidth,
   });
   useLayoutEffect(() => {
     result = resize;
@@ -82,7 +86,7 @@ beforeEach(async () => {
   vi.stubGlobal("window", {
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
-    localStorage: { getItem: (key: string) => savedWidths.get(key) ?? null, setItem },
+    localStorage: { getItem: (key: string) => savedWidths.get(key) ?? null, setItem, removeItem },
   });
   vi.stubGlobal("document", { body: { style } });
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -251,5 +255,57 @@ describe("panel width storage changes", () => {
     expect(setItem).not.toHaveBeenCalled();
     await act(() => renderer.update(<Panel />));
     expect(result.width).toBe(400);
+  });
+});
+
+describe("panel auto width", () => {
+  it("leaves panels without an auto width on the default and without a double-click reset", () => {
+    expect(result.width).toBe(400);
+    expect(result.handlers.onDoubleClick).toBeUndefined();
+  });
+
+  it("follows the auto width until the user drags, then keeps the dragged width", async () => {
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel autoWidth={520} />));
+    expect(result.width).toBe(520);
+    await act(() => renderer.update(<Panel autoWidth={900} />));
+    expect(result.width).toBe(800);
+    expect(setItem).not.toHaveBeenCalled();
+
+    await act(() => renderer.update(<Panel autoWidth={520} />));
+    await act(() => {
+      result.handlers.onPointerDown(pointer());
+      result.handlers.onPointerMove(pointer(50));
+      result.handlers.onPointerUp(pointer(50));
+    });
+    expect(result.width).toBe(570);
+    expect(setItem).toHaveBeenCalledExactlyOnceWith("test-panel-width", "570");
+    await act(() => renderer.update(<Panel autoWidth={600} />));
+    expect(result.width).toBe(570);
+  });
+
+  it("uses a stored width over the auto width and the auto width where nothing is stored", async () => {
+    savedWidths.set("thread-stored", "450");
+    await act(() => renderer.update(<Panel storageKey="thread-stored" autoWidth={500} />));
+    expect(result.width).toBe(450);
+    await act(() => renderer.update(<Panel storageKey="thread-empty" autoWidth={500} />));
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel storageKey="thread-stored" autoWidth={500} />));
+    expect(result.width).toBe(450);
+  });
+
+  it("clears the stored width on double-click and returns to the auto width", async () => {
+    savedWidths.set("test-panel-width", "450");
+    await act(() => renderer.update(<Panel storageKey="other" autoWidth={500} />));
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    expect(result.width).toBe(450);
+
+    await act(() => result.handlers.onDoubleClick?.());
+    expect(removeItem).toHaveBeenCalledExactlyOnceWith("test-panel-width");
+    expect(savedWidths.has("test-panel-width")).toBe(false);
+    expect(result.width).toBe(500);
+    await act(() => renderer.update(<Panel autoWidth={620} />));
+    expect(result.width).toBe(620);
   });
 });
