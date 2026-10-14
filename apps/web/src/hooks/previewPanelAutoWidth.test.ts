@@ -1,7 +1,12 @@
 import type { ChatWidth } from "@t3tools/contracts/settings";
+import * as NodeFS from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveAutoPreviewPanelWidth } from "./previewPanelAutoWidth";
+import {
+  COMFORTABLE_TEXT_MAX_REM,
+  WIDE_TEXT_MAX_REM,
+  resolveAutoPreviewPanelWidth,
+} from "./previewPanelAutoWidth";
 import { getPreviewPanelMaxWidth } from "./usePreviewPanelInlineSize";
 
 const MIN_WIDTH = 360;
@@ -21,6 +26,20 @@ function panelWidthForWindow(windowWidth: number, chatWidth: ChatWidth, gitCardS
     maxWidth: getPreviewPanelMaxWidth(windowWidth, rowWidth),
   });
 }
+
+const indexCss = NodeFS.readFileSync(new URL("../index.css", import.meta.url), "utf8");
+const COMFORTABLE_MAX_WIDTH_RULE = /--chat-content-max-width:\s*([\d.]+)rem/;
+const WIDE_MAX_WIDTH_RULE =
+  /\[data-chat-width="wide"\]\s*\{[^}]*--chat-content-max-width:\s*([\d.]+)rem/;
+
+describe("chat text maximum", () => {
+  it("matches the comfortable and wide chat width rules in index.css", () => {
+    expect({
+      comfortable: Number(indexCss.match(COMFORTABLE_MAX_WIDTH_RULE)?.[1]),
+      wide: Number(indexCss.match(WIDE_MAX_WIDTH_RULE)?.[1]),
+    }).toEqual({ comfortable: COMFORTABLE_TEXT_MAX_REM, wide: WIDE_TEXT_MAX_REM });
+  });
+});
 
 describe("resolveAutoPreviewPanelWidth", () => {
   it.each([
