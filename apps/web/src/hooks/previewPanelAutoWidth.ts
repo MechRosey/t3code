@@ -10,10 +10,11 @@ import {
 } from "../components/chat/threadDetailsCardLayout";
 
 const CSS_REM_PIXELS = 16;
-const COMFORTABLE_TEXT_MAX_REM = 46;
+export const COMFORTABLE_TEXT_MAX_REM = 46;
+export const WIDE_TEXT_MAX_REM = 72;
 const CHAT_TEXT_MAX_REM_BY_WIDTH: Record<ChatWidth, number | null> = {
   comfortable: COMFORTABLE_TEXT_MAX_REM,
-  wide: 72,
+  wide: WIDE_TEXT_MAX_REM,
   full: null,
 };
 const DETAILS_CARD_RESERVED_WIDTH =
