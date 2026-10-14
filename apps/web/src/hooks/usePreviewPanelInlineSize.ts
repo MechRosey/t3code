@@ -1,5 +1,7 @@
+import type { ChatWidth } from "@t3tools/contracts/settings";
 import { type RefObject, useLayoutEffect, useState } from "react";
 
+import { resolveAutoPreviewPanelWidth } from "./previewPanelAutoWidth";
 import { type ResizableWidthHandlers, useResizableWidth } from "./useResizableWidth";
 import { observeResize } from "../lib/observeResize";
 
@@ -23,6 +25,16 @@ const PREVIEW_PANEL_MAX_WIDTH_FRACTION = 0.7;
 const SIBLING_COLUMN_MIN_WIDTH = 360;
 const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
 
+export interface PreviewPanelAutoWidthOptions {
+  readonly chatWidth: ChatWidth;
+  readonly gitCardShown: boolean;
+}
+
+interface PreviewPanelBounds {
+  readonly maxWidth: number;
+  readonly autoWidth: number | undefined;
+}
+
 export function usePreviewPanelInlineSize(
   hostRef?: RefObject<HTMLElement | null>,
   options: {
@@ -31,15 +43,24 @@ export function usePreviewPanelInlineSize(
     readonly defaultWidth?: number | undefined;
     /** Measure this row instead of the panel's parent. */
     readonly container?: HTMLElement | null | undefined;
+    readonly autoWidth?: PreviewPanelAutoWidthOptions | undefined;
   } = {},
 ): PreviewPanelInlineSize {
-  const maxWidth = useViewportClampedMaxWidth(hostRef, options.enabled ?? true, options.container);
+  const defaultWidth = options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH;
+  const bounds = useViewportClampedBounds(
+    hostRef,
+    options.enabled ?? true,
+    options.container,
+    defaultWidth,
+    options.autoWidth,
+  );
   return useResizableWidth({
     storageKey: options.widthStorageKey ?? PREVIEW_PANEL_WIDTH_STORAGE_KEY,
-    defaultWidth: options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
+    defaultWidth,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
-    maxWidth,
+    maxWidth: bounds.maxWidth,
     edge: "left",
+    autoWidth: bounds.autoWidth,
   });
 }
 
@@ -48,14 +69,19 @@ export function usePreviewPanelInlineSize(
  * it sits in. Resize-aware so dragging the OS window narrower (or expanding
  * the app sidebar) re-clamps the stored width on the next render.
  */
-function useViewportClampedMaxWidth(
+function useViewportClampedBounds(
   hostRef: RefObject<HTMLElement | null> | undefined,
   enabled: boolean,
   container: HTMLElement | null | undefined,
-): number {
-  const [maxWidth, setMaxWidth] = useState(() =>
-    getPreviewPanelMaxWidth(typeof window === "undefined" ? 1280 : window.innerWidth),
-  );
+  defaultWidth: number,
+  autoWidthOptions: PreviewPanelAutoWidthOptions | undefined,
+): PreviewPanelBounds {
+  const autoChatWidth = autoWidthOptions?.chatWidth;
+  const autoGitCardShown = autoWidthOptions?.gitCardShown ?? false;
+  const [bounds, setBounds] = useState<PreviewPanelBounds>(() => ({
+    maxWidth: getPreviewPanelMaxWidth(typeof window === "undefined" ? 1280 : window.innerWidth),
+    autoWidth: undefined,
+  }));
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const row = container ?? (enabled ? hostRef?.current?.parentElement : null) ?? null;
@@ -65,7 +91,24 @@ function useViewportClampedMaxWidth(
     // row resizes every frame of a sidebar drag, but the cap rarely moves, and an
     // unchanged cap skips re-rendering the panel's owner.
     const measure = () => {
-      setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, row?.clientWidth));
+      const rowWidth = row?.clientWidth;
+      const maxWidth = getPreviewPanelMaxWidth(window.innerWidth, rowWidth);
+      const autoWidth =
+        autoChatWidth === undefined || rowWidth === undefined
+          ? undefined
+          : resolveAutoPreviewPanelWidth({
+              rowWidth,
+              chatWidth: autoChatWidth,
+              gitCardShown: autoGitCardShown,
+              minWidth: PREVIEW_PANEL_MIN_WIDTH,
+              defaultWidth,
+              maxWidth,
+            });
+      setBounds((current) =>
+        current.maxWidth === maxWidth && current.autoWidth === autoWidth
+          ? current
+          : { maxWidth, autoWidth },
+      );
     };
     measure();
     let frame = 0;
@@ -83,8 +126,8 @@ function useViewportClampedMaxWidth(
       if (frame !== 0) window.cancelAnimationFrame(frame);
       stopObserving?.();
     };
-  }, [container, hostRef, enabled]);
-  return maxWidth;
+  }, [container, hostRef, enabled, defaultWidth, autoChatWidth, autoGitCardShown]);
+  return bounds;
 }
 export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: number): number {
   const fractionCap = Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION);

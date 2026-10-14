@@ -8,7 +8,11 @@ import {
   type CSSProperties,
 } from "react";
 import { ChatCanvasContext } from "./ChatCanvasContext";
-import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
+import {
+  CHAT_CANVAS_LANE_PADDING,
+  resolveChatCanvasLayout,
+  type ChatCanvasPreview,
+} from "./chatCanvasLayout";
 import type { PreviewMiniPlayerObstacles } from "../preview/previewMiniPlayerLayout";
 import { observeResize } from "../../lib/observeResize";
 
@@ -42,7 +46,7 @@ export function ChatCanvas({
   const [measurements, setMeasurements] = useState({
     width: 0,
     height: 0,
-    padding: 48,
+    padding: CHAT_CANVAS_LANE_PADDING,
     maxChatWidth: 768,
     minChatWidth: 640,
     composerHeight: 0,
