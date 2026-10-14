@@ -67,6 +67,16 @@ function children(parentId: string, ids: ReadonlyArray<string>): Array<TodoIssue
   return ids.map((id) => issue({ id, title: id, parentId, depth: 1 }));
 }
 
+const NO_CAP = Number.POSITIVE_INFINITY;
+
+function kidsWithStatus(
+  parentId: string,
+  status: string,
+  ids: ReadonlyArray<string>,
+): Array<TodoIssue> {
+  return children(parentId, ids).map((kid) => ({ ...kid, status }));
+}
+
 function chainOfFive(): Array<TodoIssue> {
   return [
     issue({ id: "n1", title: "n1" }),
@@ -359,6 +369,7 @@ describe("focus graph layout", () => {
         ),
       ],
       "c",
+      NO_CAP,
     );
     const overflowOnly = buildFocusGraph(
       [
@@ -373,6 +384,201 @@ describe("focus graph layout", () => {
     assert.equal(wideSecondRing.orientation, "LR");
     assert.equal(overflowOnly.orientation, "TD");
     assert.equal(overflowOnly.hidden, 1);
+  });
+});
+
+describe("focus graph node cap", () => {
+  function sevenClosedKidsUnderHub(): Array<TodoIssue> {
+    return [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "done", ["k1", "k2", "k3", "k4", "k5", "k6", "k7"]),
+    ];
+  }
+
+  it("draws seven tickets at the cap and drops the lowest id of an exact tie one past it", () => {
+    const atCap = buildFocusGraph(sevenClosedKidsUnderHub().slice(0, 7), "c");
+    const pastCap = buildFocusGraph(sevenClosedKidsUnderHub(), "c");
+
+    assert.deepEqual(nodeIds(atCap), ["c", "k1", "k2", "k3", "k4", "k5", "k6"]);
+    assert.equal(atCap.hidden, 0);
+    assert.equal(atCap.overflow, null);
+    assert.deepEqual(nodeIds(pastCap), ["c", "k2", "k3", "k4", "k5", "k6", "k7"]);
+    assert.equal(pastCap.hidden, 1);
+    assert.deepEqual(pastCap.overflow, { x: 280, y: 149, width: 104, height: 28 });
+    assert.deepEqual(pastCap.layout, { width: 384, height: 326 });
+    assert.ok(pastCap.edges.every((edge) => !edge.key.includes("k1")));
+    assert.equal(pastCap.edges.length, 6);
+  });
+
+  it("drops cancelled tickets before done ones and closed first-hop tickets before open ones", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1", "o2"]),
+      ...kidsWithStatus("c", "cancelled", ["x1"]),
+      ...kidsWithStatus("c", "done", ["d1"]),
+    ];
+
+    const dropsCancelled = buildFocusGraph(issues, "c", 4);
+    const dropsBoth = buildFocusGraph(issues, "c", 3);
+
+    assert.deepEqual(nodeIds(dropsCancelled), ["c", "d1", "o1", "o2"]);
+    assert.equal(dropsCancelled.hidden, 1);
+    assert.deepEqual(nodeIds(dropsBoth), ["c", "o1", "o2"]);
+    assert.equal(dropsBoth.hidden, 2);
+  });
+
+  it("drops the outermost ring first, then the oldest, within a class", () => {
+    const outermost = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1"]),
+      ...kidsWithStatus("c", "done", ["d1"]),
+      issue({ id: "gd", title: "gd", parentId: "o1", depth: 2, status: "done" }),
+    ];
+    const oldest = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1"]),
+      issue({
+        id: "a-new",
+        title: "a-new",
+        parentId: "c",
+        depth: 1,
+        status: "done",
+        updated: "2026-09-05T00:00:00.000Z",
+      }),
+      issue({
+        id: "z-old",
+        title: "z-old",
+        parentId: "c",
+        depth: 1,
+        status: "done",
+        updated: "2026-08-01T00:00:00.000Z",
+      }),
+    ];
+
+    assert.deepEqual(nodeIds(buildFocusGraph(outermost, "c", 3)), ["c", "d1", "o1"]);
+    assert.deepEqual(nodeIds(buildFocusGraph(oldest, "c", 3)), ["c", "a-new", "o1"]);
+  });
+
+  it("keeps the same drawn set whatever order the snapshot lists tickets", () => {
+    const dated = (id: string, status: string, updated: string): TodoIssue =>
+      issue({ id, title: id, parentId: "c", depth: 1, status, updated });
+    const family = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1", "o2", "o3"]),
+      dated("d1", "done", "2026-09-04T00:00:00.000Z"),
+      dated("d2", "done", "2026-09-02T00:00:00.000Z"),
+      dated("d3", "done", "2026-09-03T00:00:00.000Z"),
+      dated("d4", "done", "2026-09-05T00:00:00.000Z"),
+      dated("x1", "cancelled", "2026-09-06T00:00:00.000Z"),
+    ];
+    const reversed = family.toReversed();
+    const rotated = [...family.slice(4), ...family.slice(0, 4)];
+
+    const expected = buildFocusGraph(family, "c");
+
+    assert.deepEqual(nodeIds(expected), ["c", "d1", "d3", "d4", "o1", "o2", "o3"]);
+    assert.deepEqual(buildFocusGraph(reversed, "c"), expected);
+    assert.deepEqual(buildFocusGraph(rotated, "c"), expected);
+  });
+
+  it("never drops the focus ticket even when it is done", () => {
+    const issues = [
+      issue({ id: "c", title: "c", status: "done" }),
+      ...kidsWithStatus("c", "done", ["d1", "d2"]),
+    ];
+
+    const graph = buildFocusGraph(issues, "c", 1);
+
+    assert.deepEqual(nodeIds(graph), ["c"]);
+    assert.equal(graph.hidden, 2);
+    assert.notEqual(graph.overflow, null);
+  });
+
+  it("draws every open first-hop ticket past the cap and drops the closed ones", () => {
+    const openStatuses = ["backlog", "read", "doing", "blocked"];
+    const openKids = ["o1", "o2", "o3", "o4", "o5", "o6", "o7", "o8", "o9"].map((id, position) =>
+      issue({
+        id,
+        title: id,
+        parentId: "c",
+        depth: 1,
+        status: openStatuses[position % openStatuses.length]!,
+      }),
+    );
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      ...openKids,
+      ...kidsWithStatus("c", "done", ["d1", "d2"]),
+    ];
+
+    const graph = buildFocusGraph(issues, "c");
+
+    assert.deepEqual(nodeIds(graph), ["c", "o1", "o2", "o3", "o4", "o5", "o6", "o7", "o8", "o9"]);
+    assert.equal(graph.hidden, 2);
+  });
+
+  it("clamps a zero or negative cap to the focus ticket and its open first hop", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1", "o2"]),
+      ...kidsWithStatus("c", "done", ["d1"]),
+    ];
+
+    const atZero = buildFocusGraph(issues, "c", 0);
+    const belowZero = buildFocusGraph(issues, "c", -3);
+
+    assert.deepEqual(nodeIds(atZero), ["c", "o1", "o2"]);
+    assert.equal(atZero.hidden, 1);
+    assert.deepEqual(belowZero, atZero);
+  });
+
+  it("drops a second-hop ticket left without a drawn connector but keeps one that still has one", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "backlog", ["o1"]),
+      ...kidsWithStatus("c", "done", ["d1", "d2"]),
+      issue({ id: "g1", title: "g1", parentId: "d1", depth: 2 }),
+      issue({
+        id: "g2",
+        title: "g2",
+        parentId: "d1",
+        depth: 2,
+        links: { blocks: [], relates: ["d2"] },
+      }),
+    ];
+
+    const graph = buildFocusGraph(issues, "c", 5);
+
+    assert.deepEqual(nodeIds(graph), ["c", "d2", "o1", "g2"]);
+    assert.equal(graph.hidden, 2);
+    assert.deepEqual(graph.edges.map((edge) => edge.key).toSorted(), ["c|d2", "c|o1", "d2|g2"]);
+  });
+
+  it("chooses top-down or left-right from the rings left after the cap", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      ...kidsWithStatus("c", "done", ["k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8"]),
+    ];
+
+    assert.equal(buildFocusGraph(issues, "c", NO_CAP).orientation, "LR");
+    assert.equal(buildFocusGraph(issues, "c", 7).orientation, "LR");
+    assert.equal(buildFocusGraph(issues, "c", 6).orientation, "TD");
+  });
+
+  it("counts dropped tickets and third-hop tickets together in the outside-the-map node", () => {
+    const issues = [
+      ...sevenClosedKidsUnderHub(),
+      issue({ id: "g", title: "g", parentId: "k7", depth: 2 }),
+      issue({ id: "h", title: "h", parentId: "g", depth: 3 }),
+    ];
+
+    const graph = buildFocusGraph(issues, "c");
+
+    assert.deepEqual(nodeIds(graph), ["c", "k3", "k4", "k5", "k6", "k7", "g"]);
+    assert.equal(graph.hidden, 3);
+    assert.equal(graph.orientation, "TD");
+    assert.deepEqual(graph.overflow, { x: 232, y: 246, width: 104, height: 28 });
+    assert.deepEqual(graph.layout, { width: 568, height: 274 });
   });
 });
 
