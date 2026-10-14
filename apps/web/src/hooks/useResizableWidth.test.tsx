@@ -285,6 +285,20 @@ describe("panel auto width", () => {
     expect(result.width).toBe(570);
   });
 
+  it("keeps following the auto width after a click on the handle without a drag", async () => {
+    await act(() => renderer.update(<Panel autoWidth={500} />));
+    await act(() => {
+      result.handlers.onPointerDown(pointer());
+      result.handlers.onPointerUp(pointer());
+    });
+    expect(setItem).not.toHaveBeenCalled();
+    expect(result.width).toBe(500);
+
+    await act(() => renderer.update(<Panel autoWidth={620} />));
+    expect(result.width).toBe(620);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
   it("uses a stored width over the auto width and the auto width where nothing is stored", async () => {
     savedWidths.set("thread-stored", "450");
     await act(() => renderer.update(<Panel storageKey="thread-stored" autoWidth={500} />));
