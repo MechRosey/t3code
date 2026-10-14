@@ -536,15 +536,17 @@ describe("focus graph node cap", () => {
     const issues = [
       issue({ id: "c", title: "c" }),
       ...kidsWithStatus("c", "backlog", ["o1"]),
-      ...kidsWithStatus("c", "done", ["d1", "d2"]),
-      issue({ id: "g1", title: "g1", parentId: "d1", depth: 2 }),
+      ...kidsWithStatus("c", "done", ["d1"]),
       issue({
-        id: "g2",
-        title: "g2",
-        parentId: "d1",
-        depth: 2,
-        links: { blocks: [], relates: ["d2"] },
+        id: "d2",
+        title: "d2",
+        parentId: "c",
+        depth: 1,
+        status: "done",
+        links: { blocks: [], relates: ["g2"] },
       }),
+      issue({ id: "g1", title: "g1", parentId: "d1", depth: 2 }),
+      issue({ id: "g2", title: "g2", parentId: "d1", depth: 2 }),
     ];
 
     const graph = buildFocusGraph(issues, "c", 5);

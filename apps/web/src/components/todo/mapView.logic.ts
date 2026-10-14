@@ -24,7 +24,13 @@ const FOCUS_OVERFLOW_HEIGHT = 28;
 const TRAVERSE_HOPS = 3;
 const RENDER_HOPS = 2;
 const WIDE_RING_NODE_COUNT = 5;
+const FOCUS_NODE_CAP = 7;
 const CLOSED_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
+const DROP_CLASS_RANK = { cancelled: 0, done: 1, followOn: 2, open: 3 } as const;
+const CLOSED_DROP_CLASS: Readonly<Record<string, DropClass>> = {
+  cancelled: "cancelled",
+  done: "done",
+};
 const EDGE_KIND_RANK: Record<MapEdgeKind, number> = { tree: 0, blocks: 1, relates: 2 };
 const RING_GAPS = {
   TD: { betweenRings: 36, withinRing: 12 },
@@ -42,6 +48,8 @@ const ANCHOR_SIDES = {
 } as const;
 
 type FocusOrientation = "TD" | "LR";
+
+type DropClass = keyof typeof DROP_CLASS_RANK;
 
 export type FocusAnchor = "top" | "bottom" | "left" | "right";
 
@@ -204,10 +212,96 @@ function walkFromFocus(index: FocusIndex, centreId: string): FocusReach {
   return { hopById, discoveredVia, edges, hidden };
 }
 
-function ringsByHop(reach: FocusReach): Array<Array<string>> {
+function dropClassOf(issue: TodoIssue, index: FocusIndex): DropClass {
+  const closedClass = CLOSED_DROP_CLASS[issue.status];
+  if (closedClass !== undefined) return closedClass;
+  const everyNeighbourClosed = neighbourIds(issue, index).every((id) => {
+    const neighbour = index.byId.get(id);
+    return neighbour === undefined || id === issue.id || CLOSED_STATUSES.has(neighbour.status);
+  });
+  return everyNeighbourClosed ? "followOn" : "open";
+}
+
+function protectedIds(
+  index: FocusIndex,
+  reach: FocusReach,
+  centreId: string,
+  drawn: ReadonlySet<string>,
+): Set<string> {
+  const isOpenFirstHop = (id: string): boolean =>
+    reach.hopById.get(id) === 1 && !CLOSED_STATUSES.has(index.byId.get(id)!.status);
+  return new Set([...drawn].filter((id) => id === centreId || isOpenFirstHop(id)));
+}
+
+function dropOrder(
+  index: FocusIndex,
+  reach: FocusReach,
+  droppable: ReadonlyArray<string>,
+): Array<string> {
+  const rankById = new Map(
+    droppable.map((id) => [id, DROP_CLASS_RANK[dropClassOf(index.byId.get(id)!, index)]] as const),
+  );
+  const hopOf = (id: string): number => reach.hopById.get(id)!;
+  const updatedOf = (id: string): string => index.byId.get(id)!.updated;
+  return [...droppable].sort(
+    (left, right) =>
+      rankById.get(left)! - rankById.get(right)! ||
+      hopOf(right) - hopOf(left) ||
+      compareIds(updatedOf(left), updatedOf(right)) ||
+      compareIds(left, right),
+  );
+}
+
+function drawnLinks(edges: ReadonlyArray<FocusEdgeDraft>): Map<string, Array<string>> {
+  const links = new Map<string, Array<string>>();
+  for (const edge of edges) {
+    appendTo(links, edge.from, edge.to);
+    appendTo(links, edge.to, edge.from);
+  }
+  return links;
+}
+
+function dropOrphans(
+  kept: Set<string>,
+  links: ReadonlyMap<string, ReadonlyArray<string>>,
+  protectedSet: ReadonlySet<string>,
+): void {
+  let removedAny = true;
+  while (removedAny) {
+    removedAny = false;
+    for (const id of kept) {
+      const hasKeptLink = (links.get(id) ?? []).some((other) => kept.has(other));
+      if (protectedSet.has(id) || hasKeptLink) continue;
+      kept.delete(id);
+      removedAny = true;
+    }
+  }
+}
+
+function capDrawnIds(
+  index: FocusIndex,
+  reach: FocusReach,
+  centreId: string,
+  maxNodes: number,
+): ReadonlySet<string> {
+  const kept = new Set(
+    [...reach.hopById].filter(([, hop]) => hop <= RENDER_HOPS).map(([id]) => id),
+  );
+  const protectedSet = protectedIds(index, reach, centreId, kept);
+  const links = drawnLinks(reach.edges);
+  const droppable = [...kept].filter((id) => !protectedSet.has(id));
+  for (const id of dropOrder(index, reach, droppable)) {
+    if (kept.size <= maxNodes) break;
+    if (!kept.delete(id)) continue;
+    dropOrphans(kept, links, protectedSet);
+  }
+  return kept;
+}
+
+function ringsByHop(reach: FocusReach, drawn: ReadonlySet<string>): Array<Array<string>> {
   const rings: Array<Array<string>> = [];
   for (const [id, hop] of reach.hopById) {
-    if (hop > RENDER_HOPS) continue;
+    if (!drawn.has(id)) continue;
     const ring = rings[hop];
     if (ring === undefined) rings[hop] = [id];
     else ring.push(id);
@@ -297,16 +391,22 @@ function edgeAnchors(
     : { fromAnchor: sides.withinRing.towardEarlier, toAnchor: sides.withinRing.towardLater };
 }
 
-export function buildFocusGraph(issues: ReadonlyArray<TodoIssue>, centreId: string): FocusGraph {
+export function buildFocusGraph(
+  issues: ReadonlyArray<TodoIssue>,
+  centreId: string,
+  maxNodes = FOCUS_NODE_CAP,
+): FocusGraph {
   const index = indexIssues(issues);
   if (!index.byId.has(centreId)) return EMPTY_FOCUS_GRAPH;
   const reach = walkFromFocus(index, centreId);
-  const rings = ringsByHop(reach);
+  const drawn = capDrawnIds(index, reach, centreId, maxNodes);
+  const hidden = reach.hopById.size - drawn.size;
+  const rings = ringsByHop(reach, drawn);
   const orientation = rings.some((ring) => ring.length > WIDE_RING_NODE_COUNT) ? "LR" : "TD";
   const ringSizes: Array<Array<Size>> = rings.map((ring) =>
     ring.map(() => ({ width: FOCUS_NODE_WIDTH, height: FOCUS_NODE_HEIGHT })),
   );
-  if (reach.hidden > 0) {
+  if (hidden > 0) {
     ringSizes.push([{ width: FOCUS_NODE_WIDTH, height: FOCUS_OVERFLOW_HEIGHT }]);
   }
   const { rects, layout } = layoutRings(ringSizes, orientation);
@@ -316,12 +416,14 @@ export function buildFocusGraph(issues: ReadonlyArray<TodoIssue>, centreId: stri
     ),
   );
   const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
-  const edges = reach.edges.map((draft) => ({
-    ...draft,
-    ...edgeAnchors(nodesById.get(draft.from)!, nodesById.get(draft.to)!, orientation),
-  }));
-  const overflow = reach.hidden > 0 ? rects[rings.length]![0]! : null;
-  return { orientation, nodes, edges, hidden: reach.hidden, overflow, layout };
+  const edges = reach.edges
+    .filter((draft) => drawn.has(draft.from) && drawn.has(draft.to))
+    .map((draft) => ({
+      ...draft,
+      ...edgeAnchors(nodesById.get(draft.from)!, nodesById.get(draft.to)!, orientation),
+    }));
+  const overflow = hidden > 0 ? rects[rings.length]![0]! : null;
+  return { orientation, nodes, edges, hidden, overflow, layout };
 }
 
 export function mapTitleLines(title: string, maxChars = 26): Array<string> {
