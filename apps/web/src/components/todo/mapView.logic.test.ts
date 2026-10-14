@@ -589,6 +589,25 @@ describe("focus graph node cap", () => {
     assert.deepEqual(nodeIds(graph), ["c", "A", "a-odd"]);
   });
 
+  it("drops open second-hop tickets oldest first, and one with no updated stamp before any dated one", () => {
+    const dated = (id: string, updated: string): TodoIssue =>
+      issue({ id, title: id, parentId: "A", depth: 2, updated });
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      issue({ id: "A", title: "A", parentId: "c", depth: 1 }),
+      dated("g1", "2026-08-01T00:00:00.000Z"),
+      dated("g2", "2026-09-05T00:00:00.000Z"),
+      dated("g3", ""),
+    ];
+
+    const dropsUndated = buildFocusGraph(issues, "c", 4);
+    const dropsOldestNext = buildFocusGraph(issues, "c", 3);
+
+    assert.deepEqual(nodeIds(dropsUndated), ["c", "A", "g1", "g2"]);
+    assert.deepEqual(nodeIds(dropsOldestNext), ["c", "A", "g2"]);
+    assert.equal(dropsOldestNext.hidden, 2);
+  });
+
   it("chooses top-down or left-right from the rings left after the cap", () => {
     const issues = [
       issue({ id: "c", title: "c" }),

@@ -123,7 +123,7 @@ const EMPTY_FOCUS_GRAPH: FocusGraph = {
   layout: { width: 0, height: 0 },
 };
 
-const compareIds = (left: string, right: string): number =>
+const compareStrings = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
 function appendTo(map: Map<string, Array<string>>, key: string, value: string): void {
@@ -136,7 +136,7 @@ function appendTo(map: Map<string, Array<string>>, key: string, value: string): 
 }
 
 function indexIssues(issues: ReadonlyArray<TodoIssue>): FocusIndex {
-  const sorted = [...issues].sort((left, right) => compareIds(left.id, right.id));
+  const sorted = [...issues].sort((left, right) => compareStrings(left.id, right.id));
   const childrenOf = new Map<string, Array<string>>();
   const blockersOf = new Map<string, Array<string>>();
   for (const issue of sorted) {
@@ -237,8 +237,8 @@ function dropOrder(
     (left, right) =>
       rankById.get(left)! - rankById.get(right)! ||
       hopOf(right) - hopOf(left) ||
-      compareIds(updatedOf(left), updatedOf(right)) ||
-      compareIds(left, right),
+      compareStrings(updatedOf(left), updatedOf(right)) ||
+      compareStrings(left, right),
   );
 }
 
@@ -256,16 +256,10 @@ function dropOrphans(
   links: ReadonlyMap<string, ReadonlyArray<string>>,
   protectedSet: ReadonlySet<string>,
 ): void {
-  let removedAny = true;
-  while (removedAny) {
-    removedAny = false;
-    for (const id of kept) {
-      const hasKeptLink = (links.get(id) ?? []).some((other) => kept.has(other));
-      if (protectedSet.has(id) || hasKeptLink) continue;
-      kept.delete(id);
-      removedAny = true;
-    }
-  }
+  const hasKeptLink = (id: string): boolean =>
+    (links.get(id) ?? []).some((other) => kept.has(other));
+  const orphans = [...kept].filter((id) => !protectedSet.has(id) && !hasKeptLink(id));
+  for (const id of orphans) kept.delete(id);
 }
 
 function capDrawnIds(
@@ -298,7 +292,7 @@ function ringsByHop(reach: FocusReach, drawn: ReadonlySet<string>): Array<Array<
   }
   const rank = (id: string): number => EDGE_KIND_RANK[reach.discoveredVia.get(id) ?? "tree"];
   return rings.map((ring) =>
-    ring.sort((left, right) => rank(left) - rank(right) || compareIds(left, right)),
+    ring.sort((left, right) => rank(left) - rank(right) || compareStrings(left, right)),
   );
 }
 
