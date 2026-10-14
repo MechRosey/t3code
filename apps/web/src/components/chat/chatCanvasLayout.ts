@@ -22,12 +22,13 @@ const GAP = 12;
 // Minimum space between chat and the workspace card. Chat stays centered while
 // the card fits beside it with this much room.
 export const DETAILS_CARD_CLEARANCE = 32;
+export const CHAT_CANVAS_LANE_PADDING = 48;
 
 /** Pure geometry shared by the conversation, composer, workspace card, and floating preview. */
 export function resolveChatCanvasLayout({
   container,
   preview,
-  padding = 48,
+  padding = CHAT_CANVAS_LANE_PADDING,
   maxChatWidth = 768,
   minChatWidth = 640,
   composerHeight = 0,
