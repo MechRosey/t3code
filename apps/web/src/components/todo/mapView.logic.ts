@@ -25,12 +25,11 @@ const TRAVERSE_HOPS = 3;
 const RENDER_HOPS = 2;
 const WIDE_RING_NODE_COUNT = 5;
 const FOCUS_NODE_CAP = 7;
-const CLOSED_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
-const DROP_CLASS_RANK = { cancelled: 0, done: 1, followOn: 2, open: 3 } as const;
-const CLOSED_DROP_CLASS: Readonly<Record<string, DropClass>> = {
-  cancelled: "cancelled",
-  done: "done",
-};
+const DROP_CLASS_RANK = { cancelled: 0, done: 1, open: 2 } as const;
+const CLOSED_DROP_CLASS: ReadonlyMap<string, DropClass> = new Map<string, DropClass>([
+  ["cancelled", "cancelled"],
+  ["done", "done"],
+]);
 const EDGE_KIND_RANK: Record<MapEdgeKind, number> = { tree: 0, blocks: 1, relates: 2 };
 const RING_GAPS = {
   TD: { betweenRings: 36, withinRing: 12 },
@@ -209,15 +208,9 @@ function walkFromFocus(index: FocusIndex, centreId: string): FocusReach {
   return { hopById, discoveredVia, edges };
 }
 
-function dropClassOf(issue: TodoIssue, index: FocusIndex): DropClass {
-  const closedClass = CLOSED_DROP_CLASS[issue.status];
-  if (closedClass !== undefined) return closedClass;
-  const everyNeighbourClosed = neighbourIds(issue, index).every((id) => {
-    const neighbour = index.byId.get(id);
-    return neighbour === undefined || id === issue.id || CLOSED_STATUSES.has(neighbour.status);
-  });
-  return everyNeighbourClosed ? "followOn" : "open";
-}
+const isClosed = (status: string): boolean => CLOSED_DROP_CLASS.has(status);
+
+const dropClassOf = (issue: TodoIssue): DropClass => CLOSED_DROP_CLASS.get(issue.status) ?? "open";
 
 function protectedIds(
   index: FocusIndex,
@@ -226,7 +219,7 @@ function protectedIds(
   drawn: ReadonlySet<string>,
 ): Set<string> {
   const isOpenFirstHop = (id: string): boolean =>
-    reach.hopById.get(id) === 1 && !CLOSED_STATUSES.has(index.byId.get(id)!.status);
+    reach.hopById.get(id) === 1 && !isClosed(index.byId.get(id)!.status);
   return new Set([...drawn].filter((id) => id === centreId || isOpenFirstHop(id)));
 }
 
@@ -236,7 +229,7 @@ function dropOrder(
   droppable: ReadonlyArray<string>,
 ): Array<string> {
   const rankById = new Map(
-    droppable.map((id) => [id, DROP_CLASS_RANK[dropClassOf(index.byId.get(id)!, index)]] as const),
+    droppable.map((id) => [id, DROP_CLASS_RANK[dropClassOf(index.byId.get(id)!)]] as const),
   );
   const hopOf = (id: string): number => reach.hopById.get(id)!;
   const updatedOf = (id: string): string => index.byId.get(id)!.updated;
@@ -345,7 +338,7 @@ function layoutRings(
 function hasOpenChild(id: string, index: FocusIndex): boolean {
   return (index.childrenOf.get(id) ?? []).some((childId) => {
     const child = index.byId.get(childId);
-    return child !== undefined && !CLOSED_STATUSES.has(child.status);
+    return child !== undefined && !isClosed(child.status);
   });
 }
 
