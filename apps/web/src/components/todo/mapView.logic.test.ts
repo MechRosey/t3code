@@ -556,6 +556,39 @@ describe("focus graph node cap", () => {
     assert.deepEqual(graph.edges.map((edge) => edge.key).toSorted(), ["c|d2", "c|o1", "d2|g2"]);
   });
 
+  it("ranks a second-hop ticket reached by a one-sided relates link as open, not a follow-on", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      issue({
+        id: "A",
+        title: "A",
+        parentId: "c",
+        depth: 1,
+        links: { blocks: [], relates: ["z-related"] },
+      }),
+      issue({ id: "g-child", title: "g-child", parentId: "A", depth: 2 }),
+      issue({ id: "z-related", title: "z-related" }),
+    ];
+
+    const graph = buildFocusGraph(issues, "c", 3);
+
+    assert.deepEqual(nodeIds(graph), ["c", "A", "z-related"]);
+    assert.equal(graph.hidden, 1);
+  });
+
+  it("ranks a ticket whose status names an Object prototype member as open", () => {
+    const issues = [
+      issue({ id: "c", title: "c" }),
+      issue({ id: "A", title: "A", parentId: "c", depth: 1 }),
+      issue({ id: "d", title: "d", parentId: "A", depth: 2, status: "done" }),
+      issue({ id: "a-odd", title: "a-odd", parentId: "A", depth: 2, status: "constructor" }),
+    ];
+
+    const graph = buildFocusGraph(issues, "c", 3);
+
+    assert.deepEqual(nodeIds(graph), ["c", "A", "a-odd"]);
+  });
+
   it("chooses top-down or left-right from the rings left after the cap", () => {
     const issues = [
       issue({ id: "c", title: "c" }),
