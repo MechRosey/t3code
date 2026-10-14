@@ -78,6 +78,7 @@ const unitTestProject = {
   extends: true,
   test: {
     name: "unit",
+    css: { include: [/src[\\/]index\.css/] },
     include: ["src/**/*.test.{ts,tsx}"],
     // The web runtime suite exercises auth bootstrap, saved environments,
     // and websocket subscription lifecycles. Under the full monorepo test

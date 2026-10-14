@@ -1,7 +1,7 @@
 import type { ChatWidth } from "@t3tools/contracts/settings";
-import * as NodeFS from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
+import indexCss from "../index.css?raw";
 import {
   COMFORTABLE_TEXT_MAX_REM,
   DEFAULT_REM_PIXELS,
@@ -29,7 +29,6 @@ function panelWidthForWindow(windowWidth: number, chatWidth: ChatWidth, gitCardS
   });
 }
 
-const indexCss = NodeFS.readFileSync(new URL("../index.css", import.meta.url), "utf8");
 const COMFORTABLE_MAX_WIDTH_RULE = /--chat-content-max-width:\s*([\d.]+)rem/;
 const WIDE_MAX_WIDTH_RULE =
   /\[data-chat-width="wide"\]\s*\{[^}]*--chat-content-max-width:\s*([\d.]+)rem/;
