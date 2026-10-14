@@ -116,7 +116,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         host?.style.setProperty(RESIZABLE_WIDTH_PROPERTY, `${nextWidth}px`);
         return nextWidth;
       },
-      finish(finalWidth) {
+      finish(finalWidth, moved) {
+        if (!moved) return;
         setWidthState({ storageKey, width: finalWidth, stored: true });
         // Commit once at drag-end to avoid 60Hz localStorage writes.
         try {
