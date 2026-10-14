@@ -79,6 +79,7 @@ import {
   INITIAL_BOARD_COLUMN_REVEAL,
   revealedCardCount,
   revealMoreCards,
+  syncColumnReveal,
 } from "./boardColumnWindow.logic";
 import { shortBoardId } from "./boardCopy.logic";
 import { BoardIssuePane } from "./BoardIssuePane";
@@ -523,8 +524,12 @@ export function BoardView({
   } | null>(null);
   const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
   const [addTaskOpen, setAddTaskOpen] = useState(false);
-  const [columnReveal, setColumnReveal] = useState(INITIAL_BOARD_COLUMN_REVEAL);
-  const columnRevealKey = boardColumnRevealKey(uiState);
+  const columnRevealKey = boardColumnRevealKey({ ...uiState, root: resolvedRoot });
+  const [storedColumnReveal, setColumnReveal] = useState(() =>
+    syncColumnReveal(INITIAL_BOARD_COLUMN_REVEAL, columnRevealKey),
+  );
+  const columnReveal = syncColumnReveal(storedColumnReveal, columnRevealKey);
+  if (columnReveal !== storedColumnReveal) setColumnReveal(columnReveal);
   const revealColumnCards = useCallback(
     (status: string, mountedCount: number) =>
       setColumnReveal((prev) => revealMoreCards(prev, columnRevealKey, status, mountedCount)),

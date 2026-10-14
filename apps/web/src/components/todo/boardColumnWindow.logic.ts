@@ -21,16 +21,24 @@ export interface BoardColumnRevealSource {
   readonly tagSpec: string;
   readonly query: string;
   readonly epic: string;
+  readonly root: string | null;
 }
 
 export const INITIAL_BOARD_COLUMN_REVEAL: BoardColumnReveal = { key: "", counts: {} };
 
 export function boardColumnRevealKey(source: BoardColumnRevealSource): string {
-  return JSON.stringify([source.tag, source.sort, source.tagSpec, source.query, source.epic]);
+  return JSON.stringify([
+    source.root,
+    source.tag,
+    source.sort,
+    source.tagSpec,
+    source.query,
+    source.epic,
+  ]);
 }
 
-export function syncColumnReveal(reveal: BoardColumnReveal, _key: string): BoardColumnReveal {
-  return reveal;
+export function syncColumnReveal(reveal: BoardColumnReveal, key: string): BoardColumnReveal {
+  return reveal.key === key ? reveal : { ...INITIAL_BOARD_COLUMN_REVEAL, key };
 }
 
 export function revealedCardCount(reveal: BoardColumnReveal, key: string, status: string): number {
