@@ -8,6 +8,7 @@ import {
   boardColumnWindow,
   revealMoreCards,
   revealedCardCount,
+  syncColumnReveal,
   type BoardColumnRevealSource,
 } from "./boardColumnWindow.logic";
 
@@ -24,6 +25,7 @@ const DEFAULT_SOURCE: BoardColumnRevealSource = {
   tagSpec: "",
   query: "",
   epic: "",
+  root: "/repo/one",
 };
 
 function columnCards(count: number) {
@@ -127,6 +129,7 @@ describe("column reveal state", () => {
       { ...DEFAULT_SOURCE, tagSpec: "perf" },
       { ...DEFAULT_SOURCE, query: "abc12" },
       { ...DEFAULT_SOURCE, epic: "board" },
+      { ...DEFAULT_SOURCE, root: "/repo/two" },
     ];
 
     for (const source of changedSources) {
@@ -139,5 +142,23 @@ describe("column reveal state", () => {
       assert.equal(revealedCardCount(afterChange, changedKey, BACKLOG), BOARD_COLUMN_INITIAL_CARDS);
     }
     assert.equal(boardColumnRevealKey({ ...DEFAULT_SOURCE }), key);
+  });
+
+  it("syncColumnReveal_ReturnToAnEarlierSignature_StartsFromTheInitialSize", () => {
+    const keyA = boardColumnRevealKey(DEFAULT_SOURCE);
+    const keyB = boardColumnRevealKey({ ...DEFAULT_SOURCE, query: "abc12" });
+    const revealedUnderA = revealMoreCards(
+      syncColumnReveal(INITIAL_BOARD_COLUMN_REVEAL, keyA),
+      keyA,
+      DONE,
+      BOARD_COLUMN_INITIAL_CARDS,
+    );
+    assert.strictEqual(syncColumnReveal(revealedUnderA, keyA), revealedUnderA);
+
+    const underB = syncColumnReveal(revealedUnderA, keyB);
+    const backToA = syncColumnReveal(underB, keyA);
+
+    assert.equal(revealedCardCount(underB, keyB, DONE), BOARD_COLUMN_INITIAL_CARDS);
+    assert.equal(revealedCardCount(backToA, keyA, DONE), BOARD_COLUMN_INITIAL_CARDS);
   });
 });

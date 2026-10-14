@@ -29,6 +29,10 @@ export function boardColumnRevealKey(source: BoardColumnRevealSource): string {
   return JSON.stringify([source.tag, source.sort, source.tagSpec, source.query, source.epic]);
 }
 
+export function syncColumnReveal(reveal: BoardColumnReveal, _key: string): BoardColumnReveal {
+  return reveal;
+}
+
 export function revealedCardCount(reveal: BoardColumnReveal, key: string, status: string): number {
   if (reveal.key !== key) return BOARD_COLUMN_INITIAL_CARDS;
   return reveal.counts[status] ?? BOARD_COLUMN_INITIAL_CARDS;
