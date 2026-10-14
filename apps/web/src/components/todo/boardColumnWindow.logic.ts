@@ -25,31 +25,36 @@ export interface BoardColumnRevealSource {
 
 export const INITIAL_BOARD_COLUMN_REVEAL: BoardColumnReveal = { key: "", counts: {} };
 
-export function boardColumnRevealKey(_source: BoardColumnRevealSource): string {
-  return "";
+export function boardColumnRevealKey(source: BoardColumnRevealSource): string {
+  return JSON.stringify([source.tag, source.sort, source.tagSpec, source.query, source.epic]);
 }
 
-export function revealedCardCount(
-  _reveal: BoardColumnReveal,
-  _key: string,
-  _status: string,
-): number {
-  return BOARD_COLUMN_INITIAL_CARDS;
+export function revealedCardCount(reveal: BoardColumnReveal, key: string, status: string): number {
+  if (reveal.key !== key) return BOARD_COLUMN_INITIAL_CARDS;
+  return reveal.counts[status] ?? BOARD_COLUMN_INITIAL_CARDS;
 }
 
 export function revealMoreCards(
   reveal: BoardColumnReveal,
-  _key: string,
-  _status: string,
-  _mountedCount: number,
+  key: string,
+  status: string,
+  mountedCount: number,
 ): BoardColumnReveal {
-  return reveal;
+  const counts = reveal.key === key ? reveal.counts : {};
+  const revealed = Math.max(
+    revealedCardCount(reveal, key, status),
+    mountedCount + BOARD_COLUMN_REVEAL_STEP,
+  );
+  return { key, counts: { ...counts, [status]: revealed } };
 }
 
 export function boardColumnWindow<Card extends BoardColumnWindowCard>(
   cards: ReadonlyArray<Card>,
-  _revealed: number,
-  _selectedIssueId: string | null,
+  revealed: number,
+  selectedIssueId: string | null,
 ): BoardColumnWindow<Card> {
-  return { mounted: cards, hiddenCount: 0 };
+  const selectedIndex =
+    selectedIssueId === null ? -1 : cards.findIndex((card) => card.issue.id === selectedIssueId);
+  const mountedCount = Math.min(cards.length, Math.max(revealed, selectedIndex + 1));
+  return { mounted: cards.slice(0, mountedCount), hiddenCount: cards.length - mountedCount };
 }

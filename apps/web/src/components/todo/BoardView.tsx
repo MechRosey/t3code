@@ -72,6 +72,14 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
 import { BoardDraggableCard, BoardDragPreview } from "./BoardCard";
+import { BoardColumnMore } from "./BoardColumnMore";
+import {
+  boardColumnRevealKey,
+  boardColumnWindow,
+  INITIAL_BOARD_COLUMN_REVEAL,
+  revealedCardCount,
+  revealMoreCards,
+} from "./boardColumnWindow.logic";
 import { shortBoardId } from "./boardCopy.logic";
 import { BoardIssuePane } from "./BoardIssuePane";
 import { BoardSplitLayout, type BoardSplitDetail } from "./BoardSplitLayout";
@@ -515,6 +523,13 @@ export function BoardView({
   } | null>(null);
   const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
   const [addTaskOpen, setAddTaskOpen] = useState(false);
+  const [columnReveal, setColumnReveal] = useState(INITIAL_BOARD_COLUMN_REVEAL);
+  const columnRevealKey = boardColumnRevealKey(uiState);
+  const revealColumnCards = useCallback(
+    (status: string, mountedCount: number) =>
+      setColumnReveal((prev) => revealMoreCards(prev, columnRevealKey, status, mountedCount)),
+    [columnRevealKey],
+  );
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
   const startTurn = useAtomCommand(threadEnvironment.startTurn, {
     reportFailure: false,
@@ -1163,32 +1178,47 @@ export function BoardView({
             ) : (
               <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
                 <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
-                  {model.columns.map((column) => (
-                    <div key={column.status} className="flex w-56 shrink-0 flex-col">
-                      <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
-                        <span className="min-w-0 truncate">
-                          {column.label}
-                          <span className="ml-1 font-normal text-muted-foreground/50">
-                            {column.cards.length}
+                  {model.columns.map((column) => {
+                    const columnWindow = boardColumnWindow(
+                      column.cards,
+                      revealedCardCount(columnReveal, columnRevealKey, column.status),
+                      selectedIssue?.id ?? null,
+                    );
+                    return (
+                      <div key={column.status} className="flex w-56 shrink-0 flex-col">
+                        <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
+                          <span className="min-w-0 truncate">
+                            {column.label}
+                            <span className="ml-1 font-normal text-muted-foreground/50">
+                              {column.cards.length}
+                            </span>
                           </span>
-                        </span>
-                        {column.status === "read" || column.status === "doing" ? (
-                          <BoardActionNowTarget status={column.status} />
-                        ) : null}
+                          {column.status === "read" || column.status === "doing" ? (
+                            <BoardActionNowTarget status={column.status} />
+                          ) : null}
+                        </div>
+                        <BoardColumnCards status={column.status}>
+                          {columnWindow.mounted.map((card) => (
+                            <BoardDraggableCard
+                              key={card.issue.id}
+                              card={card}
+                              progress={progressByIssueId[card.issue.id] ?? null}
+                              selected={card.issue.id === selectedIssue?.id}
+                              onOpen={() => setSelectedIssueId(card.issue.id)}
+                            />
+                          ))}
+                          {columnWindow.hiddenCount > 0 ? (
+                            <BoardColumnMore
+                              status={column.status}
+                              mountedCount={columnWindow.mounted.length}
+                              hiddenCount={columnWindow.hiddenCount}
+                              onReveal={revealColumnCards}
+                            />
+                          ) : null}
+                        </BoardColumnCards>
                       </div>
-                      <BoardColumnCards status={column.status}>
-                        {column.cards.map((card) => (
-                          <BoardDraggableCard
-                            key={card.issue.id}
-                            card={card}
-                            progress={progressByIssueId[card.issue.id] ?? null}
-                            selected={card.issue.id === selectedIssue?.id}
-                            onOpen={() => setSelectedIssueId(card.issue.id)}
-                          />
-                        ))}
-                      </BoardColumnCards>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
               </DndContext>
