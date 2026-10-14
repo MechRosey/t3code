@@ -24,21 +24,21 @@ export interface AutoPreviewPanelWidthInput {
   readonly rowWidth: number;
   readonly chatWidth: ChatWidth;
   readonly gitCardShown: boolean;
-  readonly remPixels?: number | undefined;
+  readonly remPixels: number;
   readonly minWidth: number;
   readonly defaultWidth: number;
   readonly maxWidth: number;
 }
 
 export function resolveAutoPreviewPanelWidth(input: AutoPreviewPanelWidthInput): number {
-  const { rowWidth, chatWidth, gitCardShown, minWidth, defaultWidth, maxWidth } = input;
+  const { rowWidth, chatWidth, gitCardShown, remPixels, minWidth, defaultWidth, maxWidth } = input;
   const clamp = (width: number) => Math.max(minWidth, Math.min(maxWidth, Math.round(width)));
   if (!Number.isFinite(rowWidth) || rowWidth <= 0) return clamp(defaultWidth);
 
   const textMaxRem = CHAT_TEXT_MAX_REM_BY_WIDTH[chatWidth];
   const capBasisRem = textMaxRem ?? COMFORTABLE_TEXT_MAX_REM;
   const conversationCap =
-    capBasisRem * DEFAULT_REM_PIXELS +
+    capBasisRem * remPixels +
     CHAT_CANVAS_LANE_PADDING +
     (gitCardShown ? DETAILS_CARD_RESERVED_WIDTH : CHAT_CANVAS_LANE_PADDING);
   const widthBeyondCap = rowWidth - conversationCap;

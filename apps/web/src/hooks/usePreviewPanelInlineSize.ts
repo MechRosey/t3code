@@ -1,7 +1,7 @@
 import type { ChatWidth } from "@t3tools/contracts/settings";
 import { type RefObject, useLayoutEffect, useState } from "react";
 
-import { resolveAutoPreviewPanelWidth } from "./previewPanelAutoWidth";
+import { DEFAULT_REM_PIXELS, resolveAutoPreviewPanelWidth } from "./previewPanelAutoWidth";
 import { type ResizableWidthHandlers, useResizableWidth } from "./useResizableWidth";
 import { observeResize } from "../lib/observeResize";
 
@@ -100,6 +100,7 @@ function useViewportClampedBounds(
               rowWidth,
               chatWidth: autoChatWidth,
               gitCardShown: autoGitCardShown,
+              remPixels: readRootRemPixels(),
               minWidth: PREVIEW_PANEL_MIN_WIDTH,
               defaultWidth,
               maxWidth,
@@ -129,6 +130,11 @@ function useViewportClampedBounds(
   }, [container, hostRef, enabled, defaultWidth, autoChatWidth, autoGitCardShown]);
   return bounds;
 }
+function readRootRemPixels(): number {
+  const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(rootFontSize) && rootFontSize > 0 ? rootFontSize : DEFAULT_REM_PIXELS;
+}
+
 export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: number): number {
   const fractionCap = Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION);
   const containerCap =
