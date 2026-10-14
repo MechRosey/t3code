@@ -1215,6 +1215,7 @@ export function BoardView({
                           {columnWindow.hiddenCount > 0 ? (
                             <BoardColumnMore
                               status={column.status}
+                              label={column.label}
                               mountedCount={columnWindow.mounted.length}
                               hiddenCount={columnWindow.hiddenCount}
                               onReveal={revealColumnCards}

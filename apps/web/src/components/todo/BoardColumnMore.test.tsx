@@ -6,6 +6,7 @@ import { BoardColumnMore } from "./BoardColumnMore";
 import { BOARD_COLUMN_INITIAL_CARDS, BOARD_COLUMN_REVEAL_STEP } from "./boardColumnWindow.logic";
 
 const DONE = "done";
+const DONE_LABEL = "Done";
 const HIDDEN_TAIL = 10;
 
 let observers: TestIntersectionObserver[] = [];
@@ -34,7 +35,7 @@ function renderMore(props: {
 }): ReactTestRenderer {
   let renderer: ReactTestRenderer | undefined;
   act(() => {
-    renderer = create(<BoardColumnMore status={DONE} {...props} />, {
+    renderer = create(<BoardColumnMore status={DONE} label={DONE_LABEL} {...props} />, {
       createNodeMock: () => ({}),
     });
   });
@@ -75,6 +76,7 @@ describe("BoardColumnMore", () => {
         renderer.update(
           <BoardColumnMore
             status={DONE}
+            label={DONE_LABEL}
             mountedCount={grown}
             hiddenCount={HIDDEN_TAIL}
             onReveal={onReveal}

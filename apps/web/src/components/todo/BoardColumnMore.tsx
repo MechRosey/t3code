@@ -7,6 +7,7 @@ const BOARD_COLUMN_REVEAL_ROOT_MARGIN = "200px";
 
 export interface BoardColumnMoreProps {
   readonly status: string;
+  readonly label: string;
   readonly mountedCount: number;
   readonly hiddenCount: number;
   readonly onReveal: (status: string, mountedCount: number) => void;
@@ -14,6 +15,7 @@ export interface BoardColumnMoreProps {
 
 export function BoardColumnMore({
   status,
+  label,
   mountedCount,
   hiddenCount,
   onReveal,
@@ -26,19 +28,21 @@ export function BoardColumnMore({
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) onReveal(status, mountedCount);
       },
-      { rootMargin: BOARD_COLUMN_REVEAL_ROOT_MARGIN },
+      { root: button.parentElement, rootMargin: BOARD_COLUMN_REVEAL_ROOT_MARGIN },
     );
     observer.observe(button);
     return () => observer.disconnect();
   }, [status, mountedCount, onReveal]);
+  const nextCount = Math.min(hiddenCount, BOARD_COLUMN_REVEAL_STEP);
   return (
     <Button
       ref={ref}
       size="compact"
       variant="ghost-muted"
+      aria-label={`Show ${nextCount} more ${label} cards`}
       onClick={() => onReveal(status, mountedCount)}
     >
-      {`Show ${Math.min(hiddenCount, BOARD_COLUMN_REVEAL_STEP)} more`}
+      {`Show ${nextCount} more`}
     </Button>
   );
 }
