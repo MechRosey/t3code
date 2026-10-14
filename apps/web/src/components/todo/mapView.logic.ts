@@ -108,7 +108,6 @@ interface FocusReach {
   readonly hopById: ReadonlyMap<string, number>;
   readonly discoveredVia: ReadonlyMap<string, MapEdgeKind>;
   readonly edges: ReadonlyArray<FocusEdgeDraft>;
-  readonly hidden: number;
 }
 
 interface Size {
@@ -181,7 +180,6 @@ function walkFromFocus(index: FocusIndex, centreId: string): FocusReach {
   const discoveredVia = new Map<string, MapEdgeKind>();
   const seenPairs = new Set<string>();
   const edges: Array<FocusEdgeDraft> = [];
-  let hidden = 0;
   let frontier = [centreId];
   for (let hop = 0; hop < TRAVERSE_HOPS && frontier.length > 0; hop += 1) {
     const nextHop = hop + 1;
@@ -204,12 +202,11 @@ function walkFromFocus(index: FocusIndex, centreId: string): FocusReach {
         if (!isNew) continue;
         hopById.set(neighbourId, nextHop);
         if (nextHop < TRAVERSE_HOPS) next.push(neighbourId);
-        else hidden += 1;
       }
     }
     frontier = next;
   }
-  return { hopById, discoveredVia, edges, hidden };
+  return { hopById, discoveredVia, edges };
 }
 
 function dropClassOf(issue: TodoIssue, index: FocusIndex): DropClass {
