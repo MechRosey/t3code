@@ -87,9 +87,7 @@ function useViewportClampedBounds(
     const row = container ?? (enabled ? hostRef?.current?.parentElement : null) ?? null;
     // Measure before first paint: the persisted width must be clamped against
     // the row on the initial render, not one observer tick later (the panel
-    // would flash over-wide on every mount). Only the derived cap is stored: the
-    // row resizes every frame of a sidebar drag, but the cap rarely moves, and an
-    // unchanged cap skips re-rendering the panel's owner.
+    // would flash over-wide on every mount).
     const measure = () => {
       const rowWidth = row?.clientWidth;
       const maxWidth = getPreviewPanelMaxWidth(window.innerWidth, rowWidth);
