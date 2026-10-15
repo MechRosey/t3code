@@ -1,6 +1,6 @@
 import { DragOverlay, useDndContext, useDraggable, useSensor, useSensors } from "@dnd-kit/core";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useCallback } from "react";
+import { memo } from "react";
 import type { TodoIssue } from "@t3tools/contracts";
 import {
   cardHueStyle,
@@ -18,6 +18,18 @@ import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
 
 const BOARD_CARD_BLOCKER_CAP = 4;
+
+const BOARD_DRAG_ACTIVATION_DISTANCE = 6;
+
+const ignoreDragSensorEvent = () => {};
+
+const BOARD_DRAG_SENSOR_OPTIONS = {
+  distance: BOARD_DRAG_ACTIVATION_DISTANCE,
+  onAttach: ignoreDragSensorEvent,
+  onFinish: ignoreDragSensorEvent,
+};
+
+const ignoreCardOpen = () => {};
 
 export function CopyIssueIdButton({
   issue,
@@ -55,21 +67,21 @@ export function CopyIssueIdButton({
   );
 }
 
-export function BoardCard({
+export const BoardCard = memo(function BoardCard({
   card,
   onOpen,
   progress,
   selected = false,
 }: {
   readonly card: BoardCardViewModel;
-  readonly onOpen: () => void;
+  readonly onOpen: (issueId: string) => void;
   readonly progress: BoardDispatchProgress | null;
   readonly selected?: boolean;
 }) {
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={() => onOpen(card.issue.id)}
       aria-current={selected ? true : undefined}
       style={cardHueStyle(card.issue)}
       className={cn(
@@ -174,16 +186,16 @@ export function BoardCard({
       </div>
     </button>
   );
-}
+});
 
-export function BoardDraggableCard({
+export const BoardDraggableCard = memo(function BoardDraggableCard({
   card,
   onOpen,
   progress,
   selected,
 }: {
   readonly card: BoardCardViewModel;
-  readonly onOpen: () => void;
+  readonly onOpen: (issueId: string) => void;
   readonly progress: BoardDispatchProgress | null;
   readonly selected: boolean;
 }) {
@@ -204,18 +216,10 @@ export function BoardDraggableCard({
       />
     </div>
   );
-}
+});
 
 export function useBoardDragSensors() {
-  const attachDragSensor = useCallback(() => {}, []);
-  const finishCardDrag = useCallback(() => {}, []);
-  return useSensors(
-    useSensor(SidebarPointerSensor, {
-      distance: 6,
-      onAttach: attachDragSensor,
-      onFinish: finishCardDrag,
-    }),
-  );
+  return useSensors(useSensor(SidebarPointerSensor, BOARD_DRAG_SENSOR_OPTIONS));
 }
 
 export function BoardDragPreview({
@@ -235,7 +239,11 @@ export function BoardDragPreview({
   return (
     <DragOverlay dropAnimation={null}>
       <div className="cursor-grabbing">
-        <BoardCard card={card} progress={progressByIssueId[issueId] ?? null} onOpen={() => {}} />
+        <BoardCard
+          card={card}
+          progress={progressByIssueId[issueId] ?? null}
+          onOpen={ignoreCardOpen}
+        />
       </div>
     </DragOverlay>
   );

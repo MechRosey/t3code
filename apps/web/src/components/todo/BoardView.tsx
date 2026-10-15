@@ -1199,7 +1199,7 @@ export function BoardView({
                               card={card}
                               progress={progressByIssueId[card.issue.id] ?? null}
                               selected={card.issue.id === selectedIssue?.id}
-                              onOpen={() => setSelectedIssueId(card.issue.id)}
+                              onOpen={setSelectedIssueId}
                             />
                           ))}
                           {columnWindow.hiddenCount > 0 ? (

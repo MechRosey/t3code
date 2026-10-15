@@ -77,7 +77,7 @@ describe("board card copy affordance", () => {
     try {
       const copyButton = renderer.root.find(isCopyButton);
       const cardButton = renderer.root.find(
-        (node) => node.type === "button" && node.props.onClick === onOpen,
+        (node) => node.type === "button" && !isCopyButton(node),
       );
       expect(cardButton.findAll((node) => node === copyButton)).toHaveLength(0);
       await act(async () => copyButton.props.onClick());

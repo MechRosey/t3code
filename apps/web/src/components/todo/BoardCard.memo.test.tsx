@@ -1,23 +1,23 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { DndContext } from "@dnd-kit/core";
-import type { TodoIssue } from "@t3tools/contracts";
+import { DndContext, type UseDraggableArguments } from "@dnd-kit/core";
 import type { BoardCardViewModel } from "@t3tools/client-runtime/state/todo-board-view";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { BoardDraggableCard, useBoardDragSensors } from "./BoardCard";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
 
+const CARD_DRAG_ID_PREFIX = "card:";
+
 const renderedIssueIds = vi.hoisted((): Array<string> => []);
 
-vi.mock("@t3tools/client-runtime/state/todo-board-view", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@t3tools/client-runtime/state/todo-board-view")>();
+vi.mock("@dnd-kit/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dnd-kit/core")>();
   return {
     ...actual,
-    cardHueStyle: (issue: TodoIssue) => {
-      renderedIssueIds.push(issue.id);
-      return actual.cardHueStyle(issue);
+    useDraggable: (args: UseDraggableArguments) => {
+      renderedIssueIds.push(String(args.id).slice(CARD_DRAG_ID_PREFIX.length));
+      return actual.useDraggable(args);
     },
   };
 });
