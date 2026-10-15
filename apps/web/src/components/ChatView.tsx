@@ -7784,8 +7784,9 @@ export default function ChatView(props: ChatViewProps) {
           : "Compacting is unavailable right now"
     : null;
   // Tokens a stale Claude session would re-read on its next turn. While set,
-  // the composer shows a Compact chip. Held queues and multi-model sends
-  // never compact first, so the offer hides for them.
+  // the composer shows a Compact chip, off by default; turning the chip on
+  // makes Enter compact first. Held queues and multi-model sends never
+  // compact first, so the offer hides for them.
   const resumeCompactionTokens =
     activeContextWindow &&
     !resumeCompactionPermanentlyDismissed &&
@@ -7803,7 +7804,8 @@ export default function ChatView(props: ChatViewProps) {
     })
       ? activeContextWindow.usedTokens
       : null;
-  // A send that starts its turn clears its thread's entry; a failed send keeps it for the retry.
+  // Threads whose Compact chip is turned on. A send that starts its turn
+  // clears its thread's entry; a failed send keeps it for the retry.
   const [compactThreadKeys, setCompactThreadKeys] = useState<ReadonlySet<string>>(() => new Set());
   const keepFullHistory = !compactThreadKeys.has(routeThreadKey);
   const setKeepFullHistory = useCallback((threadKey: string, keep: boolean) => {
@@ -9357,6 +9359,9 @@ export default function ChatView(props: ChatViewProps) {
     );
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
+    // A stale Claude session compacts before this message so the turn does not re-read the
+    // old history. The message queues behind the /compact run, since steering into it is
+    // rejected.
     const compactBeforeSend =
       resumeCompactionTokens !== null &&
       !keepFullHistory &&
