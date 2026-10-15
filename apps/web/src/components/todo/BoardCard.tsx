@@ -1,5 +1,6 @@
-import { DragOverlay, useDraggable, useDndContext } from "@dnd-kit/core";
+import { DragOverlay, useDndContext, useDraggable, useSensor, useSensors } from "@dnd-kit/core";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { useCallback } from "react";
 import type { TodoIssue } from "@t3tools/contracts";
 import {
   cardHueStyle,
@@ -9,6 +10,7 @@ import {
 
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { cn } from "~/lib/utils";
+import { SidebarPointerSensor } from "../Sidebar.pointer";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
@@ -201,6 +203,18 @@ export function BoardDraggableCard({
         className="absolute end-1 top-1 z-10 opacity-0 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100 data-[copied=true]:opacity-100"
       />
     </div>
+  );
+}
+
+export function useBoardDragSensors() {
+  const attachDragSensor = useCallback(() => {}, []);
+  const finishCardDrag = useCallback(() => {}, []);
+  return useSensors(
+    useSensor(SidebarPointerSensor, {
+      distance: 6,
+      onAttach: attachDragSensor,
+      onFinish: finishCardDrag,
+    }),
   );
 }
 

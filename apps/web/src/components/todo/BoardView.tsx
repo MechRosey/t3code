@@ -17,7 +17,6 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
 import { DndContext, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
   Maximize2Icon,
@@ -52,7 +51,6 @@ import { todoBoardMutate, todoBoardSubscribe } from "../../state/todoBoard";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
-import { SidebarPointerSensor } from "../Sidebar.pointer";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -71,7 +69,7 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
-import { BoardDraggableCard, BoardDragPreview } from "./BoardCard";
+import { BoardDraggableCard, BoardDragPreview, useBoardDragSensors } from "./BoardCard";
 import { BoardColumnMore } from "./BoardColumnMore";
 import {
   boardColumnRevealKey,
@@ -941,15 +939,7 @@ export function BoardView({
     setConfirmDispatch({ issue, mode: action.mode });
   };
 
-  const attachDragSensor = useCallback(() => {}, []);
-  const finishCardDrag = useCallback(() => {}, []);
-  const dndSensors = useSensors(
-    useSensor(SidebarPointerSensor, {
-      distance: 6,
-      onAttach: attachDragSensor,
-      onFinish: finishCardDrag,
-    }),
-  );
+  const dndSensors = useBoardDragSensors();
 
   const showMissing = boardLoadState === "unavailable";
 
