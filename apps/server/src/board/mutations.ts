@@ -52,7 +52,7 @@ export const assertStatusChildrenGuard = (
   force: boolean | undefined,
 ): void => {
   const canonical = canonicalStatus(targetStatus);
-  if (!["done", "cancelled"].includes(canonical)) return;
+  if (canonical !== "cancelled") return;
   if (force) return;
   const open = directChildren.filter((child) => !["done", "cancelled"].includes(child.status));
   if (open.length > 0) {

@@ -98,11 +98,11 @@ it.layer(NodeServices.layer)((it) => {
       }),
     );
 
-    it("refuses closing a parent with open direct children unless forced", () => {
+    it("refuses cancelling a parent with open direct children unless forced", () => {
       expect(() =>
         assertStatusChildrenGuard(
           "e594b",
-          "done",
+          "cancelled",
           [
             { id: "0fef4", status: "backlog" },
             { id: "x", status: "done" },
@@ -111,12 +111,12 @@ it.layer(NodeServices.layer)((it) => {
         ),
       ).toThrow(BoardRuleError);
       expect(() =>
-        assertStatusChildrenGuard("e594b", "done", [{ id: "0fef4", status: "backlog" }], true),
+        assertStatusChildrenGuard("e594b", "cancelled", [{ id: "0fef4", status: "backlog" }], true),
       ).not.toThrow();
       expect(() =>
         assertStatusChildrenGuard(
           "e594b",
-          "done",
+          "cancelled",
           [
             { id: "0fef4", status: "done" },
             { id: "x", status: "cancelled" },
@@ -192,13 +192,6 @@ it.layer(NodeServices.layer)((it) => {
       expect(refusal).toThrow(
         "Cannot set e594b to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
       );
-    });
-
-    it("lets force override the refusal to cancel a parent with open children", () => {
-      const openChildren = [{ id: "0fef4-rollup-grandchild", status: "backlog" }];
-      expect(() =>
-        assertStatusChildrenGuard("e594b", "cancelled", openChildren, true),
-      ).not.toThrow();
     });
 
     it("lets a parent go to done with open children", () => {

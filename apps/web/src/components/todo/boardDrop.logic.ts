@@ -19,13 +19,18 @@ const BOARD_DISPATCH_STATUSES: ReadonlySet<string> = new Set(["read", "doing"]);
 
 const BOARD_ROLLUP_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 
+const BOARD_DELEGATED_COLUMN = "delegated";
+
+const BOARD_DELEGATED_STORED_STATUS = "done";
+
 export function resolveBoardDropAction(
   sourceStatus: string,
-  targetStatus: string,
+  droppedColumn: string,
   speed: BoardDropSpeed,
 ): BoardDropAction {
+  const targetStatus =
+    droppedColumn === BOARD_DELEGATED_COLUMN ? BOARD_DELEGATED_STORED_STATUS : droppedColumn;
   if (sourceStatus === targetStatus) return { kind: "noop" };
-  if (targetStatus === "delegated") return { kind: "noop" };
   if (speed === "status-only") return { kind: "status", status: targetStatus };
   if (BOARD_DISPATCH_STATUSES.has(targetStatus)) {
     return { kind: "dispatch", mode: targetStatus as BoardDropActionMode };
