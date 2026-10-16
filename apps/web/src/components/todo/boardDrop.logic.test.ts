@@ -78,10 +78,17 @@ describe("drop to action mapping", () => {
     });
   });
 
-  it("treats a Delegated column drop as a no-op at every speed", () => {
+  it("maps a Delegated column drop to a done status write at every speed", () => {
     for (const speed of ["confirm", "now", "status-only"] as const) {
-      assertAction(resolveBoardDropAction("backlog", "delegated", speed), { kind: "noop" });
-      assertAction(resolveBoardDropAction("doing", "delegated", speed), { kind: "noop" });
+      assertAction(resolveBoardDropAction("backlog", "delegated", speed), {
+        kind: "status",
+        status: "done",
+      });
+      assertAction(resolveBoardDropAction("doing", "delegated", speed), {
+        kind: "status",
+        status: "done",
+      });
+      assertAction(resolveBoardDropAction("done", "delegated", speed), { kind: "noop" });
     }
   });
 

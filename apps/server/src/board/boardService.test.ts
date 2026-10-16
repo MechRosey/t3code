@@ -367,27 +367,26 @@ describe("TodoBoard service", () => {
     );
 
     it.effect(
-      "refuses to close a parent with open children and archives only closed subtrees",
+      "refuses to cancel a parent with open children, lets it go done, and archives only closed subtrees",
       () =>
         Effect.gen(function* () {
           const { boardDir, cwd } = yield* installBoard("board-before");
           yield* setBoardTime("2026-09-20 12:00");
           const board = yield* TodoBoard.TodoBoard;
           const guarded = yield* board
-            .mutate({ action: "status", cwd, id: "e594b-rollup-child", status: "done" })
+            .mutate({ action: "status", cwd, id: "e594b-rollup-child", status: "cancelled" })
             .pipe(Effect.flip);
           expect(guarded.failure).toBe("open_children");
           expect(guarded.message).toBe(
-            "Cannot set e594b-rollup-child to done - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
+            "Cannot set e594b-rollup-child to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
           );
-          const forced = yield* board.mutate({
+          const delegated = yield* board.mutate({
             action: "status",
             cwd,
             id: "e594b-rollup-child",
             status: "done",
-            force: true,
           });
-          expect(forced.issue.status).toBe("done");
+          expect(delegated.issue.status).toBe("done");
           const openArchive = yield* board
             .mutate({ action: "archive", cwd, id: "e594b-rollup-child" })
             .pipe(Effect.flip);

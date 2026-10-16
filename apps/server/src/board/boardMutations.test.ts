@@ -184,14 +184,28 @@ it.layer(NodeServices.layer)((it) => {
       const refusal = () =>
         assertStatusChildrenGuard(
           "e594b",
-          "done",
+          "cancelled",
           [{ id: "0fef4-rollup-grandchild", status: "backlog" }],
           undefined,
         );
       expect(refusal).toThrow(BoardRuleError);
       expect(refusal).toThrow(
-        "Cannot set e594b to done - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
+        "Cannot set e594b to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
       );
+    });
+
+    it("lets force override the refusal to cancel a parent with open children", () => {
+      const openChildren = [{ id: "0fef4-rollup-grandchild", status: "backlog" }];
+      expect(() =>
+        assertStatusChildrenGuard("e594b", "cancelled", openChildren, true),
+      ).not.toThrow();
+    });
+
+    it("lets a parent go to done with open children", () => {
+      const openChildren = [{ id: "0fef4-rollup-grandchild", status: "backlog" }];
+      expect(() =>
+        assertStatusChildrenGuard("e594b", "done", openChildren, undefined),
+      ).not.toThrow();
     });
   });
 
