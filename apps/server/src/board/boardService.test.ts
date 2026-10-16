@@ -380,6 +380,14 @@ describe("TodoBoard service", () => {
           expect(guarded.message).toBe(
             "Cannot set e594b-rollup-child to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.",
           );
+          const forcedCancel = yield* board.mutate({
+            action: "status",
+            cwd,
+            id: "e594b-rollup-child",
+            status: "cancelled",
+            force: true,
+          });
+          expect(forcedCancel.issue.status).toBe("cancelled");
           const delegated = yield* board.mutate({
             action: "status",
             cwd,
