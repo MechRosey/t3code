@@ -1,3 +1,4 @@
+import { TodoBoardError } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
@@ -8,6 +9,8 @@ import {
   composeBoardDispatchPrompt,
   composeBoardNewTaskPrompt,
   composeBoardNewTaskTitle,
+  composeBoardRefusalDescription,
+  isOpenChildrenRefusal,
   resolveBoardDropAction,
   type BoardDropAction,
 } from "./boardDrop.logic";
@@ -92,11 +95,58 @@ describe("drop to action mapping", () => {
     }
   });
 
+  it("maps a force drop to a status write that carries force", () => {
+    assertAction(resolveBoardDropAction("doing", "cancelled", "force"), {
+      kind: "status",
+      status: "cancelled",
+      force: true,
+    });
+    assertAction(resolveBoardDropAction("cancelled", "cancelled", "force"), { kind: "noop" });
+  });
+
+  it("never carries force on a plain drop", () => {
+    for (const speed of ["confirm", "now", "status-only"] as const) {
+      assertAction(resolveBoardDropAction("doing", "cancelled", speed), {
+        kind: "status",
+        status: "cancelled",
+      });
+    }
+  });
+
   it("treats a same-column drop as a no-op at every speed", () => {
     for (const speed of ["confirm", "now", "status-only"] as const) {
       assertAction(resolveBoardDropAction("done", "done", speed), { kind: "noop" });
       assertAction(resolveBoardDropAction("read", "read", speed), { kind: "noop" });
     }
+  });
+});
+
+const OPEN_CHILDREN_MESSAGE =
+  "Cannot set e594b to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]\nUse -Force to override.";
+
+describe("open children refusal handling", () => {
+  it("recognises the open children refusal and nothing else", () => {
+    assert.isTrue(
+      isOpenChildrenRefusal(
+        new TodoBoardError({ failure: "open_children", message: OPEN_CHILDREN_MESSAGE }),
+      ),
+    );
+    assert.isFalse(
+      isOpenChildrenRefusal(new TodoBoardError({ failure: "conflict", message: "stale write" })),
+    );
+    assert.isFalse(isOpenChildrenRefusal(new Error(OPEN_CHILDREN_MESSAGE)));
+    assert.isFalse(isOpenChildrenRefusal(undefined));
+  });
+
+  it("drops the CLI flag hint but keeps the open children list", () => {
+    assert.equal(
+      composeBoardRefusalDescription(OPEN_CHILDREN_MESSAGE),
+      "Cannot set e594b to cancelled - it has open children:\n  0fef4-rollup-grandchild [backlog]",
+    );
+  });
+
+  it("leaves a message without the hint untouched", () => {
+    assert.equal(composeBoardRefusalDescription("stale write"), "stale write");
   });
 });
 
