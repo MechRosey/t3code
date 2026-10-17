@@ -667,7 +667,7 @@ export function BoardView({
 
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
-    await applyStatusDrop(issue, status);
+    await applyStatus(issue, status);
   };
 
   const addComment = async (issue: TodoIssue, text: string, by: string | undefined) => {
@@ -715,7 +715,7 @@ export function BoardView({
     void mutateTag(issue, tag, true);
   };
 
-  const applyStatusDrop = async (issue: TodoIssue, status: string, force?: true) => {
+  const applyStatus = async (issue: TodoIssue, status: string, force?: true) => {
     const result = await mutate({
       environmentId,
       input: { action: "status", cwd, id: issue.id, status, force },
@@ -735,11 +735,12 @@ export function BoardView({
           : "The board rejected the change.",
       ...(offerForce
         ? {
+            timeout: 0,
             actionProps: {
               children: "Cancel anyway",
               onClick: () => {
                 toastManager.close(toastId);
-                void applyStatusDrop(issue, status, true);
+                void applyStatus(issue, status, true);
               },
             },
           }
@@ -963,7 +964,7 @@ export function BoardView({
     const action = resolveBoardDropAction(issue.status, target, speed);
     if (action.kind === "noop") return;
     if (action.kind === "status") {
-      void applyStatusDrop(issue, action.status, action.force);
+      void applyStatus(issue, action.status, action.force);
       return;
     }
     if (speed === "now") {
