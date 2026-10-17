@@ -24,6 +24,7 @@ import {
   NetworkIcon,
   PlusIcon,
   TagIcon,
+  TriangleAlertIcon,
   XIcon,
   ZapIcon,
 } from "lucide-react";
@@ -90,6 +91,8 @@ import {
   composeBoardDispatchPrompt,
   composeBoardNewTaskPrompt,
   composeBoardNewTaskTitle,
+  composeBoardRefusalDescription,
+  isOpenChildrenRefusal,
   resolveBoardDropAction,
   type BoardDispatchProgress,
   type BoardDropActionMode,
@@ -183,12 +186,22 @@ function BoardColumnCards({
   );
 }
 
-function BoardActionNowTarget({ status }: { readonly status: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `dispatch:${status}` });
+function BoardDropChip({
+  dropId,
+  ariaLabel,
+  icon,
+  label,
+}: {
+  readonly dropId: string;
+  readonly ariaLabel: string;
+  readonly icon: ReactNode;
+  readonly label: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: dropId });
   return (
     <span
       ref={setNodeRef}
-      aria-label="Drop a card here to action it right away"
+      aria-label={ariaLabel}
       className={cn(
         "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[.55rem] font-normal normal-case tracking-normal",
         isOver
@@ -196,9 +209,31 @@ function BoardActionNowTarget({ status }: { readonly status: string }) {
           : "bg-muted text-muted-foreground",
       )}
     >
-      <ZapIcon className="size-2.5" />
-      Action now
+      {icon}
+      {label}
     </span>
+  );
+}
+
+function BoardActionNowTarget({ status }: { readonly status: string }) {
+  return (
+    <BoardDropChip
+      dropId={`dispatch:${status}`}
+      ariaLabel="Drop a card here to action it right away"
+      icon={<ZapIcon className="size-2.5" />}
+      label="Action now"
+    />
+  );
+}
+
+function BoardForceTarget({ status }: { readonly status: string }) {
+  return (
+    <BoardDropChip
+      dropId={`force:${status}`}
+      ariaLabel="Drop a card here to move it even though it has open children"
+      icon={<TriangleAlertIcon className="size-2.5" />}
+      label="Force"
+    />
   );
 }
 
@@ -632,23 +667,7 @@ export function BoardView({
 
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
-    const result = await mutate({
-      environmentId,
-      input: { action: "status", cwd, id: issue.id, status },
-    });
-    if (result._tag !== "Failure") {
-      await rollupAfterStatus(issue, status);
-      return;
-    }
-    const failure = squashAtomCommandFailure(result);
-    toastManager.add({
-      type: "error",
-      title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
-      description:
-        failure instanceof Error && failure.message.length > 0
-          ? failure.message
-          : "The board rejected the change.",
-    });
+    await applyStatusDrop(issue, status);
   };
 
   const addComment = async (issue: TodoIssue, text: string, by: string | undefined) => {
@@ -696,23 +715,35 @@ export function BoardView({
     void mutateTag(issue, tag, true);
   };
 
-  const applyStatusDrop = async (issue: TodoIssue, status: string) => {
+  const applyStatusDrop = async (issue: TodoIssue, status: string, force?: true) => {
     const result = await mutate({
       environmentId,
-      input: { action: "status", cwd, id: issue.id, status },
+      input: { action: "status", cwd, id: issue.id, status, force },
     });
     if (result._tag !== "Failure") {
       await rollupAfterStatus(issue, status);
       return;
     }
     const failure = squashAtomCommandFailure(result);
-    toastManager.add({
+    const offerForce = force === undefined && isOpenChildrenRefusal(failure);
+    const toastId = toastManager.add({
       type: "error",
       title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
       description:
         failure instanceof Error && failure.message.length > 0
-          ? failure.message
+          ? composeBoardRefusalDescription(failure.message)
           : "The board rejected the change.",
+      ...(offerForce
+        ? {
+            actionProps: {
+              children: "Cancel anyway",
+              onClick: () => {
+                toastManager.close(toastId);
+                void applyStatusDrop(issue, status, true);
+              },
+            },
+          }
+        : {}),
     });
   };
 
@@ -924,12 +955,15 @@ export function BoardView({
     } else if (overId.startsWith("dispatch:")) {
       target = overId.slice("dispatch:".length);
       speed = "now";
+    } else if (overId.startsWith("force:")) {
+      target = overId.slice("force:".length);
+      speed = "force";
     }
     if (target === null) return;
     const action = resolveBoardDropAction(issue.status, target, speed);
     if (action.kind === "noop") return;
     if (action.kind === "status") {
-      void applyStatusDrop(issue, action.status);
+      void applyStatusDrop(issue, action.status, action.force);
       return;
     }
     if (speed === "now") {
@@ -1190,6 +1224,9 @@ export function BoardView({
                           </span>
                           {column.status === "read" || column.status === "doing" ? (
                             <BoardActionNowTarget status={column.status} />
+                          ) : null}
+                          {column.status === "cancelled" ? (
+                            <BoardForceTarget status={column.status} />
                           ) : null}
                         </div>
                         <BoardColumnCards status={column.status}>

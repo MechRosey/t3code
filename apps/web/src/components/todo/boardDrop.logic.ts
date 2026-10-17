@@ -1,10 +1,13 @@
+import { TodoBoardError } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+
 export type BoardDropActionMode = "read" | "doing";
 
-export type BoardDropSpeed = "confirm" | "now" | "status-only";
+export type BoardDropSpeed = "confirm" | "now" | "status-only" | "force";
 
 export type BoardDropAction =
   | { readonly kind: "noop" }
-  | { readonly kind: "status"; readonly status: string }
+  | { readonly kind: "status"; readonly status: string; readonly force?: true }
   | { readonly kind: "dispatch"; readonly mode: BoardDropActionMode };
 
 export const BOARD_PIPELINE_STEPS = [
@@ -31,11 +34,24 @@ export function resolveBoardDropAction(
   const targetStatus =
     droppedColumn === BOARD_DELEGATED_COLUMN ? BOARD_DELEGATED_STORED_STATUS : droppedColumn;
   if (sourceStatus === targetStatus) return { kind: "noop" };
+  if (speed === "force") return { kind: "status", status: targetStatus, force: true };
   if (speed === "status-only") return { kind: "status", status: targetStatus };
   if (BOARD_DISPATCH_STATUSES.has(targetStatus)) {
     return { kind: "dispatch", mode: targetStatus as BoardDropActionMode };
   }
   return { kind: "status", status: targetStatus };
+}
+
+const isTodoBoardError = Schema.is(TodoBoardError);
+
+const OPEN_CHILDREN_FORCE_HINT = /\nUse -Force to override\.$/;
+
+export function isOpenChildrenRefusal(failure: unknown): boolean {
+  return isTodoBoardError(failure) && failure.failure === "open_children";
+}
+
+export function composeBoardRefusalDescription(message: string): string {
+  return message.replace(OPEN_CHILDREN_FORCE_HINT, "");
 }
 
 export function composeBoardDispatchPrompt(
