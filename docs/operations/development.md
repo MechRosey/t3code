@@ -146,6 +146,12 @@ vp run dist:desktop:linux
 vp run dist:desktop:win
 ```
 
+Run `vp i` first after pulling or merging. The artifact bundles whatever is in `node_modules`, so a
+stale install builds without error but can crash at launch. Build 298 shipped with `effect@4.0.2`
+against 4.0.4 source and exited at startup with `crypto.randomUUIDv4 is not a function`. When an
+installed build does nothing on launch, read the last `desktop.app` span in
+`<T3 home>/userdata/logs/desktop.trace.ndjson`.
+
 DMGs default to the host architecture. Use `--arch` to choose another target and `--keep-stage`
 to retain packaging files for inspection. Run `vp run dist:desktop:artifact --help` for other
 options.
