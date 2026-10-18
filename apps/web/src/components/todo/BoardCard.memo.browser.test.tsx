@@ -1,8 +1,8 @@
-import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { act, type ComponentProps } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { DndContext, type UseDraggableArguments } from "@dnd-kit/core";
 import type { BoardCardViewModel } from "@t3tools/client-runtime/state/todo-board-view";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { BoardDraggableCard, useBoardDragSensors } from "./BoardCard";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
@@ -100,67 +100,57 @@ function takeRenderedIssueIds(): Array<string> {
   return renderedIssueIds.splice(0);
 }
 
+let root: Root;
+let container: HTMLDivElement;
+
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+async function renderColumn(props: Omit<ComponentProps<typeof BoardStyleColumn>, "cards">) {
+  await act(() => root.render(<BoardStyleColumn cards={CARDS} {...props} />));
+}
+
 describe("board card re-render cost", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    await act(() => root.unmount());
+    container.remove();
     renderedIssueIds.splice(0);
     vi.unstubAllGlobals();
   });
 
-  it("BoardDraggableCard_ParentRerenders_RerendersOnlyCardsWhoseOwnPropsChanged", () => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.stubGlobal("window", {});
+  it("BoardDraggableCard_ParentRerenders_RerendersOnlyCardsWhoseOwnPropsChanged", async () => {
     const [first, second, third] = CARDS.map((card) => card.issue.id);
-    let renderer: ReactTestRenderer | undefined;
-    act(() => {
-      renderer = create(
-        <BoardStyleColumn
-          cards={CARDS}
-          selectedIssueId={null}
-          progressByIssueId={NO_PROGRESS}
-          unrelatedRenderToken={0}
-        />,
-      );
+    await renderColumn({
+      selectedIssueId: null,
+      progressByIssueId: NO_PROGRESS,
+      unrelatedRenderToken: 0,
     });
-    try {
-      expect(takeRenderedIssueIds().toSorted()).toEqual([first, second, third].toSorted());
+    expect(takeRenderedIssueIds().toSorted()).toEqual([first, second, third].toSorted());
+    expect(container.querySelectorAll("button")).toHaveLength(CARDS.length * 2);
 
-      act(() =>
-        renderer!.update(
-          <BoardStyleColumn
-            cards={CARDS}
-            selectedIssueId={null}
-            progressByIssueId={NO_PROGRESS}
-            unrelatedRenderToken={1}
-          />,
-        ),
-      );
-      expect(takeRenderedIssueIds()).toEqual([]);
+    await renderColumn({
+      selectedIssueId: null,
+      progressByIssueId: NO_PROGRESS,
+      unrelatedRenderToken: 1,
+    });
+    expect(takeRenderedIssueIds()).toEqual([]);
 
-      act(() =>
-        renderer!.update(
-          <BoardStyleColumn
-            cards={CARDS}
-            selectedIssueId={second!}
-            progressByIssueId={NO_PROGRESS}
-            unrelatedRenderToken={2}
-          />,
-        ),
-      );
-      expect(takeRenderedIssueIds()).toEqual([second]);
+    await renderColumn({
+      selectedIssueId: second!,
+      progressByIssueId: NO_PROGRESS,
+      unrelatedRenderToken: 2,
+    });
+    expect(takeRenderedIssueIds()).toEqual([second]);
 
-      act(() =>
-        renderer!.update(
-          <BoardStyleColumn
-            cards={CARDS}
-            selectedIssueId={second!}
-            progressByIssueId={{ [third!]: "starting" }}
-            unrelatedRenderToken={3}
-          />,
-        ),
-      );
-      expect(takeRenderedIssueIds()).toEqual([third]);
-    } finally {
-      act(() => renderer!.unmount());
-    }
+    await renderColumn({
+      selectedIssueId: second!,
+      progressByIssueId: { [third!]: "starting" },
+      unrelatedRenderToken: 3,
+    });
+    expect(takeRenderedIssueIds()).toEqual([third]);
   });
 });
