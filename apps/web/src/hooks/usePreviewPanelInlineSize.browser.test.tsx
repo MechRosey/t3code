@@ -24,7 +24,7 @@ let commitCount = 0;
 let frame: FrameRequestCallback | undefined;
 
 function Probe({ chatWidth, gitCardShown }: { chatWidth?: ChatWidth; gitCardShown?: boolean }) {
-  const { width } = usePreviewPanelInlineSize(undefined, {
+  const { width, observeRow } = usePreviewPanelInlineSize({
     container: row,
     autoWidth:
       chatWidth === undefined ? undefined : { chatWidth, gitCardShown: gitCardShown ?? false },
@@ -32,7 +32,7 @@ function Probe({ chatWidth, gitCardShown }: { chatWidth?: ChatWidth; gitCardShow
   useLayoutEffect(() => {
     commitCount += 1;
   });
-  return <output>{width}</output>;
+  return <output ref={(host) => (host === null ? undefined : observeRow(host))}>{width}</output>;
 }
 
 const panelWidth = () => Number(container.querySelector("output")!.textContent);

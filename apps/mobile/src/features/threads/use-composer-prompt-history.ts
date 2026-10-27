@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import {
   buildComposerPromptHistoryEntries,
   stepComposerPromptHistory,
   type ComposerPromptHistoryMessage,
   type ComposerPromptHistoryPosition,
-} from "@t3tools/shared/composerPromptHistory";
+} from "@t3tools/client-runtime/composer-prompt-history";
 import {
   isComposerPromptHistoryRecallBlocked,
   resolveComposerPromptHistoryButtons,
@@ -20,23 +20,13 @@ export function useComposerPromptHistory(input: {
   readonly hasContextImports: boolean;
   readonly onRecall: (prompt: string) => void;
 }) {
-  const [position, setPositionState] = useState<ComposerPromptHistoryPosition | null>(null);
-  const positionRef = useRef<ComposerPromptHistoryPosition | null>(null);
-  const messagesRef = useRef(input.messages);
-  messagesRef.current = input.messages;
-  const ownerKeyRef = useRef(input.ownerKey);
-
-  useEffect(() => {
-    if (ownerKeyRef.current === input.ownerKey) return;
-    ownerKeyRef.current = input.ownerKey;
-    positionRef.current = null;
-    setPositionState(null);
-  }, [input.ownerKey]);
-
-  const setPosition = useCallback((next: ComposerPromptHistoryPosition | null) => {
-    positionRef.current = next;
-    setPositionState(next);
-  }, []);
+  const [state, setState] = useState<{
+    readonly ownerKey: string;
+    readonly position: ComposerPromptHistoryPosition | null;
+  }>({ ownerKey: input.ownerKey, position: null });
+  const position = state.ownerKey === input.ownerKey ? state.position : null;
+  const setPosition = (next: ComposerPromptHistoryPosition | null) =>
+    setState({ ownerKey: input.ownerKey, position: next });
 
   const blocked = isComposerPromptHistoryRecallBlocked({
     voiceBusy: input.voiceBusy,
@@ -45,32 +35,26 @@ export function useComposerPromptHistory(input: {
     hasContextImports: input.hasContextImports,
   });
 
-  const step = useCallback(
-    (direction: "backward" | "forward") => {
-      if (blocked) return;
-      const result = stepComposerPromptHistory({
-        direction,
-        entries: buildComposerPromptHistoryEntries(messagesRef.current),
-        position: positionRef.current,
-        currentPrompt: input.draftMessage,
-      });
-      if (!result) return;
-      setPosition(result.position);
-      if (result.prompt !== input.draftMessage) input.onRecall(result.prompt);
-    },
-    [blocked, input.draftMessage, input.onRecall, setPosition],
-  );
+  const step = (direction: "backward" | "forward") => {
+    if (blocked) return;
+    const result = stepComposerPromptHistory({
+      direction,
+      entries: buildComposerPromptHistoryEntries(input.messages),
+      position,
+      currentPrompt: input.draftMessage,
+    });
+    if (!result) return;
+    setPosition(result.position);
+    if (result.prompt !== input.draftMessage) input.onRecall(result.prompt);
+  };
 
-  const reset = useCallback(() => setPosition(null), [setPosition]);
-
-  const recallOlder = useCallback(() => step("backward"), [step]);
-  const recallNewer = useCallback(() => step("forward"), [step]);
+  const reset = () => setPosition(null);
+  const recallOlder = () => step("backward");
+  const recallNewer = () => step("forward");
 
   const browsing = position !== null && position.recalled === input.draftMessage;
-  const hasRecallableText = useMemo(
-    () =>
-      input.messages.some((message) => message.role === "user" && message.text.trim().length > 0),
-    [input.messages],
+  const hasRecallableText = input.messages.some(
+    (message) => message.role === "user" && message.text.trim().length > 0,
   );
 
   return {

@@ -275,9 +275,10 @@ describe("TodoBoard.regenerate with the real skill script", () => {
         }
       }).pipe(
         Effect.provide(
-          TodoBoard.layer
-            .pipe(Layer.provideMerge(NodeServices.layer))
-            .pipe(Layer.merge(Layer.succeed(HostProcess.HomeDirectory, "C:\\no-skill-home"))),
+          TodoBoard.layer.pipe(
+            Layer.provideMerge(NodeServices.layer),
+            Layer.merge(Layer.succeed(HostProcess.HomeDirectory, "C:\\no-skill-home")),
+          ),
         ),
       ),
     { timeout: 120_000 },

@@ -1,5 +1,5 @@
 import type { MenuAction } from "@react-native-menu/menu";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { ThreadListToolbar } from "./ThreadListToolbar";
 import type { HomeHeaderProps } from "./HomeHeader.types";
@@ -13,59 +13,56 @@ function checkedMenuState(checked: boolean) {
 export function HomeHeader(props: HomeHeaderProps) {
   const hasCustomListOptions =
     props.selectedEnvironmentId !== null || props.selectedProjectKey !== null;
-  const menuActions = useMemo<MenuAction[]>(
-    () => [
-      {
-        id: "environment",
-        title: "Environment",
-        subactions: [
+  const menuActions: MenuAction[] = [
+    {
+      id: "environment",
+      title: "Environment",
+      subactions: [
+        {
+          id: "environment:all",
+          title: "All environments",
+          state: checkedMenuState(props.selectedEnvironmentId === null),
+        },
+        ...props.environments.map((environment) => ({
+          id: `environment:${environment.environmentId}`,
+          title: environment.label,
+          state: checkedMenuState(props.selectedEnvironmentId === environment.environmentId),
+        })),
+      ],
+    },
+    ...(props.projects.length === 0
+      ? []
+      : ([
           {
-            id: "environment:all",
-            title: "All environments",
-            state: checkedMenuState(props.selectedEnvironmentId === null),
-          },
-          ...props.environments.map((environment) => ({
-            id: `environment:${environment.environmentId}`,
-            title: environment.label,
-            state: checkedMenuState(props.selectedEnvironmentId === environment.environmentId),
-          })),
-        ],
-      },
-      ...(props.projects.length === 0
-        ? []
-        : ([
-            {
-              id: "project",
-              title: "Project",
-              subactions: [
-                {
-                  id: "project:all",
-                  title: "All projects",
-                  state: checkedMenuState(props.selectedProjectKey === null),
-                },
-                ...props.projects.map((project) => ({
-                  id: `project:${project.key}`,
-                  title: project.label,
-                  state: checkedMenuState(props.selectedProjectKey === project.key),
-                })),
-              ],
-            },
-          ] satisfies MenuAction[])),
-      ...(props.projects.length === 0 || props.onOpenProjectBoard === undefined
-        ? []
-        : ([
-            {
-              id: "board",
-              title: "Board",
-              subactions: props.projects.map((project) => ({
-                id: `board:${project.key}`,
+            id: "project",
+            title: "Project",
+            subactions: [
+              {
+                id: "project:all",
+                title: "All projects",
+                state: checkedMenuState(props.selectedProjectKey === null),
+              },
+              ...props.projects.map((project) => ({
+                id: `project:${project.key}`,
                 title: project.label,
+                state: checkedMenuState(props.selectedProjectKey === project.key),
               })),
-            },
-          ] satisfies MenuAction[])),
-    ],
-    [props.environments, props.projects, props.selectedEnvironmentId, props.selectedProjectKey],
-  );
+            ],
+          },
+        ] satisfies MenuAction[])),
+    ...(props.projects.length === 0 || props.onOpenProjectBoard === undefined
+      ? []
+      : ([
+          {
+            id: "board",
+            title: "Board",
+            subactions: props.projects.map((project) => ({
+              id: `board:${project.key}`,
+              title: project.label,
+            })),
+          },
+        ] satisfies MenuAction[])),
+  ];
   const handleMenuAction = useCallback(
     (event: { nativeEvent: { event: string } }) => {
       const id = event.nativeEvent.event;
@@ -118,7 +115,6 @@ export function HomeHeader(props: HomeHeaderProps) {
         filterActions={menuActions}
         filterCustomized={hasCustomListOptions}
         onFilterAction={handleMenuAction}
-        onOpenSettings={props.onOpenSettings}
         onOpenEnvironments={props.onOpenEnvironments}
       />
     </>

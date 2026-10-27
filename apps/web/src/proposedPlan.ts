@@ -51,8 +51,8 @@ function sanitizePlanFileSegment(input: string): string {
   return sanitized.length > 0 ? sanitized : "plan";
 }
 
-export { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/shared/composerPromptHistory";
-import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/shared/composerPromptHistory";
+export { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/client-runtime/composer-prompt-history";
+import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "@t3tools/client-runtime/composer-prompt-history";
 
 export function buildPlanImplementationPrompt(planMarkdown: string): string {
   return `${PLAN_IMPLEMENTATION_PROMPT_PREFIX}${planMarkdown.trim()}`;

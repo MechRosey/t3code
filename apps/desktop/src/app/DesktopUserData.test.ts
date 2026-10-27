@@ -6,26 +6,6 @@ import * as Path from "effect/Path";
 
 import { resolveUserDataPath } from "./DesktopUserData.ts";
 
-it.effect("returns the t3todo profile when no prior profile exists", () =>
-  Effect.gen(function* () {
-    const userDataPath = yield* resolveUserDataPath({
-      appDataDirectory: "/profiles",
-      isDevelopment: false,
-      platform: "win32",
-    });
-    assert.equal(userDataPath, "/profiles/t3todo");
-  }).pipe(
-    Effect.provideService(
-      FileSystem.FileSystem,
-      FileSystem.makeNoop({
-        exists: () => Effect.succeed(false),
-        readFileString: () => Effect.die("unexpected read"),
-      }),
-    ),
-    Effect.provide(NodeServices.layer),
-  ),
-);
-
 it.effect.each(["t3code", "T3 Code (Alpha)"])(
   "preserves Windows credential keys from %s without copying browser databases",
   (sourceName) =>

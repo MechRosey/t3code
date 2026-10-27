@@ -180,7 +180,7 @@ export const make = Effect.gen(function* () {
 
   const existsDirectory = (candidate: string): Effect.Effect<boolean> =>
     Effect.map(statInfo(candidate), (info) => info.type === "Directory").pipe(
-      Effect.catch(() => Effect.succeed(false)),
+      Effect.orElseSucceed(() => false),
     );
 
   const readPointer = (dir: string): Effect.Effect<string | null> =>
@@ -193,7 +193,7 @@ export const make = Effect.gen(function* () {
       } catch {
         return Effect.succeed(null);
       }
-    }).pipe(Effect.catch(() => Effect.succeed(null)));
+    }).pipe(Effect.orElseSucceed(() => null));
 
   const resolveRoot = (cwd: string): Effect.Effect<string, TodoBoardError> =>
     Effect.gen(function* () {
@@ -373,7 +373,7 @@ export const make = Effect.gen(function* () {
         Effect.mapError((cause) =>
           toError("operation_failed", `Failed to list ${archiveRoot}`, cause),
         ),
-        Effect.catch(() => Effect.succeed([] as Array<string>)),
+        Effect.orElseSucceed(() => [] as Array<string>),
       );
       const groupDirs: Array<TodoArchiveGroup> = [];
       for (const dirName of groupNames.toSorted()) {
@@ -421,17 +421,17 @@ export const make = Effect.gen(function* () {
       : Effect.fail(toError("issue_not_found", `Issue not found: ${id}`));
   };
 
-  const rebuildFromDisk = (root: string, id: string) =>
-    Effect.gen(function* () {
-      const snapshot = yield* readBoardAt(root);
-      const issue = snapshot.issues.find((entry) => entry.id === id);
-      if (!issue) {
-        return yield* Effect.fail(
-          toError("issue_not_found", `Issue not found after mutation: ${id}`),
-        );
-      }
-      return issue;
-    });
+  const rebuildFromDisk = Effect.fn("TodoBoard.rebuildFromDisk")(function* (
+    root: string,
+    id: string,
+  ) {
+    const snapshot = yield* readBoardAt(root);
+    const issue = snapshot.issues.find((entry) => entry.id === id);
+    if (!issue) {
+      return yield* toError("issue_not_found", `Issue not found after mutation: ${id}`);
+    }
+    return issue;
+  });
 
   const mutateAt = (
     root: string,
@@ -514,16 +514,12 @@ export const make = Effect.gen(function* () {
         case "rollup": {
           const childSegments = target.rel.split("/");
           if (childSegments.length < 2) {
-            return yield* Effect.fail(
-              toError("no_parent", `Issue ${input.id} has no parent issue.`),
-            );
+            return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
           }
           const parentRel = childSegments.slice(0, -1).join("/");
           const parentDir = dirs.find((dir) => dir.rel === parentRel);
           if (!parentDir) {
-            return yield* Effect.fail(
-              toError("no_parent", `Issue ${input.id} has no parent issue.`),
-            );
+            return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
           }
           const child = yield* readMarker(root, target);
           const childParsed = parseIssue(child.text, target.name);
@@ -691,14 +687,25 @@ export const make = Effect.gen(function* () {
     );
 
   return TodoBoard.of({
-    read: (input) => Effect.flatMap(resolveRoot(input.cwd), (root) => readBoardAt(root)),
-    readArchive: (input) => Effect.flatMap(resolveRoot(input.cwd), (root) => readArchiveAt(root)),
-    mutate: (input) =>
-      Effect.flatMap(resolveRoot(input.cwd), (root) => withLock(root, mutateAt(root, input))),
-    regenerate: (input) =>
-      Effect.flatMap(resolveRoot(input.cwd), (root) =>
-        withLock(root, regenerateAt(root, input.target)),
-      ),
+    read: Effect.fn("TodoBoard.read")(function* (input: { readonly cwd: string }) {
+      const root = yield* resolveRoot(input.cwd);
+      return yield* readBoardAt(root);
+    }),
+    readArchive: Effect.fn("TodoBoard.readArchive")(function* (input: { readonly cwd: string }) {
+      const root = yield* resolveRoot(input.cwd);
+      return yield* readArchiveAt(root);
+    }),
+    mutate: Effect.fn("TodoBoard.mutate")(function* (input: TodoBoardMutateInput) {
+      const root = yield* resolveRoot(input.cwd);
+      return yield* withLock(root, mutateAt(root, input));
+    }),
+    regenerate: Effect.fn("TodoBoard.regenerate")(function* (input: {
+      readonly cwd: string;
+      readonly target: TodoBoardRegenerateTarget;
+    }) {
+      const root = yield* resolveRoot(input.cwd);
+      return yield* withLock(root, regenerateAt(root, input.target));
+    }),
     stream: (input) =>
       Stream.unwrap(
         Effect.gen(function* () {

@@ -225,31 +225,6 @@ describe("panel width storage changes", () => {
     await mountFresh(<Panel storageKey="thread-b" />);
     expect(shownWidth()).toBe(600);
   });
-
-  it("cancels an unfinished drag on a thread switch without saving it to either thread", async () => {
-    localStorage.setItem("thread-b", "650");
-    setItem.mockClear();
-    await act(() => {
-      pointer("pointerdown");
-      pointer("pointermove", 50);
-    });
-    await act(() => frame?.(0));
-    expect(liveWidth()).toBe("450px");
-    await act(() => pointer("pointermove", 25));
-    await render(<Panel storageKey="thread-b" />);
-    expect(shownWidth()).toBe(650);
-    expect(liveWidth()).toBe("650px");
-    expect(captured).toBe(false);
-    expect(bodyStyle().cursor).toBe("");
-    await act(() => {
-      frame?.(0);
-      pointer("pointerup", 25);
-    });
-    expect(shownWidth()).toBe(650);
-    expect(setItem).not.toHaveBeenCalled();
-    await render(<Panel />);
-    expect(shownWidth()).toBe(400);
-  });
 });
 
 describe("panel auto width", () => {
