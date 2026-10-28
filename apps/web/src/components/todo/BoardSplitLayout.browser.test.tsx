@@ -1,7 +1,6 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import { BoardSplitLayout, type BoardSplitDetail } from "./BoardSplitLayout";
 import type { BoardSplitMode } from "./boardSplit.logic";
 import type { BoardDrawerMode } from "./boardUiState";
@@ -11,31 +10,11 @@ const NARROW_CONTAINER = 400;
 
 const ISSUE_PANE_WIDTH_STORAGE_KEY = "t3code:board-issue-drawer-width";
 
-let root: Root;
-let container: HTMLDivElement;
-
-function mount() {
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-}
-
-async function unmount() {
-  await act(() => root.unmount());
-  container.remove();
-}
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+function freshStorage(entries: ReadonlyArray<readonly [string, string]> = []): Disposable {
   localStorage.clear();
-  mount();
-});
-
-afterEach(async () => {
-  await unmount();
-  localStorage.clear();
-  vi.unstubAllGlobals();
-});
+  for (const [key, value] of entries) localStorage.setItem(key, value);
+  return { [Symbol.dispose]: () => localStorage.clear() };
+}
 
 function layout(options: {
   readonly drawerMode: BoardDrawerMode;
@@ -58,8 +37,9 @@ async function renderLayout(options: {
   readonly detail: BoardSplitDetail | null;
   readonly onClose: () => void;
 }) {
+  const container = document.createElement("div");
   container.style.width = `${options.containerWidth}px`;
-  await act(() => root.render(layout(options)));
+  return render(layout(options), { container });
 }
 
 function detailRecordingMode(modes: Array<BoardSplitMode>): BoardSplitDetail {
@@ -72,21 +52,25 @@ function detailRecordingMode(modes: Array<BoardSplitMode>): BoardSplitDetail {
   };
 }
 
-const aside = () => container.querySelector("aside");
+const aside = (container: HTMLElement) => container.querySelector("aside");
 
-function boardWrapper(): HTMLElement {
+function boardWrapper(container: HTMLElement): HTMLElement {
   const boardButton = [...container.querySelectorAll("button")].find(
     (element) => element.textContent === "Board card",
   );
   return boardButton!.parentElement!;
 }
 
-const modalNodes = () => container.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+const modalNodes = (container: HTMLElement) =>
+  container.querySelectorAll('[role="dialog"], [aria-modal="true"]');
 
-async function pressEscape(options: {
-  readonly isComposing?: boolean;
-  readonly prevented?: boolean;
-}) {
+async function pressEscape(
+  container: HTMLElement,
+  options: {
+    readonly isComposing?: boolean;
+    readonly prevented?: boolean;
+  },
+) {
   const target = container.querySelector("aside p")!;
   const stopper = (event: Event) => event.preventDefault();
   if (options.prevented) target.addEventListener("keydown", stopper);
@@ -105,9 +89,10 @@ async function pressEscape(options: {
 
 describe("BoardSplitLayout", () => {
   it("BoardSplitLayout_WideContainerWithIssueOpen_ShowsNonModalPaneBesideInteractiveBoard", async () => {
+    using _storage = freshStorage();
     const modes: Array<BoardSplitMode> = [];
     const onClose = vi.fn();
-    await renderLayout({
+    await using screen = await renderLayout({
       containerWidth: WIDE_CONTAINER,
       drawerMode: "normal",
       detail: detailRecordingMode(modes),
@@ -115,24 +100,26 @@ describe("BoardSplitLayout", () => {
     });
 
     expect(modes.at(-1)).toBe("split");
-    expect(boardWrapper().hidden).toBe(false);
-    expect(modalNodes()).toHaveLength(0);
-    expect(aside()!.querySelectorAll('[role="separator"]').length).toBeGreaterThan(0);
+    expect(boardWrapper(screen.container).hidden).toBe(false);
+    expect(modalNodes(screen.container)).toHaveLength(0);
+    expect(aside(screen.container)!.querySelectorAll('[role="separator"]').length).toBeGreaterThan(
+      0,
+    );
 
-    await pressEscape({ prevented: true });
+    await pressEscape(screen.container, { prevented: true });
     expect(onClose).not.toHaveBeenCalled();
 
-    const composingEscape = await pressEscape({ isComposing: true });
+    const composingEscape = await pressEscape(screen.container, { isComposing: true });
     expect(onClose).not.toHaveBeenCalled();
     expect(composingEscape.defaultPrevented).toBe(false);
 
-    const escape = await pressEscape({});
+    const escape = await pressEscape(screen.container, {});
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(escape.defaultPrevented).toBe(true);
 
-    await act(() => root.render(layout({ detail: null, drawerMode: "normal", onClose })));
-    expect(aside()).toBeNull();
-    expect(boardWrapper().hidden).toBe(false);
+    await screen.rerender(layout({ detail: null, drawerMode: "normal", onClose }));
+    expect(aside(screen.container)).toBeNull();
+    expect(boardWrapper(screen.container).hidden).toBe(false);
   });
 
   it("BoardSplitLayout_NarrowContainerOrFullDrawer_StacksPaneOverHiddenBoard", async () => {
@@ -141,8 +128,9 @@ describe("BoardSplitLayout", () => {
       { containerWidth: WIDE_CONTAINER, drawerMode: "full" },
     ];
     for (const { containerWidth, drawerMode } of cases) {
+      using _storage = freshStorage();
       const modes: Array<BoardSplitMode> = [];
-      await renderLayout({
+      await using screen = await renderLayout({
         containerWidth,
         drawerMode,
         detail: detailRecordingMode(modes),
@@ -150,12 +138,9 @@ describe("BoardSplitLayout", () => {
       });
 
       expect(modes.at(-1)).toBe("stacked");
-      expect(boardWrapper().hidden).toBe(true);
-      expect(aside()!.querySelectorAll('[role="separator"]')).toHaveLength(0);
-      expect(modalNodes()).toHaveLength(0);
-
-      await unmount();
-      mount();
+      expect(boardWrapper(screen.container).hidden).toBe(true);
+      expect(aside(screen.container)!.querySelectorAll('[role="separator"]')).toHaveLength(0);
+      expect(modalNodes(screen.container)).toHaveLength(0);
     }
   });
 
@@ -168,31 +153,28 @@ describe("BoardSplitLayout", () => {
       { storedEntries: [], expectedWidth: 448 },
     ];
     for (const { storedEntries, expectedWidth } of cases) {
-      localStorage.clear();
-      for (const [key, value] of storedEntries) localStorage.setItem(key, value);
-      await renderLayout({
+      using _storage = freshStorage(storedEntries);
+      await using screen = await renderLayout({
         containerWidth: WIDE_CONTAINER,
         drawerMode: "normal",
         detail: detailRecordingMode([]),
         onClose: () => {},
       });
 
-      expect(aside()!.style.width).toBe(`${expectedWidth}px`);
-
-      await unmount();
-      mount();
+      expect(aside(screen.container)!.style.width).toBe(`${expectedWidth}px`);
     }
   });
 
   it("BoardSplitLayout_NarrowContainerWithNothingOpen_ShowsBoard", async () => {
-    await renderLayout({
+    using _storage = freshStorage();
+    await using screen = await renderLayout({
       containerWidth: NARROW_CONTAINER,
       drawerMode: "full",
       detail: null,
       onClose: () => {},
     });
 
-    expect(boardWrapper().hidden).toBe(false);
-    expect(aside()).toBeNull();
+    expect(boardWrapper(screen.container).hidden).toBe(false);
+    expect(aside(screen.container)).toBeNull();
   });
 });

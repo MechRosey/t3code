@@ -1,9 +1,9 @@
-import { act, type ComponentProps } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import type { ComponentProps } from "react";
 import { DndContext, type UseDraggableArguments } from "@dnd-kit/core";
 import type { BoardCardViewModel } from "@t3tools/client-runtime/state/todo-board-view";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { render } from "../../../test/render";
 import { BoardDraggableCard, useBoardDragSensors } from "./BoardCard";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
 
@@ -100,57 +100,45 @@ function takeRenderedIssueIds(): Array<string> {
   return renderedIssueIds.splice(0);
 }
 
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-async function renderColumn(props: Omit<ComponentProps<typeof BoardStyleColumn>, "cards">) {
-  await act(() => root.render(<BoardStyleColumn cards={CARDS} {...props} />));
+function column(props: Omit<ComponentProps<typeof BoardStyleColumn>, "cards">) {
+  return <BoardStyleColumn cards={CARDS} {...props} />;
 }
 
 describe("board card re-render cost", () => {
-  afterEach(async () => {
-    await act(() => root.unmount());
-    container.remove();
-    renderedIssueIds.splice(0);
-    vi.unstubAllGlobals();
-  });
-
   it("BoardDraggableCard_ParentRerenders_RerendersOnlyCardsWhoseOwnPropsChanged", async () => {
     const [first, second, third] = CARDS.map((card) => card.issue.id);
-    await renderColumn({
-      selectedIssueId: null,
-      progressByIssueId: NO_PROGRESS,
-      unrelatedRenderToken: 0,
-    });
+    takeRenderedIssueIds();
+    await using screen = await render(
+      column({ selectedIssueId: null, progressByIssueId: NO_PROGRESS, unrelatedRenderToken: 0 }),
+    );
     expect(takeRenderedIssueIds().toSorted()).toEqual([first, second, third].toSorted());
-    expect(container.querySelectorAll("button")).toHaveLength(CARDS.length * 2);
+    expect(screen.container.querySelectorAll("button")).toHaveLength(CARDS.length * 2);
 
-    await renderColumn({
-      selectedIssueId: null,
-      progressByIssueId: NO_PROGRESS,
-      unrelatedRenderToken: 1,
-    });
+    await screen.rerender(
+      column({
+        selectedIssueId: null,
+        progressByIssueId: NO_PROGRESS,
+        unrelatedRenderToken: 1,
+      }),
+    );
     expect(takeRenderedIssueIds()).toEqual([]);
 
-    await renderColumn({
-      selectedIssueId: second!,
-      progressByIssueId: NO_PROGRESS,
-      unrelatedRenderToken: 2,
-    });
+    await screen.rerender(
+      column({
+        selectedIssueId: second!,
+        progressByIssueId: NO_PROGRESS,
+        unrelatedRenderToken: 2,
+      }),
+    );
     expect(takeRenderedIssueIds()).toEqual([second]);
 
-    await renderColumn({
-      selectedIssueId: second!,
-      progressByIssueId: { [third!]: "starting" },
-      unrelatedRenderToken: 3,
-    });
+    await screen.rerender(
+      column({
+        selectedIssueId: second!,
+        progressByIssueId: { [third!]: "starting" },
+        unrelatedRenderToken: 3,
+      }),
+    );
     expect(takeRenderedIssueIds()).toEqual([third]);
   });
 });

@@ -3570,7 +3570,7 @@ function SidebarProjectBoardButton({ project }: { project: SidebarProjectSnapsho
       tabIndex={-1}
       aria-hidden="true"
       title={`Open board for ${project.displayName}`}
-      className="size-6 [--control-icon-color:currentColor] text-icon-muted focus-visible:bg-accent focus-visible:text-foreground"
+      className="size-6"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();

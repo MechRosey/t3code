@@ -63,10 +63,10 @@ const TodoPointerContent = Schema.Struct({
   created: Schema.optional(Schema.String),
 });
 
+const encodeTodoPointerContent = Schema.encodeSync(Schema.fromJsonString(TodoPointerContent));
+
 const pointerHtml = (content: typeof TodoPointerContent.Type): string =>
-  `<!doctype html><script type="application/json" id="todo-pointer">${Schema.encodeSync(
-    Schema.fromJsonString(TodoPointerContent),
-  )(content)}</script>`;
+  `<!doctype html><script type="application/json" id="todo-pointer">${encodeTodoPointerContent(content)}</script>`;
 
 const encodeTodoBoardReadResult = Schema.encodeEffect(TodoBoardReadResult);
 

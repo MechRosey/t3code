@@ -68,7 +68,6 @@ import {
   releasePackageFiles,
 } from "./update-release-package-versions.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
 const encodeModuleUrl = Schema.encodeEffect(Schema.fromJsonString(Schema.String));

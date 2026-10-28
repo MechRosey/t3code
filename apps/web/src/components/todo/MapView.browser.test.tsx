@@ -1,8 +1,7 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import type { TodoIssue } from "@t3tools/contracts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import { buildFocusGraph } from "./mapView.logic";
 import { MapView } from "./MapView";
 
@@ -31,22 +30,6 @@ function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">):
   };
 }
 
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(() => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
-});
-
 const labels = (elements: ReadonlyArray<Element>) =>
   elements.map((element) => element.getAttribute("aria-label"));
 
@@ -62,10 +45,10 @@ describe("MapView", () => {
       "abc12-centre",
     );
     const onFocusIssue = vi.fn();
-    await act(() => root.render(<MapView graph={graph} onFocusIssue={onFocusIssue} />));
+    await using screen = await render(<MapView graph={graph} onFocusIssue={onFocusIssue} />);
 
-    const buttons = [...container.querySelectorAll<SVGGElement>('g[role="button"]')];
-    const inert = [...container.querySelectorAll<SVGGElement>('g[role="img"]')];
+    const buttons = [...screen.container.querySelectorAll<SVGGElement>('g[role="button"]')];
+    const inert = [...screen.container.querySelectorAll<SVGGElement>('g[role="img"]')];
 
     expect(labels(buttons)).toEqual(["Near ticket - Doing", "Far ticket - Doing"]);
     expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket", "1 more outside"]);

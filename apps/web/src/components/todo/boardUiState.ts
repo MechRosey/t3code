@@ -1,11 +1,12 @@
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
 import {
   isBoardSortOrder,
   type BoardSortOrder,
 } from "@t3tools/client-runtime/state/todo-board-view";
+import { useStableCallback } from "../../hooks/useStableCallback";
 
 export type BoardViewKind = "columns" | "archive";
 
@@ -128,18 +129,15 @@ export function useBoardUiState(
     entry.root === resolvedRoot
       ? entry
       : { root: resolvedRoot, state: readBoardUiState(storage, resolvedRoot) };
-  const update = useCallback(
-    (patch: Partial<BoardUiState>) => {
-      setEntry((prev) => {
-        const state =
-          prev.root === resolvedRoot ? prev.state : readBoardUiState(storage, resolvedRoot);
-        const next = { ...state, ...patch };
-        writeBoardUiState(storage, resolvedRoot, next);
-        return { root: resolvedRoot, state: next };
-      });
-    },
-    [resolvedRoot, storage],
-  );
+  const update = useStableCallback((patch: Partial<BoardUiState>) => {
+    setEntry((prev) => {
+      const state =
+        prev.root === resolvedRoot ? prev.state : readBoardUiState(storage, resolvedRoot);
+      const next = { ...state, ...patch };
+      writeBoardUiState(storage, resolvedRoot, next);
+      return { root: resolvedRoot, state: next };
+    });
+  });
   if (current !== entry) {
     setEntry(current);
   }

@@ -1,7 +1,6 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../test/render";
 import { useRightPanelSheetLayout } from "./useRightPanelSheetLayout";
 
 vi.mock("~/env", () => ({ isElectron: true }));
@@ -9,77 +8,67 @@ vi.mock("~/env", () => ({ isElectron: true }));
 const INLINE_WIDTH = 1280;
 const SHEET_WIDTH = 900;
 
-let root: Root;
-let container: HTMLDivElement;
-let innerWidth = INLINE_WIDTH;
-let devicePixelRatio = 1;
-
 function Probe() {
   return <output>{String(useRightPanelSheetLayout())}</output>;
 }
 
-const usesSheet = () => container.querySelector("output")!.textContent === "true";
+const usesSheet = (container: HTMLElement) =>
+  container.querySelector("output")!.textContent === "true";
 
-async function mountProbe() {
-  await act(() => root.render(<Probe />));
+function stubViewport() {
+  const viewport = { innerWidth: INLINE_WIDTH, devicePixelRatio: 1 };
+  const width = vi.spyOn(window, "innerWidth", "get").mockImplementation(() => viewport.innerWidth);
+  const ratio = vi
+    .spyOn(window, "devicePixelRatio", "get")
+    .mockImplementation(() => viewport.devicePixelRatio);
+  return Object.assign(viewport, {
+    [Symbol.dispose]() {
+      ratio.mockRestore();
+      width.mockRestore();
+    },
+  });
 }
 
-async function resizeTo(width: number) {
+async function resizeTo(viewport: { innerWidth: number }, width: number) {
   await act(() => {
-    innerWidth = width;
+    viewport.innerWidth = width;
     window.dispatchEvent(new Event("resize"));
   });
 }
 
-beforeEach(() => {
-  innerWidth = INLINE_WIDTH;
-  devicePixelRatio = 1;
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.spyOn(window, "innerWidth", "get").mockImplementation(() => innerWidth);
-  vi.spyOn(window, "devicePixelRatio", "get").mockImplementation(() => devicePixelRatio);
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(() => root.unmount());
-  container.remove();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
 it("flips between inline and sheet host as the window resizes across the breakpoint", async () => {
-  await mountProbe();
-  expect(usesSheet()).toBe(false);
+  using viewport = stubViewport();
+  await using screen = await render(<Probe />);
+  expect(usesSheet(screen.container)).toBe(false);
 
-  await resizeTo(SHEET_WIDTH);
-  expect(usesSheet()).toBe(true);
+  await resizeTo(viewport, SHEET_WIDTH);
+  expect(usesSheet(screen.container)).toBe(true);
 
-  await resizeTo(INLINE_WIDTH);
-  expect(usesSheet()).toBe(false);
+  await resizeTo(viewport, INLINE_WIDTH);
+  expect(usesSheet(screen.container)).toBe(false);
 });
 
 it("re-arms the resolution query and flips the host when devicePixelRatio changes without a resize", async () => {
-  innerWidth = SHEET_WIDTH;
+  using viewport = stubViewport();
+  viewport.innerWidth = SHEET_WIDTH;
   const queries: string[] = [];
   const armed: EventTarget[] = [];
-  vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+  using _matchMedia = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
     queries.push(query);
     const media = Object.assign(new EventTarget(), { matches: false }) as MediaQueryList;
     armed.push(media);
     return media;
   });
 
-  await mountProbe();
-  expect(usesSheet()).toBe(true);
+  await using screen = await render(<Probe />);
+  expect(usesSheet(screen.container)).toBe(true);
   expect(queries).toEqual(["(resolution: 1dppx)", "(resolution: 1dppx)"]);
 
   await act(() => {
-    devicePixelRatio = 2;
+    viewport.devicePixelRatio = 2;
     armed.forEach((media) => media.dispatchEvent(new Event("change")));
   });
-  expect(usesSheet()).toBe(false);
+  expect(usesSheet(screen.container)).toBe(false);
   expect(queries).toEqual([
     "(resolution: 1dppx)",
     "(resolution: 1dppx)",

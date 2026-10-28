@@ -1,5 +1,3 @@
-import { useEffect, useRef } from "react";
-
 import { Button } from "../ui/button";
 import { BOARD_COLUMN_REVEAL_STEP } from "./boardColumnWindow.logic";
 
@@ -20,9 +18,7 @@ export function BoardColumnMore({
   hiddenCount,
   onReveal,
 }: BoardColumnMoreProps) {
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const button = ref.current;
+  const revealWhenVisible = (button: HTMLButtonElement | null) => {
     if (button === null || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -32,11 +28,11 @@ export function BoardColumnMore({
     );
     observer.observe(button);
     return () => observer.disconnect();
-  }, [status, mountedCount, onReveal]);
+  };
   const nextCount = Math.min(hiddenCount, BOARD_COLUMN_REVEAL_STEP);
   return (
     <Button
-      ref={ref}
+      ref={revealWhenVisible}
       size="compact"
       variant="ghost-muted"
       aria-label={`Show ${nextCount} more ${label} cards`}

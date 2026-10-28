@@ -1,8 +1,7 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import type { TodoIssue } from "@t3tools/contracts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import { BoardIssuePane } from "./BoardIssuePane";
 import { BoardSplitLayout } from "./BoardSplitLayout";
 import type { BoardDrawerMode } from "./boardUiState";
@@ -36,24 +35,6 @@ function issue(): TodoIssue {
   };
 }
 
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.clear();
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(() => root.unmount());
-  container.remove();
-  localStorage.clear();
-  vi.unstubAllGlobals();
-});
-
 async function renderPane(options: {
   readonly containerWidth: number;
   readonly drawerMode: BoardDrawerMode;
@@ -61,49 +42,50 @@ async function renderPane(options: {
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
 }) {
   const selected = issue();
+  const container = document.createElement("div");
   container.style.width = `${options.containerWidth}px`;
-  await act(() =>
-    root.render(
-      <BoardSplitLayout
-        primary={<button type="button">Board card</button>}
-        drawerMode={options.drawerMode}
-        onClose={options.onClose}
-        detail={{
-          key: selected.id,
-          render: (splitMode) => (
-            <BoardIssuePane
-              issue={selected}
-              splitMode={splitMode}
-              drawerMode={options.drawerMode}
-              statusOptions={["backlog", "read", "doing"]}
-              boardTags={["ui", "bug"]}
-              dispatchInFlight={false}
-              viewDiff={null}
-              focusGraph={null}
-              onFocusIssue={() => {}}
-              onDrawerModeChange={options.onDrawerModeChange}
-              onStatusChange={() => {}}
-              onDispatch={() => {}}
-              onComment={async () => true}
-              onTagAdd={() => {}}
-              onTagRemove={() => {}}
-              onViewDiff={() => {}}
-              onClose={options.onClose}
-            />
-          ),
-        }}
-      />,
-    ),
+  return render(
+    <BoardSplitLayout
+      primary={<button type="button">Board card</button>}
+      drawerMode={options.drawerMode}
+      onClose={options.onClose}
+      detail={{
+        key: selected.id,
+        render: (splitMode) => (
+          <BoardIssuePane
+            issue={selected}
+            splitMode={splitMode}
+            drawerMode={options.drawerMode}
+            statusOptions={["backlog", "read", "doing"]}
+            boardTags={["ui", "bug"]}
+            dispatchInFlight={false}
+            viewDiff={null}
+            focusGraph={null}
+            onFocusIssue={() => {}}
+            onDrawerModeChange={options.onDrawerModeChange}
+            onStatusChange={() => {}}
+            onDispatch={() => {}}
+            onComment={async () => true}
+            onTagAdd={() => {}}
+            onTagRemove={() => {}}
+            onViewDiff={() => {}}
+            onClose={options.onClose}
+          />
+        ),
+      }}
+    />,
+    { container },
   );
 }
 
-function buttonsLabelled(label: string): Array<HTMLButtonElement> {
+function buttonsLabelled(container: HTMLElement, label: string): Array<HTMLButtonElement> {
   return [...container.querySelectorAll<HTMLButtonElement>("button")].filter(
     (button) => button.getAttribute("aria-label") === label,
   );
 }
 
-const modalNodes = () => container.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+const modalNodes = (container: HTMLElement) =>
+  container.querySelectorAll('[role="dialog"], [aria-modal="true"]');
 
 async function click(button: HTMLButtonElement) {
   await act(() => button.click());
@@ -113,22 +95,22 @@ describe("BoardIssuePane", () => {
   it("BoardIssuePane_OpenBesideBoard_MountsNoDialogAndClosesFromTheX", async () => {
     const onClose = vi.fn();
     const onDrawerModeChange = vi.fn();
-    await renderPane({
+    await using screen = await renderPane({
       containerWidth: WIDE_CONTAINER,
       drawerMode: "normal",
       onClose,
       onDrawerModeChange,
     });
 
-    expect(modalNodes()).toHaveLength(0);
-    expect(buttonsLabelled("Back to the board")).toHaveLength(0);
+    expect(modalNodes(screen.container)).toHaveLength(0);
+    expect(buttonsLabelled(screen.container, "Back to the board")).toHaveLength(0);
 
-    const close = buttonsLabelled("Close the issue pane");
+    const close = buttonsLabelled(screen.container, "Close the issue pane");
     expect(close).toHaveLength(1);
     await click(close[0]!);
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    const maximise = buttonsLabelled("Maximise the issue pane");
+    const maximise = buttonsLabelled(screen.container, "Maximise the issue pane");
     expect(maximise).toHaveLength(1);
     await click(maximise[0]!);
     expect(onDrawerModeChange).toHaveBeenCalledWith("full");
@@ -136,18 +118,18 @@ describe("BoardIssuePane", () => {
 
   it("BoardIssuePane_StackedInNarrowContainer_ClosesFromTheBoardBackButtonOnly", async () => {
     const onClose = vi.fn();
-    await renderPane({
+    await using screen = await renderPane({
       containerWidth: NARROW_CONTAINER,
       drawerMode: "normal",
       onClose,
       onDrawerModeChange: () => {},
     });
 
-    expect(modalNodes()).toHaveLength(0);
-    expect(buttonsLabelled("Close the issue pane")).toHaveLength(0);
-    expect(buttonsLabelled("Maximise the issue pane")).toHaveLength(0);
+    expect(modalNodes(screen.container)).toHaveLength(0);
+    expect(buttonsLabelled(screen.container, "Close the issue pane")).toHaveLength(0);
+    expect(buttonsLabelled(screen.container, "Maximise the issue pane")).toHaveLength(0);
 
-    const back = buttonsLabelled("Back to the board");
+    const back = buttonsLabelled(screen.container, "Back to the board");
     expect(back).toHaveLength(1);
     await click(back[0]!);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -155,17 +137,17 @@ describe("BoardIssuePane", () => {
 
   it("BoardIssuePane_MaximisedInWideContainer_OffersBackAndRestore", async () => {
     const onDrawerModeChange = vi.fn();
-    await renderPane({
+    await using screen = await renderPane({
       containerWidth: WIDE_CONTAINER,
       drawerMode: "full",
       onClose: () => {},
       onDrawerModeChange,
     });
 
-    expect(buttonsLabelled("Back to the board")).toHaveLength(1);
-    expect(buttonsLabelled("Close the issue pane")).toHaveLength(0);
+    expect(buttonsLabelled(screen.container, "Back to the board")).toHaveLength(1);
+    expect(buttonsLabelled(screen.container, "Close the issue pane")).toHaveLength(0);
 
-    const restore = buttonsLabelled("Restore the issue pane");
+    const restore = buttonsLabelled(screen.container, "Restore the issue pane");
     expect(restore).toHaveLength(1);
     await click(restore[0]!);
     expect(onDrawerModeChange).toHaveBeenCalledWith("normal");

@@ -1799,11 +1799,11 @@ function SidebarRowProjectBoardButton({
 }) {
   return (
     <Button
-      size="icon-xs"
+      size="icon-micro"
       variant="ghost-muted"
       tabIndex={-1}
       title={`Open board for ${displayName ?? project.title}`}
-      className="size-5 shrink-0 rounded-sm [--control-icon-color:currentColor] text-icon-muted hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
+      className="shrink-0"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();

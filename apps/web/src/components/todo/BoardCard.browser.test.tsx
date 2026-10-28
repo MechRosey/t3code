@@ -1,10 +1,9 @@
-import { act, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import { DndContext } from "@dnd-kit/core";
 import type { TodoIssue } from "@t3tools/contracts";
 import type { BoardCardViewModel } from "@t3tools/client-runtime/state/todo-board-view";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import { BoardCard, BoardDraggableCard } from "./BoardCard";
 
 function issue(overrides: Partial<TodoIssue> & Pick<TodoIssue, "id" | "title">): TodoIssue {
@@ -50,53 +49,36 @@ function cardModel(id: string): BoardCardViewModel {
 
 const COPY_LABEL_PREFIX = "Copy issue id";
 
-let root: Root;
-let container: HTMLDivElement;
+const allButtons = (container: HTMLElement) => [
+  ...container.querySelectorAll<HTMLButtonElement>("button"),
+];
+const copyButtons = (container: HTMLElement) =>
+  allButtons(container).filter(
+    (button) => button.ariaLabel?.startsWith(COPY_LABEL_PREFIX) === true,
+  );
+const cardButtons = (container: HTMLElement) =>
+  allButtons(container).filter(
+    (button) => button.ariaLabel?.startsWith(COPY_LABEL_PREFIX) !== true,
+  );
 
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(() => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
-});
-
-async function render(node: ReactNode) {
-  await act(() => root.render(node));
-}
-
-const allButtons = () => [...container.querySelectorAll<HTMLButtonElement>("button")];
-const copyButtons = () =>
-  allButtons().filter((button) => button.ariaLabel?.startsWith(COPY_LABEL_PREFIX) === true);
-const cardButtons = () =>
-  allButtons().filter((button) => button.ariaLabel?.startsWith(COPY_LABEL_PREFIX) !== true);
-
-function stubClipboard(writeText: (text: string) => Promise<void>) {
+function stubClipboard(writeText: (text: string) => Promise<void>): Disposable {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText },
   });
+  return { [Symbol.dispose]: () => void Reflect.deleteProperty(navigator, "clipboard") };
 }
 
 describe("board card copy affordance", () => {
-  afterEach(() => {
-    Reflect.deleteProperty(navigator, "clipboard");
-  });
-
   it("copies the card's short id from a sibling button without opening the drawer", async () => {
     const writeText = vi.fn((_text: string) => Promise.resolve());
-    stubClipboard(writeText);
+    using _clipboard = stubClipboard(writeText);
     const onOpen = vi.fn();
     const bodyKeydowns: Array<KeyboardEvent> = [];
     const recordKeydown = (event: KeyboardEvent) => bodyKeydowns.push(event);
     document.body.addEventListener("keydown", recordKeydown);
     try {
-      await render(
+      await using screen = await render(
         <DndContext>
           <BoardDraggableCard
             card={cardModel("abc12-rest-of-id")}
@@ -106,10 +88,10 @@ describe("board card copy affordance", () => {
           />
         </DndContext>,
       );
-      const [copyButton] = copyButtons();
-      const [cardButton] = cardButtons();
-      expect(copyButtons()).toHaveLength(1);
-      expect(cardButtons()).toHaveLength(1);
+      const [copyButton] = copyButtons(screen.container);
+      const [cardButton] = cardButtons(screen.container);
+      expect(copyButtons(screen.container)).toHaveLength(1);
+      expect(cardButtons(screen.container)).toHaveLength(1);
       expect(cardButton!.contains(copyButton!)).toBe(false);
 
       await act(async () => copyButton!.click());
@@ -130,7 +112,7 @@ describe("board card copy affordance", () => {
   });
 
   it("BoardDraggableCard_SelectedOrNot_MarksOnlyTheOpenCardCurrent", async () => {
-    await render(
+    await using screen = await render(
       <DndContext>
         <BoardDraggableCard
           card={cardModel("abc12-open")}
@@ -147,15 +129,18 @@ describe("board card copy affordance", () => {
       </DndContext>,
     );
 
-    expect(cardButtons().map((card) => card.getAttribute("aria-current"))).toEqual(["true", null]);
+    expect(cardButtons(screen.container).map((card) => card.getAttribute("aria-current"))).toEqual([
+      "true",
+      null,
+    ]);
   });
 
   it("renders the drag-preview card without a copy affordance", async () => {
-    await render(
+    await using screen = await render(
       <BoardCard card={cardModel("abc12-rest-of-id")} onOpen={() => {}} progress={null} />,
     );
 
-    expect(cardButtons()).toHaveLength(1);
-    expect(copyButtons()).toHaveLength(0);
+    expect(cardButtons(screen.container)).toHaveLength(1);
+    expect(copyButtons(screen.container)).toHaveLength(0);
   });
 });

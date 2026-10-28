@@ -1,6 +1,5 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { SquareKanban } from "lucide-react";
-import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../components/WorkspaceBreadcrumb";
@@ -39,24 +38,14 @@ function BoardRouteView() {
   const navigate = useNavigate();
   const projects = useProjects();
   const threads = useThreadShells();
-  const project = useMemo(
-    () =>
-      projects.find(
-        (candidate) =>
-          (search.environmentId === undefined ||
-            candidate.environmentId === search.environmentId) &&
-          (search.cwd === undefined || candidate.workspaceRoot === search.cwd),
-      ) ?? null,
-    [projects, search.cwd, search.environmentId],
-  );
-  const panelSwitchTarget = useMemo(
-    () => resolveBoardPanelSwitch(search, projects, threads),
-    [projects, search, threads],
-  );
-  const origin = useMemo(
-    () => resolveBoardOrigin(search, projects, threads) ?? undefined,
-    [projects, search, threads],
-  );
+  const project =
+    projects.find(
+      (candidate) =>
+        (search.environmentId === undefined || candidate.environmentId === search.environmentId) &&
+        (search.cwd === undefined || candidate.workspaceRoot === search.cwd),
+    ) ?? null;
+  const panelSwitchTarget = resolveBoardPanelSwitch(search, projects, threads);
+  const origin = resolveBoardOrigin(search, projects, threads) ?? undefined;
   const environmentId = project?.environmentId ?? search.environmentId;
   const cwd = project?.workspaceRoot ?? search.cwd ?? null;
   const breadcrumbLabel =

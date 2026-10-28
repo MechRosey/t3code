@@ -1,8 +1,9 @@
 import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
-import { act, type ComponentProps } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { act, render } from "../../test/render";
 
 const setAudioMuted = vi.hoisted(() => vi.fn(async () => undefined));
 
@@ -80,23 +81,7 @@ function overlay(
   };
 }
 
-let root: Root;
-let container: HTMLDivElement;
 const noop = () => undefined;
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  setAudioMuted.mockClear();
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(() => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
-});
 
 function tabsProps(
   overrides: Partial<ComponentProps<typeof RightPanelTabs>> = {},
@@ -148,17 +133,17 @@ function tabsProps(
   };
 }
 
-async function renderPanel(overrides: Partial<ComponentProps<typeof RightPanelTabs>> = {}) {
-  await act(() => root.render(<RightPanelTabs {...tabsProps(overrides)} />));
-}
+const panel = (overrides: Partial<ComponentProps<typeof RightPanelTabs>> = {}) => (
+  <RightPanelTabs {...tabsProps(overrides)} />
+);
 
-async function renderTabs(
+function tabsPanel(
   first: DesktopPreviewFavicon | null,
   second?: DesktopPreviewFavicon,
   audio?: { audible?: boolean; audioMuted?: boolean },
   previewRuntimeTabId: ((tabId: string) => string) | null = (tabId) => `runtime:${tabId}`,
 ) {
-  await renderPanel({
+  return panel({
     surfaces: second ? [previewSurface, secondSurface] : [previewSurface],
     activeSurfaceId: previewSurface.id,
     desktopByTabId: {
@@ -169,30 +154,33 @@ async function renderTabs(
   });
 }
 
-const imageSources = () => [...container.querySelectorAll("img")].map((image) => image.src);
-const button = (name: string) =>
+const imageSources = (container: HTMLElement) =>
+  [...container.querySelectorAll("img")].map((image) => image.src);
+const button = (container: HTMLElement, name: string) =>
   [...container.querySelectorAll("button")].find((element) => element.ariaLabel === name);
 
 describe("preview tab favicon", () => {
   it("prefers a live capture and never asks a public provider about a private hostname", async () => {
-    await renderTabs(favicon(PIXEL_A, "http://24x.xf.local/"));
-    expect(imageSources()).toEqual([PIXEL_A]);
+    await using screen = await render(tabsPanel(favicon(PIXEL_A, "http://24x.xf.local/")));
+    expect(imageSources(screen.container)).toEqual([PIXEL_A]);
 
-    await renderTabs(null);
-    expect(imageSources()).toEqual([]);
+    await screen.rerender(tabsPanel(null));
+    expect(imageSources(screen.container)).toEqual([]);
   });
 
   it("keeps route-specific captures isolated between live tabs on one origin", async () => {
-    await renderTabs(
-      favicon(PIXEL_A, "http://24x.xf.local/"),
-      favicon(PIXEL_B, "http://24x.xf.local/admin"),
+    await using screen = await render(
+      tabsPanel(
+        favicon(PIXEL_A, "http://24x.xf.local/"),
+        favicon(PIXEL_B, "http://24x.xf.local/admin"),
+      ),
     );
-    expect(imageSources()).toEqual([PIXEL_A, PIXEL_B]);
+    expect(imageSources(screen.container)).toEqual([PIXEL_A, PIXEL_B]);
   });
 
   it("hides a capture while the server session still describes another origin", async () => {
-    await renderTabs(favicon(PIXEL_A, "https://example.com/"));
-    expect(imageSources()).not.toContain(PIXEL_A);
+    await using screen = await render(tabsPanel(favicon(PIXEL_A, "https://example.com/")));
+    expect(imageSources(screen.container)).not.toContain(PIXEL_A);
   });
 });
 
@@ -201,41 +189,44 @@ describe("preview tab audio toggle", () => {
     { audible: false, audioMuted: false },
     { audible: false, audioMuted: true },
   ])("is absent for a silent tab (muted=$audioMuted)", async (audio) => {
-    await renderTabs(null, undefined, audio);
-    expect(button("Mute Local site")).toBeUndefined();
-    expect(button("Unmute Local site")).toBeUndefined();
+    await using screen = await render(tabsPanel(null, undefined, audio));
+    expect(button(screen.container, "Mute Local site")).toBeUndefined();
+    expect(button(screen.container, "Unmute Local site")).toBeUndefined();
   });
 
   it.each([
     { audioMuted: false, label: "Mute Local site", nextMuted: true },
     { audioMuted: true, label: "Unmute Local site", nextMuted: false },
   ])("$label addresses the desktop by runtime tab id", async ({ audioMuted, label, nextMuted }) => {
-    await renderTabs(null, undefined, { audible: true, audioMuted });
-    await act(() => button(label)!.click());
+    setAudioMuted.mockClear();
+    await using screen = await render(tabsPanel(null, undefined, { audible: true, audioMuted }));
+    await act(() => button(screen.container, label)!.click());
     expect(setAudioMuted).toHaveBeenCalledExactlyOnceWith("runtime:tab-1", nextMuted);
   });
 
   it("hides the toggle when no runtime tab id can be resolved", async () => {
-    await renderTabs(null, undefined, { audible: true }, null);
-    expect(button("Mute Local site")).toBeUndefined();
+    await using screen = await render(tabsPanel(null, undefined, { audible: true }, null));
+    expect(button(screen.container, "Mute Local site")).toBeUndefined();
   });
 });
 
 describe("empty-panel launcher", () => {
   it("lists the todo board with its shortcut only while a project is open", async () => {
-    await renderPanel({ browserAvailable: false, boardAvailable: true });
-    expect(container.textContent).toContain("Todo Board");
-    expect(container.querySelector('[data-surface-launcher-keys="O"]')).not.toBeNull();
+    await using screen = await render(panel({ browserAvailable: false, boardAvailable: true }));
+    expect(screen.container.textContent).toContain("Todo Board");
+    expect(screen.container.querySelector('[data-surface-launcher-keys="O"]')).not.toBeNull();
 
-    await renderPanel({ browserAvailable: false, boardAvailable: false });
-    expect(container.textContent).toContain("Todo Board");
-    expect(container.querySelector('[data-surface-launcher-keys=""]')).not.toBeNull();
+    await screen.rerender(panel({ browserAvailable: false, boardAvailable: false }));
+    expect(screen.container.textContent).toContain("Todo Board");
+    expect(screen.container.querySelector('[data-surface-launcher-keys=""]')).not.toBeNull();
   });
 });
 
 describe("board tab", () => {
   it("is titled Todo Board", async () => {
-    await renderPanel({ surfaces: [{ id: "board", kind: "board" }], activeSurfaceId: "board" });
-    expect(container.textContent).toContain("Todo Board");
+    await using screen = await render(
+      panel({ surfaces: [{ id: "board", kind: "board" }], activeSurfaceId: "board" }),
+    );
+    expect(screen.container.textContent).toContain("Todo Board");
   });
 });

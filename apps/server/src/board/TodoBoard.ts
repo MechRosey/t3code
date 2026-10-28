@@ -195,200 +195,191 @@ export const make = Effect.gen(function* () {
       }
     }).pipe(Effect.orElseSucceed(() => null));
 
-  const resolveRoot = (cwd: string): Effect.Effect<string, TodoBoardError> =>
-    Effect.gen(function* () {
-      if (!path.isAbsolute(cwd)) {
-        return yield* toError("cwd_not_directory", `cwd must be an absolute path: ${cwd}`);
-      }
-      if (!(yield* existsDirectory(cwd))) {
-        return yield* toError("cwd_not_directory", `cwd is not a directory: ${cwd}`);
-      }
-      let dir = cwd.replace(/[\\/]+$/, "");
-      const separator = dir.includes("/") ? "/" : "\\";
-      while (dir !== "") {
-        const pointer = yield* readPointer(dir);
-        if (pointer !== null) {
-          if (!(yield* existsDirectory(pointer))) {
-            return yield* toError(
-              "pointer_dangling",
-              `Board pointer resolves to '${pointer}', which does not exist. The central board may have moved or been removed; re-register this repo or restore the board.`,
-            );
-          }
-          return pointer;
+  const resolveRoot = Effect.fn("TodoBoard.resolveRoot")(function* (cwd: string) {
+    if (!path.isAbsolute(cwd)) {
+      return yield* toError("cwd_not_directory", `cwd must be an absolute path: ${cwd}`);
+    }
+    if (!(yield* existsDirectory(cwd))) {
+      return yield* toError("cwd_not_directory", `cwd is not a directory: ${cwd}`);
+    }
+    let dir = cwd.replace(/[\\/]+$/, "");
+    const separator = dir.includes("/") ? "/" : "\\";
+    while (dir !== "") {
+      const pointer = yield* readPointer(dir);
+      if (pointer !== null) {
+        if (!(yield* existsDirectory(pointer))) {
+          return yield* toError(
+            "pointer_dangling",
+            `Board pointer resolves to '${pointer}', which does not exist. The central board may have moved or been removed; re-register this repo or restore the board.`,
+          );
         }
-        const inPlace = path.join(dir, ".todo");
-        if (yield* existsDirectory(inPlace)) return inPlace;
-        const index = dir.lastIndexOf(separator);
-        if (index < 0) break;
-        const parent = dir.slice(0, index);
-        if (parent === dir) break;
-        dir = parent;
+        return pointer;
       }
-      return yield* toError("board_not_found", `No .todo/ found at or above ${cwd}.`);
-    });
+      const inPlace = path.join(dir, ".todo");
+      if (yield* existsDirectory(inPlace)) return inPlace;
+      const index = dir.lastIndexOf(separator);
+      if (index < 0) break;
+      const parent = dir.slice(0, index);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return yield* toError("board_not_found", `No .todo/ found at or above ${cwd}.`);
+  });
 
-  const listIssueDirs = (
+  const listIssueDirs = Effect.fn("TodoBoard.listIssueDirs")(function* (
     root: string,
     options?: { readonly looseRootMarkers?: boolean },
-  ): Effect.Effect<ReadonlyArray<IssueDir>, TodoBoardError> =>
-    Effect.gen(function* () {
-      const entries = yield* fs
-        .readDirectory(root, { recursive: true })
-        .pipe(
-          Effect.mapError((cause) => toError("operation_failed", `Failed to list ${root}`, cause)),
-        );
-      const files = entries
-        .map((entry) => normalizeSlashes(entry))
-        .filter((entry) => entry.endsWith(".md"))
-        .filter((entry) => !isArchivedPath(root, path.join(root, entry)));
-      const markers = new Map<string, string>();
-      for (const file of files.toSorted()) {
-        const segments = file.split("/");
-        const loose = segments.length === 1 && options?.looseRootMarkers === true;
-        if (segments.length < 2 && !loose) continue;
-        const baseName = (segments[segments.length - 1] ?? "").replace(/\.md$/, "");
-        const dirName = loose ? baseName : (segments[segments.length - 2] ?? "");
-        if (!isIssueMarkerFile(dirName, baseName)) continue;
-        const dirRel = loose ? dirName : segments.slice(0, -1).join("/");
-        if (!markers.has(dirRel)) markers.set(dirRel, file);
-      }
-      return [...markers.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([rel, markerRel]) => ({ name: rel.split("/").pop() ?? rel, rel, markerRel }));
-    });
+  ) {
+    const entries = yield* fs
+      .readDirectory(root, { recursive: true })
+      .pipe(
+        Effect.mapError((cause) => toError("operation_failed", `Failed to list ${root}`, cause)),
+      );
+    const files = entries
+      .map((entry) => normalizeSlashes(entry))
+      .filter((entry) => entry.endsWith(".md"))
+      .filter((entry) => !isArchivedPath(root, path.join(root, entry)));
+    const markers = new Map<string, string>();
+    for (const file of files.toSorted()) {
+      const segments = file.split("/");
+      const loose = segments.length === 1 && options?.looseRootMarkers === true;
+      if (segments.length < 2 && !loose) continue;
+      const baseName = (segments[segments.length - 1] ?? "").replace(/\.md$/, "");
+      const dirName = loose ? baseName : (segments[segments.length - 2] ?? "");
+      if (!isIssueMarkerFile(dirName, baseName)) continue;
+      const dirRel = loose ? dirName : segments.slice(0, -1).join("/");
+      if (!markers.has(dirRel)) markers.set(dirRel, file);
+    }
+    return [...markers.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([rel, markerRel]) => ({ name: rel.split("/").pop() ?? rel, rel, markerRel }));
+  });
 
-  const readMarker = (
-    root: string,
-    dir: IssueDir,
-  ): Effect.Effect<{ text: string; stat: MarkerStat }, TodoBoardError> =>
-    Effect.gen(function* () {
-      const absolute = path.join(root, dir.markerRel);
-      const text = yield* fs
-        .readFileString(absolute)
-        .pipe(
-          Effect.mapError((cause) =>
-            toError("operation_failed", `Failed to read ${absolute}`, cause),
-          ),
-        );
-      const info = yield* statInfo(absolute);
-      const stat = yield* markerStat(absolute, info);
-      return { text, stat };
-    });
+  const readMarker = Effect.fn("TodoBoard.readMarker")(function* (root: string, dir: IssueDir) {
+    const absolute = path.join(root, dir.markerRel);
+    const text = yield* fs
+      .readFileString(absolute)
+      .pipe(
+        Effect.mapError((cause) =>
+          toError("operation_failed", `Failed to read ${absolute}`, cause),
+        ),
+      );
+    const info = yield* statInfo(absolute);
+    const stat = yield* markerStat(absolute, info);
+    return { text, stat };
+  });
 
-  const writeMarker = (
+  const writeMarker = Effect.fn("TodoBoard.writeMarker")(function* (
     root: string,
     dir: IssueDir,
     next: BoardIssue,
     baseline: MarkerStat,
-  ): Effect.Effect<void, TodoBoardError> =>
-    Effect.gen(function* () {
-      const driftedAbs = path.join(root, dir.markerRel);
-      const info = yield* statInfo(driftedAbs);
-      const current = yield* markerStat(driftedAbs, info);
-      yield* runRule(() => ensureUnchanged(baseline, current));
-      const canonicalRel = `${dir.rel}/${dir.name}.md`;
-      const canonicalAbs = path.join(root, canonicalRel);
+  ) {
+    const driftedAbs = path.join(root, dir.markerRel);
+    const info = yield* statInfo(driftedAbs);
+    const current = yield* markerStat(driftedAbs, info);
+    yield* runRule(() => ensureUnchanged(baseline, current));
+    const canonicalRel = `${dir.rel}/${dir.name}.md`;
+    const canonicalAbs = path.join(root, canonicalRel);
+    yield* fs
+      .writeFileString(canonicalAbs, serializeIssue(next))
+      .pipe(
+        Effect.mapError((cause) =>
+          toError("operation_failed", `Failed to write ${canonicalAbs}`, cause),
+        ),
+      );
+    if (dir.markerRel !== canonicalRel) {
       yield* fs
-        .writeFileString(canonicalAbs, serializeIssue(next))
+        .remove(driftedAbs, { force: true })
         .pipe(
           Effect.mapError((cause) =>
-            toError("operation_failed", `Failed to write ${canonicalAbs}`, cause),
+            toError("operation_failed", `Failed to remove ${driftedAbs}`, cause),
           ),
         );
-      if (dir.markerRel !== canonicalRel) {
-        yield* fs
-          .remove(driftedAbs, { force: true })
-          .pipe(
-            Effect.mapError((cause) =>
-              toError("operation_failed", `Failed to remove ${driftedAbs}`, cause),
-            ),
-          );
-      }
-    });
+    }
+  });
 
-  const readBoardAt = (
+  const readBoardAt = Effect.fn("TodoBoard.readBoardAt")(function* (
     root: string,
     archived = false,
-  ): Effect.Effect<TodoBoardSnapshot, TodoBoardError> =>
-    Effect.gen(function* () {
-      const dirs = yield* listIssueDirs(root, { looseRootMarkers: archived });
-      const active = dirs;
-      const knownIds = active.map((dir) => dir.name);
-      const looseRoot = archived
-        ? (active.find((dir) => !dir.markerRel.includes("/")) ?? null)
-        : null;
-      const rootHues = new Map<string, number | null>();
-      if (looseRoot !== null) {
-        const { text } = yield* readMarker(root, looseRoot);
-        rootHues.set(looseRoot.name, toRootHue(parseIssue(text, looseRoot.name).fm.colour));
+  ) {
+    const dirs = yield* listIssueDirs(root, { looseRootMarkers: archived });
+    const active = dirs;
+    const knownIds = active.map((dir) => dir.name);
+    const looseRoot = archived
+      ? (active.find((dir) => !dir.markerRel.includes("/")) ?? null)
+      : null;
+    const rootHues = new Map<string, number | null>();
+    if (looseRoot !== null) {
+      const { text } = yield* readMarker(root, looseRoot);
+      rootHues.set(looseRoot.name, toRootHue(parseIssue(text, looseRoot.name).fm.colour));
+    }
+    const issues: Array<TodoIssue> = [];
+    for (const dir of active) {
+      const { text } = yield* readMarker(root, dir);
+      const parsed = parseIssue(text, dir.name);
+      const segments = dir.rel.split("/");
+      const loose = dir.markerRel.split("/").length === 1;
+      const depth = looseRoot === null ? segments.length - 1 : loose ? 0 : segments.length;
+      const parentId = loose
+        ? null
+        : looseRoot !== null
+          ? depth === 1
+            ? (looseRoot.name ?? null)
+            : (segments[depth - 2] ?? null)
+          : depth >= 1
+            ? (segments[depth - 1] ?? null)
+            : null;
+      if (looseRoot !== null ? loose : segments.length === 1) {
+        rootHues.set(dir.name, toRootHue(parsed.fm.colour));
       }
-      const issues: Array<TodoIssue> = [];
-      for (const dir of active) {
-        const { text } = yield* readMarker(root, dir);
-        const parsed = parseIssue(text, dir.name);
-        const segments = dir.rel.split("/");
-        const loose = dir.markerRel.split("/").length === 1;
-        const depth = looseRoot === null ? segments.length - 1 : loose ? 0 : segments.length;
-        const parentId = loose
-          ? null
-          : looseRoot !== null
-            ? depth === 1
-              ? (looseRoot.name ?? null)
-              : (segments[depth - 2] ?? null)
-            : depth >= 1
-              ? (segments[depth - 1] ?? null)
-              : null;
-        if (looseRoot !== null ? loose : segments.length === 1) {
-          rootHues.set(dir.name, toRootHue(parsed.fm.colour));
-        }
-        const rootId = looseRoot !== null ? (looseRoot.name ?? "") : (segments[0] ?? "");
-        issues.push({
-          id: parsed.fm.id,
-          title: parsed.fm.title,
-          status: canonicalStatus(parsed.fm.status),
-          created: parsed.fm.created,
-          updated: parsed.fm.updated,
-          tags: [...parsed.fm.tags],
-          epic: parsed.fm.epic ?? null,
-          parentId,
-          depth,
-          rootHue: rootHues.get(rootId) ?? null,
-          markerPath: normalizeSlashes(path.join(root, dir.markerRel)),
-          archived,
-          sections: toSections(getSectionMap(parsed.body)),
-          body: parsed.body,
-          links: {
-            blocks: parsed.fm.links.blocks.map((ref) => resolveLinkId(ref, knownIds)),
-            relates: parsed.fm.links.relates.map((ref) => resolveLinkId(ref, knownIds)),
-          },
-        });
-      }
-      return { root, repoName: repoDisplayName(root), issues };
-    });
+      const rootId = looseRoot !== null ? (looseRoot.name ?? "") : (segments[0] ?? "");
+      issues.push({
+        id: parsed.fm.id,
+        title: parsed.fm.title,
+        status: canonicalStatus(parsed.fm.status),
+        created: parsed.fm.created,
+        updated: parsed.fm.updated,
+        tags: [...parsed.fm.tags],
+        epic: parsed.fm.epic ?? null,
+        parentId,
+        depth,
+        rootHue: rootHues.get(rootId) ?? null,
+        markerPath: normalizeSlashes(path.join(root, dir.markerRel)),
+        archived,
+        sections: toSections(getSectionMap(parsed.body)),
+        body: parsed.body,
+        links: {
+          blocks: parsed.fm.links.blocks.map((ref) => resolveLinkId(ref, knownIds)),
+          relates: parsed.fm.links.relates.map((ref) => resolveLinkId(ref, knownIds)),
+        },
+      });
+    }
+    return { root, repoName: repoDisplayName(root), issues };
+  });
 
-  const readArchiveAt = (root: string): Effect.Effect<TodoArchiveReadResult, TodoBoardError> =>
-    Effect.gen(function* () {
-      const archiveRoot = path.join(root, "archive");
-      const groupNames = yield* fs.readDirectory(archiveRoot).pipe(
-        Effect.mapError((cause) =>
-          toError("operation_failed", `Failed to list ${archiveRoot}`, cause),
-        ),
-        Effect.orElseSucceed(() => [] as Array<string>),
-      );
-      const groupDirs: Array<TodoArchiveGroup> = [];
-      for (const dirName of groupNames.toSorted()) {
-        const groupDir = path.join(archiveRoot, dirName);
-        if (!(yield* existsDirectory(groupDir))) continue;
-        const snapshot = yield* readBoardAt(groupDir, true);
-        const normalizedGroupDir = normalizeSlashes(groupDir);
-        const rootIssue =
-          snapshot.issues.find(
-            (issue) => normalizeSlashes(path.dirname(issue.markerPath)) === normalizedGroupDir,
-          ) ?? null;
-        groupDirs.push({ dirName, rootIssue, snapshot });
-      }
-      return { boardRoot: root, repoName: repoDisplayName(root), groups: groupDirs };
-    });
+  const readArchiveAt = Effect.fn("TodoBoard.readArchiveAt")(function* (root: string) {
+    const archiveRoot = path.join(root, "archive");
+    const groupNames = yield* fs.readDirectory(archiveRoot).pipe(
+      Effect.mapError((cause) =>
+        toError("operation_failed", `Failed to list ${archiveRoot}`, cause),
+      ),
+      Effect.orElseSucceed(() => [] as Array<string>),
+    );
+    const groupDirs: Array<TodoArchiveGroup> = [];
+    for (const dirName of groupNames.toSorted()) {
+      const groupDir = path.join(archiveRoot, dirName);
+      if (!(yield* existsDirectory(groupDir))) continue;
+      const snapshot = yield* readBoardAt(groupDir, true);
+      const normalizedGroupDir = normalizeSlashes(groupDir);
+      const rootIssue =
+        snapshot.issues.find(
+          (issue) => normalizeSlashes(path.dirname(issue.markerPath)) === normalizedGroupDir,
+        ) ?? null;
+      groupDirs.push({ dirName, rootIssue, snapshot });
+    }
+    return { boardRoot: root, repoName: repoDisplayName(root), groups: groupDirs };
+  });
 
   const nowStamp = Effect.map(DateTime.now, (now) => {
     const parts = DateTime.toParts(DateTime.setZone(now, localZone));
@@ -433,151 +424,150 @@ export const make = Effect.gen(function* () {
     return issue;
   });
 
-  const mutateAt = (
+  const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (
     root: string,
     input: TodoBoardMutateInput,
-  ): Effect.Effect<{ issue: TodoIssue }, TodoBoardError> =>
-    Effect.gen(function* () {
-      const dirs = yield* listIssueDirs(root);
-      const target = yield* findTarget(dirs, input.id);
-      const now = yield* nowStamp;
+  ) {
+    const dirs = yield* listIssueDirs(root);
+    const target = yield* findTarget(dirs, input.id);
+    const now = yield* nowStamp;
 
-      switch (input.action) {
-        case "status": {
-          const children: Array<{ id: string; status: string }> = [];
-          const prefix = `${target.rel}/`;
-          for (const dir of dirs) {
-            if (!dir.rel.startsWith(prefix)) continue;
-            if (dir.rel.slice(prefix.length).includes("/")) continue;
-            const { text } = yield* readMarker(root, dir);
-            const parsed = parseIssue(text, dir.name);
-            children.push({ id: parsed.fm.id, status: parsed.fm.status });
-          }
-          yield* runRule(() =>
-            assertStatusChildrenGuard(input.id, input.status, children, input.force),
-          );
-          const { text, stat } = yield* readMarker(root, target);
-          const parsed = parseIssue(text, target.name);
-          const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
-          yield* writeMarker(root, target, next, stat);
-          return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+    switch (input.action) {
+      case "status": {
+        const children: Array<{ id: string; status: string }> = [];
+        const prefix = `${target.rel}/`;
+        for (const dir of dirs) {
+          if (!dir.rel.startsWith(prefix)) continue;
+          if (dir.rel.slice(prefix.length).includes("/")) continue;
+          const { text } = yield* readMarker(root, dir);
+          const parsed = parseIssue(text, dir.name);
+          children.push({ id: parsed.fm.id, status: parsed.fm.status });
         }
-        case "comment": {
-          const { text, stat } = yield* readMarker(root, target);
-          const parsed = parseIssue(text, target.name);
-          const next = applyComment(
+        yield* runRule(() =>
+          assertStatusChildrenGuard(input.id, input.status, children, input.force),
+        );
+        const { text, stat } = yield* readMarker(root, target);
+        const parsed = parseIssue(text, target.name);
+        const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
+        yield* writeMarker(root, target, next, stat);
+        return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+      }
+      case "comment": {
+        const { text, stat } = yield* readMarker(root, target);
+        const parsed = parseIssue(text, target.name);
+        const next = applyComment(
+          parsed,
+          { text: input.text, ...(input.by !== undefined ? { by: input.by } : {}) },
+          now,
+          now,
+        );
+        yield* writeMarker(root, target, next, stat);
+        return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+      }
+      case "tag": {
+        const { text, stat } = yield* readMarker(root, target);
+        const parsed = parseIssue(text, target.name);
+        const next = applyTag(
+          parsed,
+          { tag: input.tag, ...(input.remove !== undefined ? { remove: input.remove } : {}) },
+          now,
+        );
+        yield* writeMarker(root, target, next, stat);
+        return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+      }
+      case "link": {
+        const knownIds = dirs.map((dir) => dir.name);
+        let canonicalTargetId: string | undefined;
+        if (!input.remove) {
+          canonicalTargetId = yield* findTarget(dirs, input.target).pipe(
+            Effect.map((dir) => dir.name),
+          );
+        }
+        const { text, stat } = yield* readMarker(root, target);
+        const parsed = parseIssue(text, target.name);
+        const next = yield* runRule(() =>
+          applyLink(
             parsed,
-            { text: input.text, ...(input.by !== undefined ? { by: input.by } : {}) },
+            {
+              type: input.type,
+              target: input.target,
+              ...(input.remove !== undefined ? { remove: input.remove } : {}),
+            },
             now,
-            now,
-          );
-          yield* writeMarker(root, target, next, stat);
-          return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+            knownIds,
+            canonicalTargetId,
+          ),
+        );
+        yield* writeMarker(root, target, next, stat);
+        return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+      }
+      case "rollup": {
+        const childSegments = target.rel.split("/");
+        if (childSegments.length < 2) {
+          return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
         }
-        case "tag": {
-          const { text, stat } = yield* readMarker(root, target);
-          const parsed = parseIssue(text, target.name);
-          const next = applyTag(
-            parsed,
-            { tag: input.tag, ...(input.remove !== undefined ? { remove: input.remove } : {}) },
-            now,
-          );
-          yield* writeMarker(root, target, next, stat);
-          return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+        const parentRel = childSegments.slice(0, -1).join("/");
+        const parentDir = dirs.find((dir) => dir.rel === parentRel);
+        if (!parentDir) {
+          return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
         }
-        case "link": {
-          const knownIds = dirs.map((dir) => dir.name);
-          let canonicalTargetId: string | undefined;
-          if (!input.remove) {
-            canonicalTargetId = yield* findTarget(dirs, input.target).pipe(
-              Effect.map((dir) => dir.name),
-            );
-          }
-          const { text, stat } = yield* readMarker(root, target);
-          const parsed = parseIssue(text, target.name);
-          const next = yield* runRule(() =>
-            applyLink(
-              parsed,
-              {
-                type: input.type,
-                target: input.target,
-                ...(input.remove !== undefined ? { remove: input.remove } : {}),
-              },
-              now,
-              knownIds,
-              canonicalTargetId,
+        const child = yield* readMarker(root, target);
+        const childParsed = parseIssue(child.text, target.name);
+        const parent = yield* readMarker(root, parentDir);
+        const parentParsed = parseIssue(parent.text, parentDir.name);
+        const next = applyRollup(
+          parentParsed,
+          { id: childParsed.fm.id, title: childParsed.fm.title },
+          { status: input.status, text: input.text },
+          now,
+        );
+        yield* writeMarker(root, parentDir, next, parent.stat);
+        return { issue: yield* rebuildFromDisk(root, parentParsed.fm.id) };
+      }
+      case "archive": {
+        const subtree = dirs.filter(
+          (dir) => dir.rel === target.rel || dir.rel.startsWith(`${target.rel}/`),
+        );
+        const members: Array<{ id: string; status: string }> = [];
+        for (const member of subtree) {
+          const { text } = yield* readMarker(root, member);
+          const parsed = parseIssue(text, member.name);
+          members.push({ id: parsed.fm.id, status: parsed.fm.status });
+        }
+        yield* runRule(() => assertSubtreeClosed(input.id, members));
+        const before = yield* rebuildFromDisk(root, target.name);
+        const archiveRoot = path.join(root, "archive");
+        yield* fs
+          .makeDirectory(archiveRoot, { recursive: true })
+          .pipe(
+            Effect.mapError((cause) =>
+              toError("operation_failed", `Failed to create ${archiveRoot}`, cause),
             ),
           );
-          yield* writeMarker(root, target, next, stat);
-          return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
+        let dest = path.join(archiveRoot, target.name);
+        let suffix = 2;
+        for (;;) {
+          if (!(yield* existsDirectory(dest))) break;
+          dest = path.join(archiveRoot, `${target.name}-${suffix}`);
+          suffix += 1;
         }
-        case "rollup": {
-          const childSegments = target.rel.split("/");
-          if (childSegments.length < 2) {
-            return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
-          }
-          const parentRel = childSegments.slice(0, -1).join("/");
-          const parentDir = dirs.find((dir) => dir.rel === parentRel);
-          if (!parentDir) {
-            return yield* toError("no_parent", `Issue ${input.id} has no parent issue.`);
-          }
-          const child = yield* readMarker(root, target);
-          const childParsed = parseIssue(child.text, target.name);
-          const parent = yield* readMarker(root, parentDir);
-          const parentParsed = parseIssue(parent.text, parentDir.name);
-          const next = applyRollup(
-            parentParsed,
-            { id: childParsed.fm.id, title: childParsed.fm.title },
-            { status: input.status, text: input.text },
-            now,
+        yield* fs
+          .rename(path.join(root, target.rel), dest)
+          .pipe(
+            Effect.mapError((cause) =>
+              toError("operation_failed", `Failed to archive ${target.name}`, cause),
+            ),
           );
-          yield* writeMarker(root, parentDir, next, parent.stat);
-          return { issue: yield* rebuildFromDisk(root, parentParsed.fm.id) };
-        }
-        case "archive": {
-          const subtree = dirs.filter(
-            (dir) => dir.rel === target.rel || dir.rel.startsWith(`${target.rel}/`),
-          );
-          const members: Array<{ id: string; status: string }> = [];
-          for (const member of subtree) {
-            const { text } = yield* readMarker(root, member);
-            const parsed = parseIssue(text, member.name);
-            members.push({ id: parsed.fm.id, status: parsed.fm.status });
-          }
-          yield* runRule(() => assertSubtreeClosed(input.id, members));
-          const before = yield* rebuildFromDisk(root, target.name);
-          const archiveRoot = path.join(root, "archive");
-          yield* fs
-            .makeDirectory(archiveRoot, { recursive: true })
-            .pipe(
-              Effect.mapError((cause) =>
-                toError("operation_failed", `Failed to create ${archiveRoot}`, cause),
-              ),
-            );
-          let dest = path.join(archiveRoot, target.name);
-          let suffix = 2;
-          for (;;) {
-            if (!(yield* existsDirectory(dest))) break;
-            dest = path.join(archiveRoot, `${target.name}-${suffix}`);
-            suffix += 1;
-          }
-          yield* fs
-            .rename(path.join(root, target.rel), dest)
-            .pipe(
-              Effect.mapError((cause) =>
-                toError("operation_failed", `Failed to archive ${target.name}`, cause),
-              ),
-            );
-          return {
-            issue: {
-              ...before,
-              archived: true,
-              markerPath: normalizeSlashes(path.join(dest, `${target.name}.md`)),
-            },
-          };
-        }
+        return {
+          issue: {
+            ...before,
+            archived: true,
+            markerPath: normalizeSlashes(path.join(dest, `${target.name}.md`)),
+          },
+        };
       }
-    });
+    }
+  });
 
   const resolveSkillScript: Effect.Effect<string, TodoBoardError> = Effect.gen(function* () {
     const platform = yield* HostProcess.Platform;
@@ -598,15 +588,14 @@ export const make = Effect.gen(function* () {
     return scriptPath;
   });
 
-  const regenerateAt = (
+  const regenerateAt = Effect.fn("TodoBoard.regenerateAt")(function* (
     root: string,
     target: TodoBoardRegenerateTarget,
-  ): Effect.Effect<{ artifacts: ReadonlyArray<string> }, TodoBoardError> =>
-    Effect.gen(function* () {
-      const scriptPath = yield* resolveSkillScript;
-      yield* runTodoSkillRegeneration(processRunner, target, root, { scriptPath });
-      return { artifacts: regenerationArtifacts(target) };
-    });
+  ) {
+    const scriptPath = yield* resolveSkillScript;
+    yield* runTodoSkillRegeneration(processRunner, target, root, { scriptPath });
+    return { artifacts: regenerationArtifacts(target) };
+  });
 
   const startWatcher = (root: string, entry: WatchEntry) =>
     Stream.runForEach(
