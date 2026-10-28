@@ -15,7 +15,7 @@ export type ComposerPromptHistoryMessage = Parameters<typeof resolveUserMessageP
   readonly id: string;
 };
 
-export interface ComposerPromptHistoryEntry {
+interface ComposerPromptHistoryEntry {
   readonly id: string;
   readonly prompt: string;
 }
@@ -34,7 +34,7 @@ function findActive(
   return entries.findLastIndex((entry) => entry.prompt === position.recalled);
 }
 
-export interface ComposerPromptHistoryStep {
+interface ComposerPromptHistoryStep {
   readonly position: ComposerPromptHistoryPosition | null;
   readonly prompt: string;
 }
