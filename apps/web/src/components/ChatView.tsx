@@ -2457,14 +2457,16 @@ export default function ChatView(props: ChatViewProps) {
     })
       ? activeContextWindow.usedTokens
       : null;
-  const [compactThreadKeys, setCompactThreadKeys] = useState<ReadonlySet<string>>(() => new Set());
-  const keepFullHistory = !compactThreadKeys.has(routeThreadKey);
+  const [fullHistoryThreadKeys, setFullHistoryThreadKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const keepFullHistory = fullHistoryThreadKeys.has(routeThreadKey);
   const setKeepFullHistory = (threadKey: string, keep: boolean) => {
-    setCompactThreadKeys((current) => {
-      if (current.has(threadKey) !== keep) return current;
+    setFullHistoryThreadKeys((current) => {
+      if (current.has(threadKey) === keep) return current;
       const next = new Set(current);
-      if (keep) next.delete(threadKey);
-      else next.add(threadKey);
+      if (keep) next.add(threadKey);
+      else next.delete(threadKey);
       return next;
     });
   };
