@@ -78,7 +78,7 @@ export const assertSubtreeClosed = (
   }
 };
 
-export const addLogEntry = (body: string, entry: string): string => {
+const addLogEntry = (body: string, entry: string): string => {
   const trimmed = body.replace(/\s+$/, "");
   if (/^##\s+Log\s*$/m.test(trimmed)) {
     return `${trimmed}\n\n${entry}\n`;
@@ -151,7 +151,7 @@ export const applyLink = (
 const CHILD_RESOLUTIONS_HEADING = /^##\s+Child\s+resolutions\s*$/;
 const ANY_HEADING = /^##\s/;
 
-export const addChildResolution = (
+const addChildResolution = (
   body: string,
   childId: string,
   childTitle: string,

@@ -24,7 +24,7 @@ export interface BoardIssue {
 
 const BOM = "\uFEFF";
 
-export const splitLines = (text: string): Array<string> => {
+const splitLines = (text: string): Array<string> => {
   if (text === "") return [];
   const parts = text.split(/\r\n|\n|\r/);
   if (/(?:\r\n|\n|\r)$/.test(text)) parts.pop();
@@ -38,7 +38,7 @@ export const toYamlList = (items: readonly string[]): string => {
   return `[${items.join(", ")}]`;
 };
 
-export const fromYamlList = (raw: string): Array<string> => {
+const fromYamlList = (raw: string): Array<string> => {
   const trimmed = raw.trim();
   if (trimmed === "" || trimmed === "[]") return [];
   const inner = trimmed.startsWith("[") && trimmed.endsWith("]") ? trimmed.slice(1, -1) : trimmed;

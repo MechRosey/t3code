@@ -1,12 +1,9 @@
 import * as Schema from "effect/Schema";
 import { type PointerEvent as ReactPointerEvent, useLayoutEffect, useState } from "react";
 
-import {
-  getLocalStorageItem,
-  removeLocalStorageItem,
-  setLocalStorageItem,
-} from "./useLocalStorage";
+import { getLocalStorageItem, setLocalStorageItem } from "./useLocalStorage";
 import { useResizeDrag } from "./useResizeDrag";
+import { useStableCallback } from "./useStableCallback";
 
 const WidthSchema = Schema.Finite;
 
@@ -19,7 +16,6 @@ export interface UseResizableWidthOptions {
   readonly minWidth: number;
   readonly maxWidth: number;
   readonly edge: "left" | "right";
-  readonly autoWidth?: number | undefined;
 }
 
 export interface ResizableWidthHandlers {
@@ -29,47 +25,50 @@ export interface ResizableWidthHandlers {
   readonly onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onLostPointerCapture: (event: ReactPointerEvent<HTMLElement>) => void;
-  readonly onDoubleClick?: (() => void) | undefined;
 }
 
-/** Persist on drag end to avoid a storage write on every animation frame. */
+/** Uses the current default until a width is chosen; persists on drag end, not every frame. */
 export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
+  readonly setWidth: (width: number) => void;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, edge, autoWidth } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
 
   const clamp = (value: number): number => {
     if (!Number.isFinite(value)) return defaultWidth;
     return Math.max(minWidth, Math.min(maxWidth, value));
   };
 
-  const readWidthState = () => {
-    if (typeof window === "undefined") return { storageKey, width: defaultWidth, stored: false };
+  const readWidth = (): number | null => {
+    if (typeof window === "undefined") return null;
     try {
       const stored = getLocalStorageItem(storageKey, WidthSchema);
-      return { storageKey, width: clamp(stored ?? defaultWidth), stored: stored !== null };
+      return stored === null ? null : clamp(stored);
     } catch (error) {
       console.error("Could not read persisted panel width.", error);
-      return { storageKey, width: defaultWidth, stored: false };
+      return null;
     }
   };
-  const [widthState, setWidthState] = useState(readWidthState);
+  const [widthState, setWidthState] = useState(() => ({ storageKey, width: readWidth() }));
   if (widthState.storageKey !== storageKey) {
-    setWidthState(readWidthState());
+    setWidthState({ storageKey, width: readWidth() });
   }
 
-  const resetWidth = () => {
-    try {
-      removeLocalStorageItem(storageKey);
-    } catch (error) {
-      console.error("Could not clear persisted panel width.", error);
-    }
-    setWidthState({ storageKey, width: clamp(defaultWidth), stored: false });
-  };
+  const clampedWidth = clamp(widthState.width ?? defaultWidth);
+  const restoreWidth = useStableCallback((host: HTMLElement | null) => {
+    host?.style.setProperty(RESIZABLE_WIDTH_PROPERTY, `${clampedWidth}px`);
+  });
 
-  const autoWidthApplies = autoWidth !== undefined && !widthState.stored;
-  const clampedWidth = clamp(autoWidthApplies ? autoWidth : widthState.width);
+  const commitWidth = (nextStorageKey: string, nextWidth: number) => {
+    // Resizing remains usable for this session when browser storage is unavailable.
+    setWidthState({ storageKey: nextStorageKey, width: nextWidth });
+    try {
+      setLocalStorageItem(nextStorageKey, nextWidth, WidthSchema);
+    } catch (error) {
+      console.error("Could not persist panel width.", error);
+    }
+  };
 
   const drag = useResizeDrag<HTMLElement>((event) => {
     const host = event.currentTarget.parentElement;
@@ -88,13 +87,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         return nextWidth;
       },
       finish(finalWidth, moved) {
-        if (!moved) return;
-        setWidthState({ storageKey: startStorageKey, width: finalWidth, stored: true });
-        try {
-          setLocalStorageItem(startStorageKey, finalWidth, WidthSchema);
-        } catch (error) {
-          console.error("Could not persist panel width.", error);
-        }
+        if (moved) commitWidth(startStorageKey, finalWidth);
+        else restoreWidth(host);
       },
       cleanup(committed) {
         host?.style.removeProperty("transition-property");
@@ -111,6 +105,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   return {
     width: clampedWidth,
+    setWidth: (value) => commitWidth(storageKey, clamp(value)),
     handlers: {
       ref: drag.ref,
       onPointerDown: drag.onPointerDown,
@@ -118,7 +113,6 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       onPointerUp: drag.onPointerUp,
       onPointerCancel: drag.onPointerCancel,
       onLostPointerCapture: drag.onLostPointerCapture,
-      ...(autoWidth === undefined ? {} : { onDoubleClick: resetWidth }),
     },
   };
 }

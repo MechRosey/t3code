@@ -20,7 +20,7 @@ export const BOARD_VIEW_OPTIONS: ReadonlyArray<{
   { value: "archive", label: "Archive" },
 ];
 
-export const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
+const DEFAULT_BOARD_VIEW: BoardViewKind = "columns";
 
 const RETIRED_MAP_VIEW = "map";
 
@@ -30,7 +30,7 @@ const withoutRetiredView = (view: string): string =>
 const isBoardViewKind = (value: string): value is BoardViewKind =>
   BOARD_VIEW_OPTIONS.some((option) => option.value === value);
 
-export const DEFAULT_BOARD_DRAWER_MODE: BoardDrawerMode = "normal";
+const DEFAULT_BOARD_DRAWER_MODE: BoardDrawerMode = "normal";
 
 const isBoardDrawerMode = (value: string): value is BoardDrawerMode =>
   value === "normal" || value === "full";

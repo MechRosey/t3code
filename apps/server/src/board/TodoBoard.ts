@@ -139,7 +139,7 @@ const runRule = <A>(thunk: () => A): Effect.Effect<A, TodoBoardError> =>
     }
   });
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const processRunner = yield* ProcessRunner.ProcessRunner;

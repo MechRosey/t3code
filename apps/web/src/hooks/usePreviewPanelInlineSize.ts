@@ -49,11 +49,10 @@ export function usePreviewPanelInlineSize(
   }));
   const { width, handlers } = useResizableWidth({
     storageKey: options.widthStorageKey ?? PREVIEW_PANEL_WIDTH_STORAGE_KEY,
-    defaultWidth,
+    defaultWidth: bounds.autoWidth ?? defaultWidth,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth: bounds.maxWidth,
     edge: "left",
-    autoWidth: bounds.autoWidth,
   });
   const observeRow = (host: HTMLElement) => {
     const row = container ?? (enabled ? host.parentElement : null) ?? null;
