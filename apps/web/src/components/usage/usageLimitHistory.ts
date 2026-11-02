@@ -116,7 +116,7 @@ export function sparklinePoints(
   }));
 }
 
-export function isSparklineWindow(window: SparklineWindow): boolean {
+function isSparklineWindow(window: SparklineWindow): boolean {
   return window.kind !== "weekly" && (window.windowDurationMins ?? 0) > 0;
 }
 

@@ -2,10 +2,6 @@ import { assert, describe, it } from "vite-plus/test";
 
 import { splitMermaidFences } from "./boardMarkdown.logic";
 
-function mermaidSegments(sources: ReadonlyArray<string>): string {
-  return sources.map((source) => "```mermaid\n" + source + "\n```").join("\n");
-}
-
 describe("splitMermaidFences", () => {
   it("returns one markdown segment when there are no fences", () => {
     const body = "# Ticket\n\nSome prose with **bold** text.";

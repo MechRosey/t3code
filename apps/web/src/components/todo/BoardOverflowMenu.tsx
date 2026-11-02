@@ -7,7 +7,7 @@ import {
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 import { EllipsisIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { todoBoardMutate, todoBoardRegenerate } from "../../state/todoBoard";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -41,8 +41,8 @@ export function BoardOverflowMenu({ environmentId, cwd, issues }: BoardOverflowM
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
   const regenerate = useAtomCommand(todoBoardRegenerate, { reportFailure: false });
   const [regenerating, setRegenerating] = useState<TodoBoardRegenerateTarget | null>(null);
-  const eligibleSubtrees = useMemo(() => boardArchiveEligibleSubtrees(issues), [issues]);
-  const sweepCandidates = useMemo(() => boardArchiveSweepCandidates(issues), [issues]);
+  const eligibleSubtrees = boardArchiveEligibleSubtrees(issues);
+  const sweepCandidates = boardArchiveSweepCandidates(issues);
 
   const toastArchiveFailure = (issue: TodoIssue, failure: unknown) => {
     toastManager.add({

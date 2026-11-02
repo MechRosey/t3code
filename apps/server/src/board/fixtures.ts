@@ -20,17 +20,16 @@ export const readFixture = (relativePath: string) =>
     Effect.map(fs.readFile(fixturePath(relativePath)), Buffer.from),
   );
 
-export const findMarkerPath = (board: string, id: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const entries = yield* fs.readDirectory(fixturePath(board), { recursive: true });
-    const match = entries
-      .map((entry) => entry.replace(/\\/g, "/"))
-      .find((entry) => entry.endsWith(`/${id}.md`));
-    if (match === undefined) {
-      return yield* new FixtureMarkerNotFound({
-        message: `fixture marker not found for ${id} in ${board}`,
-      });
-    }
-    return fixturePath(`${board}/${match}`);
-  });
+export const findMarkerPath = Effect.fn("findMarkerPath")(function* (board: string, id: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const entries = yield* fs.readDirectory(fixturePath(board), { recursive: true });
+  const match = entries
+    .map((entry) => entry.replace(/\\/g, "/"))
+    .find((entry) => entry.endsWith(`/${id}.md`));
+  if (match === undefined) {
+    return yield* new FixtureMarkerNotFound({
+      message: `fixture marker not found for ${id} in ${board}`,
+    });
+  }
+  return fixturePath(`${board}/${match}`);
+});

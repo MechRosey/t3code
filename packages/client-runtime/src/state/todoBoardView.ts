@@ -10,7 +10,7 @@ export const BOARD_STATUS_ORDER = [
 ] as const;
 export type BoardStatus = (typeof BOARD_STATUS_ORDER)[number];
 
-export const BOARD_COLUMN_ORDER = [
+const BOARD_COLUMN_ORDER = [
   "backlog",
   "read",
   "doing",
@@ -57,7 +57,7 @@ export const BOARD_STATUS_GLYPHS: Record<BoardStatus, string> = {
   cancelled: "✕",
 };
 
-export const BOARD_STATUS_COLOUR_CLASSES: Record<BoardStatus, string> = {
+const BOARD_STATUS_COLOUR_CLASSES: Record<BoardStatus, string> = {
   backlog: "text-muted-foreground",
   read: "text-info",
   doing: "text-primary",
@@ -166,7 +166,7 @@ export function matchesTagSpec(tags: ReadonlyArray<string>, terms: ReadonlyArray
   return terms.every((term) => lowered.includes(term.toLowerCase()));
 }
 
-export function matchesEpicFilter(tags: ReadonlyArray<string>, epic: string): boolean {
+function matchesEpicFilter(tags: ReadonlyArray<string>, epic: string): boolean {
   return epic.length === 0 || matchesTagSpec(tags, [epic]);
 }
 
@@ -264,7 +264,7 @@ export function boardCommonTagQuickFilters(issues: ReadonlyArray<TodoIssue>): Ar
     .map(([tag]) => tag);
 }
 
-export function expandTagFilterAncestors(
+function expandTagFilterAncestors(
   matched: ReadonlyArray<TodoIssue>,
   issuesById: Map<string, TodoIssue>,
 ): Array<TodoIssue> {

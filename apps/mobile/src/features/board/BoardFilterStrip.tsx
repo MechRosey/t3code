@@ -5,7 +5,7 @@ import {
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { Pressable, ScrollView, View } from "react-native";
 
-import { AppText as Text, AppTextInput } from "../../components/AppText";
+import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 
 export interface BoardFilterState {

@@ -17,7 +17,6 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
 import { DndContext, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-import { useSensor, useSensors } from "@dnd-kit/core";
 import {
   ArrowDownUpIcon,
   Maximize2Icon,
@@ -25,18 +24,11 @@ import {
   NetworkIcon,
   PlusIcon,
   TagIcon,
+  TriangleAlertIcon,
   XIcon,
   ZapIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
@@ -52,7 +44,6 @@ import { todoBoardMutate, todoBoardSubscribe } from "../../state/todoBoard";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { cn } from "~/lib/utils";
-import { SidebarPointerSensor } from "../Sidebar.pointer";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -71,7 +62,16 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Textarea } from "../ui/textarea";
 import { BoardOverflowMenu } from "./BoardOverflowMenu";
-import { BoardDraggableCard, BoardDragPreview } from "./BoardCard";
+import { BoardDraggableCard, BoardDragPreview, useBoardDragSensors } from "./BoardCard";
+import { BoardColumnMore } from "./BoardColumnMore";
+import {
+  boardColumnRevealKey,
+  boardColumnWindow,
+  INITIAL_BOARD_COLUMN_REVEAL,
+  revealedCardCount,
+  revealMoreCards,
+  syncColumnReveal,
+} from "./boardColumnWindow.logic";
 import { shortBoardId } from "./boardCopy.logic";
 import { BoardIssuePane } from "./BoardIssuePane";
 import { BoardSplitLayout, type BoardSplitDetail } from "./BoardSplitLayout";
@@ -83,6 +83,8 @@ import {
   composeBoardDispatchPrompt,
   composeBoardNewTaskPrompt,
   composeBoardNewTaskTitle,
+  composeBoardRefusalDescription,
+  isOpenChildrenRefusal,
   resolveBoardDropAction,
   type BoardDispatchProgress,
   type BoardDropActionMode,
@@ -153,6 +155,8 @@ const BOARD_TAG_ALL = "\u0000all";
 
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
+const currentIsoTimestamp = () => new Date().toISOString();
+
 const BOARD_DISPATCH_FAILED_LOG_MESSAGE = "[todo-board] Dispatch failed";
 
 function BoardColumnCards({
@@ -168,7 +172,7 @@ function BoardColumnCards({
       ref={setNodeRef}
       className={cn(
         "flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md pb-2",
-        isOver && "outline-[1.5px] outline-dashed outline-primary -outline-offset-4",
+        isOver && "outline-2 outline-dashed outline-primary -outline-offset-4",
       )}
     >
       {children}
@@ -176,22 +180,54 @@ function BoardColumnCards({
   );
 }
 
-function BoardActionNowTarget({ status }: { readonly status: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `dispatch:${status}` });
+function BoardDropChip({
+  dropId,
+  ariaLabel,
+  icon,
+  label,
+}: {
+  readonly dropId: string;
+  readonly ariaLabel: string;
+  readonly icon: ReactNode;
+  readonly label: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: dropId });
   return (
     <span
       ref={setNodeRef}
-      aria-label="Drop a card here to action it right away"
+      aria-label={ariaLabel}
       className={cn(
-        "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[.55rem] font-normal normal-case tracking-normal",
+        "ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-4xs font-normal normal-case tracking-normal",
         isOver
-          ? "bg-muted text-primary outline-[1.5px] outline-dashed outline-primary outline-offset-[1px]"
+          ? "bg-muted text-primary outline-2 outline-dashed outline-primary -outline-offset-2"
           : "bg-muted text-muted-foreground",
       )}
     >
-      <ZapIcon className="size-2.5" />
-      Action now
+      {icon}
+      {label}
     </span>
+  );
+}
+
+function BoardActionNowTarget({ status }: { readonly status: string }) {
+  return (
+    <BoardDropChip
+      dropId={`dispatch:${status}`}
+      ariaLabel="Drop a card here to action it right away"
+      icon={<ZapIcon className="size-2.5" />}
+      label="Action now"
+    />
+  );
+}
+
+function BoardForceTarget({ status }: { readonly status: string }) {
+  return (
+    <BoardDropChip
+      dropId={`force:${status}`}
+      ariaLabel="Drop a card here to move it even though it has open children"
+      icon={<TriangleAlertIcon className="size-2.5" />}
+      label="Force"
+    />
   );
 }
 
@@ -218,40 +254,42 @@ function BoardDispatchDialog({
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base">
+          <DialogTitle>
             Run /todo -{verb} {issue.id}?
           </DialogTitle>
           <DialogDescription>
             Runs the full todo pipeline in its own session on this board's project.
           </DialogDescription>
         </DialogHeader>
-        <DialogPanel className="flex flex-col gap-3">
-          {issue.body.trim().length > 0 ? (
-            <div className="max-h-40 overflow-y-auto text-xs whitespace-pre-wrap text-foreground/80">
-              {issue.body}
+        <DialogPanel>
+          <div className="flex flex-col gap-3">
+            {issue.body.trim().length > 0 ? (
+              <div className="max-h-40 overflow-y-auto text-xs whitespace-pre-wrap text-foreground/80">
+                {issue.body}
+              </div>
+            ) : null}
+            <div className="text-xs text-muted-foreground">
+              Pipeline: {BOARD_PIPELINE_STEPS.join(" -> ")}
             </div>
-          ) : null}
-          <div className="text-xs text-muted-foreground">
-            Pipeline: {BOARD_PIPELINE_STEPS.join(" -> ")}
+            {!hintDismissed ? (
+              <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 p-2 text-3xs text-muted-foreground">
+                <span className="min-w-0 flex-1">
+                  Dropping a card on Read or Doing actions the ticket, not just its column. Use
+                  "Just flip status" to move it without running anything.
+                </span>
+                <Button size="compact" variant="ghost-muted" onClick={onDismissHint}>
+                  Don't show this hint again
+                </Button>
+              </div>
+            ) : null}
+            <Textarea
+              size="sm"
+              placeholder="Extra direction for the agent (optional)"
+              aria-label="Dispatch notes"
+              value={notes}
+              onChange={(event) => setNotes(event.currentTarget.value)}
+            />
           </div>
-          {!hintDismissed ? (
-            <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 p-2 text-[.65rem] text-muted-foreground">
-              <span className="min-w-0 flex-1">
-                Dropping a card on Read or Doing actions the ticket, not just its column. Use "Just
-                flip status" to move it without running anything.
-              </span>
-              <Button size="compact" variant="ghost-muted" onClick={onDismissHint}>
-                Don't show this hint again
-              </Button>
-            </div>
-          ) : null}
-          <Textarea
-            size="sm"
-            placeholder="Extra direction for the agent (optional)"
-            aria-label="Dispatch notes"
-            value={notes}
-            onChange={(event) => setNotes(event.currentTarget.value)}
-          />
         </DialogPanel>
         <DialogFooter>
           <Button size="compact" variant="ghost-muted" onClick={onClose}>
@@ -372,32 +410,34 @@ function BoardAddTaskDialog({
     <Dialog open onOpenChange={(open) => (open || dismissBlocked ? undefined : onClose())}>
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base">Add a task</DialogTitle>
+          <DialogTitle>Add a task</DialogTitle>
           <DialogDescription>
             Dispatches an agent to compose and record the ticket on this board.
           </DialogDescription>
         </DialogHeader>
-        <DialogPanel className="flex flex-col gap-3">
-          <Textarea
-            size="sm"
-            autoFocus
-            placeholder="Describe the task in a sentence or two"
-            aria-label="New task idea"
-            value={idea}
-            onChange={(event) => setIdea(event.currentTarget.value)}
-          />
-          {pickerShown ? (
-            <BoardProjectPicker
-              options={projectOptions}
-              value={chosenProjectId}
-              onChange={setChosenProjectId}
+        <DialogPanel>
+          <div className="flex flex-col gap-3">
+            <Textarea
+              size="sm"
+              autoFocus
+              placeholder="Describe the task in a sentence or two"
+              aria-label="New task idea"
+              value={idea}
+              onChange={(event) => setIdea(event.currentTarget.value)}
             />
-          ) : null}
-          {failure !== null ? (
-            <p role="alert" className="text-xs text-destructive">
-              {failure.message}
-            </p>
-          ) : null}
+            {pickerShown ? (
+              <BoardProjectPicker
+                options={projectOptions}
+                value={chosenProjectId}
+                onChange={setChosenProjectId}
+              />
+            ) : null}
+            {failure !== null ? (
+              <p role="alert" className="text-xs text-destructive">
+                {failure.message}
+              </p>
+            ) : null}
+          </div>
         </DialogPanel>
         <DialogFooter>
           <Button size="compact" variant="ghost-muted" disabled={dismissBlocked} onClick={onClose}>
@@ -465,11 +505,10 @@ function BoardFilterChip({
     <button
       type="button"
       aria-pressed={active}
-      title={label}
       onClick={onClick}
       style={hue === null ? undefined : ({ "--card-hue": String(hue) } as CSSProperties)}
       className={cn(
-        "cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-[.625rem] leading-4 transition-colors",
+        "cursor-pointer rounded-md border px-1.5 py-0.5 font-mono text-3xs leading-4 transition-colors",
         hue === null ? "border-border bg-muted text-muted-foreground" : "board-filter-chip-hued",
         active && "font-semibold outline-2 outline-solid outline-foreground -outline-offset-1",
         dimmed && "opacity-45 hover:opacity-100",
@@ -515,6 +554,14 @@ export function BoardView({
   } | null>(null);
   const [dispatchThreads, setDispatchThreads] = useState<Record<string, ThreadId>>({});
   const [addTaskOpen, setAddTaskOpen] = useState(false);
+  const columnRevealKey = boardColumnRevealKey({ ...uiState, root: resolvedRoot });
+  const [storedColumnReveal, setColumnReveal] = useState(() =>
+    syncColumnReveal(INITIAL_BOARD_COLUMN_REVEAL, columnRevealKey),
+  );
+  const columnReveal = syncColumnReveal(storedColumnReveal, columnRevealKey);
+  if (columnReveal !== storedColumnReveal) setColumnReveal(columnReveal);
+  const revealColumnCards = (status: string, mountedCount: number) =>
+    setColumnReveal((prev) => revealMoreCards(prev, columnRevealKey, status, mountedCount));
   const mutate = useAtomCommand(todoBoardMutate, { reportFailure: false });
   const startTurn = useAtomCommand(threadEnvironment.startTurn, {
     reportFailure: false,
@@ -526,58 +573,41 @@ export function BoardView({
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_BOARD_PROVIDERS;
   const threadSnapshot = useAtomValue(threadEnvironment.snapshotAtom(environmentId));
 
-  const model = useMemo(() => {
+  const model = (() => {
     if (snapshotQuery.data !== null) return buildBoardViewModel(snapshotQuery.data, uiState);
     if (boardBootstrap) return buildBoardViewModel(EMPTY_BOARD_SNAPSHOT, uiState);
     return null;
-  }, [snapshotQuery.data, boardBootstrap, uiState]);
-  const issuesById = useMemo(
-    () => new Map((snapshotQuery.data?.issues ?? []).map((issue) => [issue.id, issue] as const)),
-    [snapshotQuery.data],
+  })();
+  const issuesById = new Map(
+    (snapshotQuery.data?.issues ?? []).map((issue) => [issue.id, issue] as const),
   );
   const selectedIssue = selectedIssueId === null ? null : (issuesById.get(selectedIssueId) ?? null);
-  const focusGraph = useMemo(
-    () =>
-      snapshotQuery.data === null || selectedIssue === null
-        ? null
-        : buildFocusGraph(snapshotQuery.data.issues, selectedIssue.id),
-    [snapshotQuery.data, selectedIssue],
+  const focusGraph =
+    snapshotQuery.data === null || selectedIssue === null
+      ? null
+      : buildFocusGraph(snapshotQuery.data.issues, selectedIssue.id);
+  const statusOptions: Array<string> = [...BOARD_STATUS_ORDER];
+  if (selectedIssue !== null && !statusOptions.includes(selectedIssue.status)) {
+    statusOptions.push(selectedIssue.status);
+  }
+  const shellsById = new Map(
+    (threadSnapshot?.threads ?? []).map((thread) => [thread.id, thread] as const),
   );
-  const statusOptions = useMemo(() => {
-    const statuses: Array<string> = [...BOARD_STATUS_ORDER];
-    if (selectedIssue !== null && !statuses.includes(selectedIssue.status)) {
-      statuses.push(selectedIssue.status);
-    }
-    return statuses;
-  }, [selectedIssue]);
-  const shellsById = useMemo(
-    () => new Map((threadSnapshot?.threads ?? []).map((thread) => [thread.id, thread] as const)),
-    [threadSnapshot],
-  );
-  const selectedIssueViewDiff = useMemo(() => {
+  const selectedIssueViewDiff = (() => {
     if (selectedIssue === null) return null;
     if (selectedIssue.status !== "done" && selectedIssue.status !== "cancelled") return null;
     const association = resolveThreadAssociation(selectedIssue.body);
     if (association === null) return null;
     return { threadMissing: !shellsById.has(association.threadId) };
-  }, [selectedIssue, shellsById]);
-  const progressByIssueId = useMemo(() => {
-    const out: Record<string, BoardDispatchProgress> = {};
-    for (const [issueId, threadId] of Object.entries(dispatchThreads)) {
-      const progress = boardDispatchProgress(shellsById.get(threadId));
-      if (progress !== "settled") out[issueId] = progress;
-    }
-    return out;
-  }, [dispatchThreads, shellsById]);
-  const dispatchInFlight = useMemo(
-    () => new Set(Object.keys(progressByIssueId)),
-    [progressByIssueId],
-  );
+  })();
+  const progressByIssueId: Record<string, BoardDispatchProgress> = {};
+  for (const [issueId, threadId] of Object.entries(dispatchThreads)) {
+    const progress = boardDispatchProgress(shellsById.get(threadId));
+    if (progress !== "settled") progressByIssueId[issueId] = progress;
+  }
+  const dispatchInFlight = new Set(Object.keys(progressByIssueId));
   const newTaskProgress = progressByIssueId[BOARD_NEW_TASK_DISPATCH_KEY] ?? null;
-  const projectOptions = useMemo(
-    () => listBoardProjectOptions(projects, environmentId),
-    [projects, environmentId],
-  );
+  const projectOptions = listBoardProjectOptions(projects, environmentId);
 
   const totalCards = model?.columns.reduce((count, column) => count + column.cards.length, 0) ?? 0;
   const filterActive = uiState.tag !== null || isBoardFilterActive(uiState);
@@ -614,23 +644,7 @@ export function BoardView({
 
   const changeStatus = async (issue: TodoIssue, status: string) => {
     if (issue.status === status) return;
-    const result = await mutate({
-      environmentId,
-      input: { action: "status", cwd, id: issue.id, status },
-    });
-    if (result._tag !== "Failure") {
-      await rollupAfterStatus(issue, status);
-      return;
-    }
-    const failure = squashAtomCommandFailure(result);
-    toastManager.add({
-      type: "error",
-      title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
-      description:
-        failure instanceof Error && failure.message.length > 0
-          ? failure.message
-          : "The board rejected the change.",
-    });
+    await applyStatus(issue, status);
   };
 
   const addComment = async (issue: TodoIssue, text: string, by: string | undefined) => {
@@ -678,23 +692,36 @@ export function BoardView({
     void mutateTag(issue, tag, true);
   };
 
-  const applyStatusDrop = async (issue: TodoIssue, status: string) => {
+  const applyStatus = async (issue: TodoIssue, status: string, force?: true) => {
     const result = await mutate({
       environmentId,
-      input: { action: "status", cwd, id: issue.id, status },
+      input: { action: "status", cwd, id: issue.id, status, force },
     });
     if (result._tag !== "Failure") {
       await rollupAfterStatus(issue, status);
       return;
     }
     const failure = squashAtomCommandFailure(result);
-    toastManager.add({
+    const offerForce = force === undefined && isOpenChildrenRefusal(failure);
+    const toastId = toastManager.add({
       type: "error",
       title: `Could not move ${shortBoardId(issue.id)} to ${status}`,
       description:
         failure instanceof Error && failure.message.length > 0
-          ? failure.message
+          ? composeBoardRefusalDescription(failure.message)
           : "The board rejected the change.",
+      ...(offerForce
+        ? {
+            timeout: 0,
+            actionProps: {
+              children: "Cancel anyway",
+              onClick: () => {
+                toastManager.close(toastId);
+                void applyStatus(issue, status, true);
+              },
+            },
+          }
+        : {}),
     });
   };
 
@@ -739,7 +766,7 @@ export function BoardView({
       return createBoardDispatchFailure(BOARD_DISPATCH_FAILURE_CODE.noProvider);
     }
     const runtimeMode = resolvedSettings.settings.defaultRuntimeMode ?? DEFAULT_RUNTIME_MODE;
-    const createdAt = new Date().toISOString();
+    const createdAt = currentIsoTimestamp();
     recordAssociation?.();
     setDispatchThreads((prev) => ({ ...prev, [dispatchKey]: threadId }));
     const result = await startTurn({
@@ -906,12 +933,15 @@ export function BoardView({
     } else if (overId.startsWith("dispatch:")) {
       target = overId.slice("dispatch:".length);
       speed = "now";
+    } else if (overId.startsWith("force:")) {
+      target = overId.slice("force:".length);
+      speed = "force";
     }
     if (target === null) return;
     const action = resolveBoardDropAction(issue.status, target, speed);
     if (action.kind === "noop") return;
     if (action.kind === "status") {
-      void applyStatusDrop(issue, action.status);
+      void applyStatus(issue, action.status, action.force);
       return;
     }
     if (speed === "now") {
@@ -921,15 +951,7 @@ export function BoardView({
     setConfirmDispatch({ issue, mode: action.mode });
   };
 
-  const attachDragSensor = useCallback(() => {}, []);
-  const finishCardDrag = useCallback(() => {}, []);
-  const dndSensors = useSensors(
-    useSensor(SidebarPointerSensor, {
-      distance: 6,
-      onAttach: attachDragSensor,
-      onFinish: finishCardDrag,
-    }),
-  );
+  const dndSensors = useBoardDragSensors();
 
   const showMissing = boardLoadState === "unavailable";
 
@@ -961,16 +983,15 @@ export function BoardView({
           ),
         };
 
-  const wasBootstrapRef = useRef(false);
-  useEffect(() => {
-    const wasBootstrap = wasBootstrapRef.current;
-    wasBootstrapRef.current = boardBootstrap;
-    if (boardBootstrap && !wasBootstrap) setAddTaskOpen(true);
+  const [wasBootstrap, setWasBootstrap] = useState(false);
+  if (boardBootstrap !== wasBootstrap) {
+    setWasBootstrap(boardBootstrap);
+    if (boardBootstrap) setAddTaskOpen(true);
     const hasSnapshot = snapshotQuery.data !== null;
     if (shouldAutoCloseAddTask({ wasBootstrap, boardBootstrap, hasSnapshot })) {
       setAddTaskOpen(false);
     }
-  }, [boardBootstrap, snapshotQuery.data]);
+  }
 
   return (
     <div className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden", className)}>
@@ -980,7 +1001,7 @@ export function BoardView({
             {model !== null && model.repoName.length > 0 ? model.repoName : "Board"}
           </div>
           {resolvedRoot !== null ? (
-            <div className="truncate font-mono text-[.6rem] text-muted-foreground/60">
+            <div className="truncate font-mono text-3xs text-muted-foreground/60">
               {resolvedRoot}
             </div>
           ) : null}
@@ -1035,7 +1056,7 @@ export function BoardView({
               </Tooltip>
             )}
             {newTaskProgress !== null ? (
-              <span className="flex items-center gap-1 text-[.6rem] text-primary">
+              <span className="flex items-center gap-1 text-3xs text-primary">
                 <Spinner className="size-3" />
                 {newTaskProgress === "starting" ? "dispatching" : "agent running"}
               </span>
@@ -1163,32 +1184,51 @@ export function BoardView({
             ) : (
               <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
                 <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
-                  {model.columns.map((column) => (
-                    <div key={column.status} className="flex w-56 shrink-0 flex-col">
-                      <div className="flex items-center gap-1 px-1 pb-1 text-[.6rem] font-medium tracking-wider uppercase text-muted-foreground/70">
-                        <span className="min-w-0 truncate">
-                          {column.label}
-                          <span className="ml-1 font-normal text-muted-foreground/50">
-                            {column.cards.length}
+                  {model.columns.map((column) => {
+                    const columnWindow = boardColumnWindow(
+                      column.cards,
+                      revealedCardCount(columnReveal, columnRevealKey, column.status),
+                      selectedIssue?.id ?? null,
+                    );
+                    return (
+                      <div key={column.status} className="flex w-56 shrink-0 flex-col">
+                        <div className="flex items-center gap-1 px-1 pb-1 text-3xs font-medium tracking-wider uppercase text-muted-foreground/70">
+                          <span className="min-w-0 truncate">
+                            {column.label}
+                            <span className="ml-1 font-normal text-muted-foreground/50">
+                              {column.cards.length}
+                            </span>
                           </span>
-                        </span>
-                        {column.status === "read" || column.status === "doing" ? (
-                          <BoardActionNowTarget status={column.status} />
-                        ) : null}
+                          {column.status === "read" || column.status === "doing" ? (
+                            <BoardActionNowTarget status={column.status} />
+                          ) : null}
+                          {column.status === "cancelled" ? (
+                            <BoardForceTarget status={column.status} />
+                          ) : null}
+                        </div>
+                        <BoardColumnCards status={column.status}>
+                          {columnWindow.mounted.map((card) => (
+                            <BoardDraggableCard
+                              key={card.issue.id}
+                              card={card}
+                              progress={progressByIssueId[card.issue.id] ?? null}
+                              selected={card.issue.id === selectedIssue?.id}
+                              onOpen={setSelectedIssueId}
+                            />
+                          ))}
+                          {columnWindow.hiddenCount > 0 ? (
+                            <BoardColumnMore
+                              status={column.status}
+                              label={column.label}
+                              mountedCount={columnWindow.mounted.length}
+                              hiddenCount={columnWindow.hiddenCount}
+                              onReveal={revealColumnCards}
+                            />
+                          ) : null}
+                        </BoardColumnCards>
                       </div>
-                      <BoardColumnCards status={column.status}>
-                        {column.cards.map((card) => (
-                          <BoardDraggableCard
-                            key={card.issue.id}
-                            card={card}
-                            progress={progressByIssueId[card.issue.id] ?? null}
-                            selected={card.issue.id === selectedIssue?.id}
-                            onOpen={() => setSelectedIssueId(card.issue.id)}
-                          />
-                        ))}
-                      </BoardColumnCards>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
               </DndContext>

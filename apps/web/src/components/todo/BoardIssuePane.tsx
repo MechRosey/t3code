@@ -4,7 +4,7 @@ import {
   boardStatusLabel,
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { GitCompareIcon, PlusIcon, XIcon, ZapIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -80,10 +80,7 @@ export function BoardIssuePane({
   const [newTagText, setNewTagText] = useState("");
   const preparedComment = prepareCommentText(commentText);
   const preparedTag = normalizeTagInput(newTagText, issue.tags);
-  const tagSuggestions = useMemo(
-    () => unusedBoardTags(boardTags, issue.tags),
-    [boardTags, issue.tags],
-  );
+  const tagSuggestions = unusedBoardTags(boardTags, issue.tags);
   const submitComment = async () => {
     const text = preparedComment;
     if (text === null || submittingComment) return;

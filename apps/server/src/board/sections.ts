@@ -1,5 +1,3 @@
-import { HEADER_ALIASES, MARKER_ALIASES } from "./vocabulary.ts";
-
 export interface IssueSectionState {
   content: boolean;
   marker?: boolean;
@@ -93,14 +91,4 @@ export const getSectionMap = (body: string): IssueSections => {
       hasHumanOpen: openHasHumanOpen,
     },
   };
-};
-
-export const hasStaleVocabulary = (text: string): boolean => {
-  for (const old of Object.keys(HEADER_ALIASES)) {
-    if (new RegExp(`^##[ \\t]+${old}[ \\t]*(?=\\r?$)`, "m").test(text)) return true;
-  }
-  for (const old of Object.keys(MARKER_ALIASES)) {
-    if (text.includes(old)) return true;
-  }
-  return false;
 };

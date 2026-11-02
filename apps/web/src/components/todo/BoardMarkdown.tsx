@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentProps } from "react";
+import { memo, type ComponentProps } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BOARD_MARKDOWN_REHYPE_PLUGINS } from "@t3tools/shared/markdownPipeline";
@@ -28,7 +28,7 @@ const BOARD_MARKDOWN_COMPONENTS = {
   h2: (props: ComponentProps<"h2">) => <h2 className="text-sm font-semibold" {...props} />,
   h3: (props: ComponentProps<"h3">) => <h3 className="text-sm font-semibold" {...props} />,
   a: (props: ComponentProps<"a">) => (
-    <a className="text-blue-500 underline underline-offset-2" {...props} />
+    <a className="text-info underline underline-offset-2" {...props} />
   ),
   ul: (props: ComponentProps<"ul">) => <ul className="list-disc ps-5" {...props} />,
   ol: (props: ComponentProps<"ol">) => <ol className="list-decimal ps-5" {...props} />,
@@ -52,14 +52,21 @@ const BOARD_MARKDOWN_COMPONENTS = {
   ),
 } satisfies Components;
 
+function keyedSegments(body: string) {
+  const ordinals = { markdown: 0, mermaid: 0 };
+  return splitMermaidFences(body).map((segment) => ({
+    segment,
+    key: `${segment.kind}-${ordinals[segment.kind]++}`,
+  }));
+}
+
 function BoardMarkdownBody({ body }: { readonly body: string }) {
-  const segments = useMemo(() => splitMermaidFences(body), [body]);
   return (
     <div className="flex flex-col gap-2 text-sm text-foreground/80 [&>*:first-child]:mt-0">
-      {segments.map((segment, index) =>
+      {keyedSegments(body).map(({ segment, key }) =>
         segment.kind === "markdown" ? (
           <ReactMarkdown
-            key={index}
+            key={key}
             remarkPlugins={BOARD_MARKDOWN_REMARK_PLUGINS}
             rehypePlugins={BOARD_MARKDOWN_REHYPE_PLUGINS}
             components={BOARD_MARKDOWN_COMPONENTS}
@@ -67,7 +74,7 @@ function BoardMarkdownBody({ body }: { readonly body: string }) {
             {segment.text}
           </ReactMarkdown>
         ) : (
-          <MermaidView key={index} source={segment.source} />
+          <MermaidView key={key} source={segment.source} />
         ),
       )}
     </div>

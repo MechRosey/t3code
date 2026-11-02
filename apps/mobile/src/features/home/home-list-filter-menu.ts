@@ -92,7 +92,7 @@ export function buildHomeListFilterMenu(props: {
           type: "action" as const,
           title: project.label,
           subtitle: "Open the project board",
-          onPress: () => props.onOpenProjectBoard(project.key),
+          onPress: () => props.onOpenProjectBoard?.(project.key),
         })),
       });
     }

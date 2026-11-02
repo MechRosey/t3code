@@ -11,6 +11,7 @@ import { useEnvironmentQuery } from "../../state/query";
 import { todoBoardArchiveRead } from "../../state/todoBoard";
 import { cn } from "~/lib/utils";
 import { ScrollArea } from "../ui/scroll-area";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { BoardMarkdown } from "./BoardMarkdown";
 import { shortBoardId } from "./boardCopy.logic";
 import { BoardPaneHeader, BoardSplitLayout } from "./BoardSplitLayout";
@@ -84,16 +85,17 @@ function ArchiveIssueRow({
       )}
     >
       <span className="min-w-0 flex-1 truncate text-xs text-foreground/90">{issue.title}</span>
-      <span
-        title={issue.title}
-        className="shrink-0 font-mono text-xs leading-4 font-bold text-foreground/70"
-      >
-        {shortBoardId(issue.id)}
-      </span>
-      <span
-        title={boardStatusLabel(issue.status)}
-        className={cn("shrink-0 text-xs leading-4", boardStatusColourClass(issue.status))}
-      >
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="shrink-0 font-mono text-xs leading-4 font-bold text-foreground/70" />
+          }
+        >
+          {shortBoardId(issue.id)}
+        </TooltipTrigger>
+        <TooltipPopup>{issue.title}</TooltipPopup>
+      </Tooltip>
+      <span className={cn("shrink-0 text-xs leading-4", boardStatusColourClass(issue.status))}>
         {boardStatusLabel(issue.status)}
       </span>
     </button>
@@ -121,19 +123,13 @@ function ArchiveGroupCard({
             {root.title}
           </span>
           <div className="mt-1 flex items-center gap-2">
-            <span
-              title={root.title}
-              className="font-mono text-xs leading-4 font-bold text-foreground/70"
-            >
+            <span className="font-mono text-xs leading-4 font-bold text-foreground/70">
               {shortBoardId(root.id)}
             </span>
-            <span
-              className={cn("text-xs leading-4", boardStatusColourClass(root.status))}
-              title={boardStatusLabel(root.status)}
-            >
+            <span className={cn("text-xs leading-4", boardStatusColourClass(root.status))}>
               {boardStatusLabel(root.status)}
             </span>
-            <span className="ml-auto font-mono text-[.6rem] text-muted-foreground/60">
+            <span className="ml-auto font-mono text-3xs text-muted-foreground/60">
               {group.dirName}
             </span>
           </div>
@@ -141,7 +137,7 @@ function ArchiveGroupCard({
       ) : (
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">No root ticket recorded</span>
-          <span className="ml-auto font-mono text-[.6rem] text-muted-foreground/60">
+          <span className="ml-auto font-mono text-3xs text-muted-foreground/60">
             {group.dirName}
           </span>
         </div>

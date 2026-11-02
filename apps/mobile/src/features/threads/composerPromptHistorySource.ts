@@ -1,4 +1,4 @@
-import type { ComposerPromptHistoryMessage } from "@t3tools/shared/composerPromptHistory";
+import type { ComposerPromptHistoryMessage } from "@t3tools/client-runtime/composer-prompt-history";
 
 export interface ComposerPromptHistoryDetailMessage {
   readonly id: string;

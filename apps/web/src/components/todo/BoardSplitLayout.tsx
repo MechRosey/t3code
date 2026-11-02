@@ -1,16 +1,8 @@
 import { ArrowLeftIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
-import {
-  Fragment,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { Fragment, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { useResizableWidth } from "~/hooks/useResizableWidth";
+import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
 import { Button } from "../ui/button";
@@ -34,39 +26,34 @@ export interface BoardSplitDetail {
   readonly render: (splitMode: BoardSplitMode) => ReactNode;
 }
 
-function useObservedWidth(ref: RefObject<HTMLElement | null>): number {
+function useObservedWidth() {
   const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    const element = ref.current;
+  const observe = (element: HTMLElement | null) => {
     if (element === null) return;
     const measure = () => setWidth(element.clientWidth);
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
+    return observeResize(element, measure);
+  };
+  return { width, observe };
 }
 
-function useFocusReturnOnClose(detailKey: string | null, paneRef: RefObject<HTMLElement | null>) {
-  const openerRef = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (detailKey === null || typeof document === "undefined") return;
-    const active = document.activeElement;
-    if (!(active instanceof HTMLElement) || active === document.body) return;
-    if (paneRef.current?.contains(active)) return;
-    openerRef.current = active;
-  }, [detailKey, paneRef]);
-  useEffect(() => {
-    if (detailKey !== null || typeof document === "undefined") return;
-    const opener = openerRef.current;
-    openerRef.current = null;
-    if (opener === null || !opener.isConnected) return;
-    const focusWasDropped =
-      document.activeElement === null || document.activeElement === document.body;
-    if (focusWasDropped) opener.focus();
-  }, [detailKey]);
+function returnFocusToOpenerOnUnmount(pane: HTMLElement | null) {
+  if (pane === null) return;
+  const active = pane.ownerDocument.activeElement;
+  const opener =
+    active instanceof HTMLElement && active !== pane.ownerDocument.body ? active : null;
+  return () => {
+    if (opener === null) return;
+    queueMicrotask(() => {
+      const { activeElement, body } = opener.ownerDocument;
+      const focusWasDropped = activeElement === null || activeElement === body;
+      if (opener.isConnected && focusWasDropped) opener.focus();
+    });
+  };
+}
+
+function focusAfterCommit(element: HTMLElement | null) {
+  if (element !== null) queueMicrotask(() => element.focus());
 }
 
 export function BoardSplitLayout({
@@ -80,9 +67,7 @@ export function BoardSplitLayout({
   readonly drawerMode: BoardDrawerMode;
   readonly onClose: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const paneRef = useRef<HTMLElement>(null);
-  const containerWidth = useObservedWidth(containerRef);
+  const { width: containerWidth, observe } = useObservedWidth();
   const splitMode = resolveSplitMode(containerWidth, drawerMode);
   const stacked = splitMode === "stacked";
   const { width, handlers } = useResizableWidth({
@@ -91,20 +76,19 @@ export function BoardSplitLayout({
     edge: "left",
     ...(stacked ? STACKED_PANE_WIDTH_BOUNDS : detailWidthBounds(containerWidth)),
   });
-  useFocusReturnOnClose(detail?.key ?? null, paneRef);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
     event.preventDefault();
     onClose();
   };
   return (
-    <div ref={containerRef} className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
+    <div ref={observe} className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
       <div hidden={detail !== null && stacked} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {primary}
       </div>
       {detail !== null ? (
         <aside
-          ref={paneRef}
+          ref={returnFocusToOpenerOnUnmount}
           aria-label="Issue details"
           onKeyDown={closeOnEscape}
           style={stacked ? undefined : { width }}
@@ -122,12 +106,12 @@ export function BoardSplitLayout({
 }
 
 function BoardPaneHeading({ children }: { readonly children: ReactNode }) {
-  const ref = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
   return (
-    <h2 ref={ref} tabIndex={-1} className="text-base leading-tight font-semibold outline-none">
+    <h2
+      ref={focusAfterCommit}
+      tabIndex={-1}
+      className="text-base leading-tight font-semibold outline-none"
+    >
       {children}
     </h2>
   );
