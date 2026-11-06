@@ -21,7 +21,7 @@ import type { BoardDispatchProgress } from "./boardDrop.logic";
 
 const BOARD_CARD_RELATION_SLOTS = 4;
 const BOARD_CARD_RELATION_OVERFLOW_VISIBLE = BOARD_CARD_RELATION_SLOTS - 1;
-const BOARD_CARD_RELATION_GLYPH = "❯";
+const BOARD_CARD_RELATION_GLYPH = "\u276f";
 
 const BOARD_DRAG_ACTIVATION_DISTANCE = 6;
 
@@ -77,7 +77,7 @@ function RelationId({
         "max-w-full truncate text-3xs leading-4 text-muted-foreground/70",
         relation.closed && "line-through",
       )}
-      tooltip={`${tooltipPrefix} ${shortBoardId(relation.id)} ${relation.title}`}
+      tooltip={`${tooltipPrefix} ${shortBoardId(relation.id)}${relation.closed ? " (closed)" : ""} ${relation.title}`}
     >
       {glyph === "before" ? `${BOARD_CARD_RELATION_GLYPH} ` : null}
       {shortBoardId(relation.id)}
@@ -203,22 +203,16 @@ export const BoardCard = memo(function BoardCard({
         <RelationColumn relations={card.blockedBy} side="left" tooltipPrefix="Blocked by" />
         <div className="flex min-w-0 flex-col items-center">
           {card.parent !== null ? (
-            <TooltipSpan
-              tooltip={card.parent.title}
-              className={cn(
-                "max-w-full truncate text-3xs leading-4 text-muted-foreground/70",
-                card.parent.closed && "line-through",
-              )}
-            >
-              {shortBoardId(card.parent.id)}
-            </TooltipSpan>
+            <RelationId relation={card.parent} tooltipPrefix="Parent" />
           ) : null}
           <span className="font-mono text-xs leading-4 font-bold text-foreground/70">
             {shortBoardId(card.issue.id)}
           </span>
-          <RelationRow relations={card.children} tooltipPrefix="Child" />
         </div>
         <RelationColumn relations={card.blocks} side="right" tooltipPrefix="Blocks" />
+        <div className="col-span-3">
+          <RelationRow relations={card.children} tooltipPrefix="Child" />
+        </div>
       </div>
       {progress !== null ? (
         <div className="mt-1 flex items-center gap-1 text-3xs leading-4 text-primary">
