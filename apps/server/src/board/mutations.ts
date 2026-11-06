@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+
 import type { BoardIssue } from "./frontmatter.ts";
 import {
   BOARD_STATUSES,
@@ -15,14 +17,16 @@ export type BoardRuleFailure =
   | "subtree_open"
   | "no_parent";
 
-export class BoardRuleError extends Error {
-  readonly failure: BoardRuleFailure;
-
-  constructor(failure: BoardRuleFailure, message: string) {
-    super(message);
-    this.failure = failure;
-  }
-}
+export class BoardRuleError extends Schema.TaggedError<BoardRuleError>()("BoardRuleError", {
+  failure: Schema.Literals([
+    "invalid_status",
+    "invalid_link_type",
+    "open_children",
+    "subtree_open",
+    "no_parent",
+  ]),
+  message: Schema.String,
+}) {}
 
 const withUpdated = (issue: BoardIssue, now: string): BoardIssue => ({
   fm: { ...issue.fm, updated: now },
@@ -35,10 +39,10 @@ export const applyStatus = (
   now: string,
 ): BoardIssue => {
   if (!isKnownStatus(args.status)) {
-    throw new BoardRuleError(
-      "invalid_status",
-      `Invalid status '${args.status}'. Allowed: ${BOARD_STATUSES.join(", ")}.`,
-    );
+    throw new BoardRuleError({
+      failure: "invalid_status",
+      message: `Invalid status '${args.status}'. Allowed: ${BOARD_STATUSES.join(", ")}.`,
+    });
   }
   const next = withUpdated(issue, now);
   next.fm.status = canonicalStatus(args.status);
@@ -57,10 +61,10 @@ export const assertStatusChildrenGuard = (
   const open = directChildren.filter((child) => !["done", "cancelled"].includes(child.status));
   if (open.length > 0) {
     const list = open.map((child) => `  ${child.id} [${child.status}]`).join("\n");
-    throw new BoardRuleError(
-      "open_children",
-      `Cannot set ${typedId} to ${canonical} - it has open children:\n${list}\nUse -Force to override.`,
-    );
+    throw new BoardRuleError({
+      failure: "open_children",
+      message: `Cannot set ${typedId} to ${canonical} - it has open children:\n${list}\nUse -Force to override.`,
+    });
   }
 };
 
@@ -71,10 +75,10 @@ export const assertSubtreeClosed = (
   const open = members.filter((member) => !["done", "cancelled"].includes(member.status));
   if (open.length > 0) {
     const list = open.map((member) => `  ${member.id} [${member.status}]`).join("\n");
-    throw new BoardRuleError(
-      "subtree_open",
-      `Cannot archive ${typedId} - subtree has open issues:\n${list}`,
-    );
+    throw new BoardRuleError({
+      failure: "subtree_open",
+      message: `Cannot archive ${typedId} - subtree has open issues:\n${list}`,
+    });
   }
 };
 
@@ -123,10 +127,10 @@ export const applyLink = (
   canonicalTargetId: string | undefined,
 ): BoardIssue => {
   if (!(LINK_TYPES as readonly string[]).includes(args.type)) {
-    throw new BoardRuleError(
-      "invalid_link_type",
-      `Invalid link type '${args.type}'. Allowed: ${LINK_TYPES.join(", ")}.`,
-    );
+    throw new BoardRuleError({
+      failure: "invalid_link_type",
+      message: `Invalid link type '${args.type}'. Allowed: ${LINK_TYPES.join(", ")}.`,
+    });
   }
   const linkType = args.type as BoardLinkType;
   const next = withUpdated(issue, now);
