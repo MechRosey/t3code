@@ -1168,6 +1168,9 @@ export function BoardView({
           cwd={cwd}
           drawerMode={uiState.drawerMode}
           onDrawerModeChange={changeDrawerMode}
+          filter={uiState}
+          filterActive={filterActive}
+          onClearFilters={clearFilters}
         />
       ) : model === null ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4">

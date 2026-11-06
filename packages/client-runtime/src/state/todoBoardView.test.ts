@@ -1,4 +1,4 @@
-import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import type { TodoArchiveGroup, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
@@ -18,6 +18,7 @@ import {
   buildBoardViewModel,
   cardHueStyle,
   EMPTY_BOARD_SNAPSHOT,
+  filterArchiveGroups,
   filterIssuesByTag,
   isBoardFilterActive,
   isQuickFilterActive,
@@ -1333,5 +1334,77 @@ describe("empty board scaffold", () => {
     assert.deepEqual(model.commonTags, []);
     assert.equal(model.root, "");
     assert.equal(model.repoName, "");
+  });
+});
+
+describe("archive group filtering", () => {
+  function group(dirName: string, issues: TodoIssue[]): TodoArchiveGroup {
+    const rootIssue = issues.find((candidate) => candidate.parentId === null) ?? null;
+    return { dirName, rootIssue, snapshot: snapshot(issues) };
+  }
+
+  const none = { tag: null, tagSpec: "", query: "", epic: "", sort: "updated-desc" } as const;
+  const groups = [
+    group("a", [
+      issue({ id: "aaaaa-root", title: "a root", updated: "2026-09-01", tags: ["bug"] }),
+      issue({
+        id: "aaaab-kid",
+        title: "a kid",
+        updated: "2026-09-05",
+        parentId: "aaaaa-root",
+        tags: ["TreadOnly"],
+      }),
+    ]),
+    group("b", [issue({ id: "bbbbb-root", title: "b root", updated: "2026-09-03", tags: ["ui"] })]),
+    group("c", [
+      issue({ id: "ccccc-root", title: "c root", updated: "2026-09-09", tags: ["TreadOnly"] }),
+    ]),
+  ];
+  const idsOf = (filtered: ReadonlyArray<TodoArchiveGroup>) =>
+    filtered.map((entry) => [entry.dirName, entry.snapshot.issues.map((row) => row.id)]);
+
+  it("narrows and sorts archived groups like the board", () => {
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tagSpec: "bug" })), [
+      ["a", ["aaaaa-root"]],
+    ]);
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, epic: "ui" })), [
+      ["b", ["bbbbb-root"]],
+    ]);
+
+    const orphan: TodoArchiveGroup = {
+      dirName: "z",
+      rootIssue: null,
+      snapshot: snapshot([
+        issue({ id: "zzzzz-kid", title: "orphan", parentId: "gone", tags: ["TreadOnly"] }),
+      ]),
+    };
+    assert.deepEqual(
+      filterArchiveGroups([orphan, ...groups], { ...none, tagSpec: "treadonly" }).map(
+        (entry) => entry.dirName,
+      ),
+      ["c", "a", "z"],
+    );
+
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tagSpec: "treadonly" })), [
+      ["c", ["ccccc-root"]],
+      ["a", ["aaaab-kid", "aaaaa-root"]],
+    ]);
+
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tag: "ui" })), [
+      ["b", ["bbbbb-root"]],
+    ]);
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, query: "ccccc" })), [
+      ["c", ["ccccc-root"]],
+    ]);
+    assert.deepEqual(filterArchiveGroups(groups, { ...none, query: "nomatch" }), []);
+
+    assert.deepEqual(
+      filterArchiveGroups(groups, { ...none, sort: "id-asc" }).map((entry) => entry.dirName),
+      ["a", "b", "c"],
+    );
+    assert.deepEqual(
+      filterArchiveGroups(groups, none).map((entry) => entry.dirName),
+      ["c", "b", "a"],
+    );
   });
 });

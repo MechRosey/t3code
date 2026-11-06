@@ -1,4 +1,4 @@
-import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import type { TodoArchiveGroup, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 
 export const BOARD_STATUS_ORDER = [
   "backlog",
@@ -409,26 +409,60 @@ export interface BoardFilterUiState {
   readonly epic?: string;
 }
 
+type BoardFilterAndSort = {
+  readonly tag: string | null;
+  readonly sort: BoardSortOrder;
+} & BoardFilterUiState;
+
+function filterAndSortIssues(
+  issues: ReadonlyArray<TodoIssue>,
+  uiState: BoardFilterAndSort,
+): Array<TodoIssue> {
+  const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
+  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
+  const matched = filterIssuesByTag(issues, uiState.tag).filter(
+    (issue) =>
+      matchesEpicFilter(issue.tags, uiState.epic ?? "") &&
+      matchesTagSpec(issue.tags, specTerms) &&
+      matchesIssueFreeText(issue, uiState.query ?? ""),
+  );
+  return sortBoardIssues(expandTagFilterAncestors(matched, issuesById), uiState.sort);
+}
+
+export function filterArchiveGroups(
+  groups: ReadonlyArray<TodoArchiveGroup>,
+  uiState: BoardFilterAndSort,
+): Array<TodoArchiveGroup> {
+  const shown = groups.flatMap((group) => {
+    const issues = filterAndSortIssues(group.snapshot.issues, uiState);
+    return issues.length === 0 ? [] : [{ ...group, snapshot: { ...group.snapshot, issues } }];
+  });
+  const rootRank = new Map(
+    sortBoardIssues(
+      shown.flatMap((group) => (group.rootIssue === null ? [] : [group.rootIssue])),
+      uiState.sort,
+    ).map((root, rank) => [root.id, rank] as const),
+  );
+  const rankOf = (group: TodoArchiveGroup) =>
+    group.rootIssue === null ? null : (rootRank.get(group.rootIssue.id) ?? null);
+  return shown.sort((left, right) => {
+    const leftRank = rankOf(left);
+    const rightRank = rankOf(right);
+    if (leftRank === null || rightRank === null) {
+      return Number(leftRank === null) - Number(rightRank === null);
+    }
+    return leftRank - rightRank;
+  });
+}
+
 export function buildBoardViewModel(
   snapshot: TodoBoardSnapshot,
-  uiState: { readonly tag: string | null; readonly sort: BoardSortOrder } & BoardFilterUiState,
+  uiState: BoardFilterAndSort,
 ): BoardViewModel {
   const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue] as const));
   const blockedByIndex = buildBlockedByIndex(snapshot.issues);
   const childrenByParent = buildChildIssuesIndex(snapshot.issues);
-  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
-  const visible = sortBoardIssues(
-    expandTagFilterAncestors(
-      filterIssuesByTag(snapshot.issues, uiState.tag).filter(
-        (issue) =>
-          matchesEpicFilter(issue.tags, uiState.epic ?? "") &&
-          matchesTagSpec(issue.tags, specTerms) &&
-          matchesIssueFreeText(issue, uiState.query ?? ""),
-      ),
-      issuesById,
-    ),
-    uiState.sort,
-  );
+  const visible = filterAndSortIssues(snapshot.issues, uiState);
   const grouped = new Map<string, Array<TodoIssue>>();
   for (const issue of visible) {
     const column = isDelegatedIssue(issue, childrenByParent) ? "delegated" : issue.status;

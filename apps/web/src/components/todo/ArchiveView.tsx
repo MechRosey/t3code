@@ -3,6 +3,7 @@ import {
   boardStatusColourClass,
   boardStatusLabel,
   cardHueStyle,
+  filterArchiveGroups,
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { ArchiveIcon } from "lucide-react";
 import { useState } from "react";
@@ -10,6 +11,7 @@ import { useState } from "react";
 import { useEnvironmentQuery } from "../../state/query";
 import { todoBoardArchiveRead } from "../../state/todoBoard";
 import { cn } from "~/lib/utils";
+import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { BoardMarkdown } from "./BoardMarkdown";
@@ -158,6 +160,9 @@ export interface ArchiveViewProps {
   readonly cwd: string;
   readonly drawerMode: BoardDrawerMode;
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
+  readonly filter: Parameters<typeof filterArchiveGroups>[1];
+  readonly filterActive: boolean;
+  readonly onClearFilters: () => void;
 }
 
 export function ArchiveView({
@@ -165,10 +170,13 @@ export function ArchiveView({
   cwd,
   drawerMode,
   onDrawerModeChange,
+  filter,
+  filterActive,
+  onClearFilters,
 }: ArchiveViewProps) {
   const archiveQuery = useEnvironmentQuery(todoBoardArchiveRead({ environmentId, input: { cwd } }));
   const [selected, setSelected] = useState<TodoIssue | null>(null);
-  const groups = archiveQuery.data?.groups ?? [];
+  const groups = filterArchiveGroups(archiveQuery.data?.groups ?? [], filter);
   if (archiveQuery.error !== null) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
@@ -205,7 +213,14 @@ export function ArchiveView({
             }
       }
       primary={
-        groups.length === 0 ? (
+        groups.length === 0 && filterActive ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
+            <p className="text-xs text-muted-foreground">No issues match the active filters.</p>
+            <Button size="compact" variant="outline" onClick={onClearFilters}>
+              Clear filters
+            </Button>
+          </div>
+        ) : groups.length === 0 ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
             <ArchiveIcon className="size-5 text-muted-foreground/50" />
             <p className="text-xs text-muted-foreground">Nothing archived yet.</p>
