@@ -182,6 +182,46 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("snapshots the planned sequence in file order, keeping only open tickets", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const absent = yield* board.read({ cwd });
+        expect(absent.sequence).toEqual([]);
+        expect(yield* fs.exists(sequencePath)).toBe(false);
+
+        yield* board.mutate({ action: "status", cwd, id: "e20d1-status-target", status: "doing" });
+        const lines = [
+          "﻿762b5",
+          "",
+          "6ba55",
+          "762b5",
+          "e20d1-status-target",
+          "e",
+          "e0ae5",
+          "df3cf-archive-child",
+          "zzzzz",
+          "55041",
+        ];
+        const raw = `${lines.join("\r\n")}\r\n`;
+        yield* fs.writeFileString(sequencePath, raw);
+
+        const snapshot = yield* board.read({ cwd });
+
+        expect(snapshot.sequence).toEqual([
+          "762b5-comment-target",
+          "6ba55-parser-fidelity",
+          "e20d1-status-target",
+          "55041-tag-target",
+        ]);
+        expect(snapshot.issues.length).toBe(16);
+        expect(yield* fs.readFileString(sequencePath)).toBe(raw);
+      }),
+    );
+
     it.effect("excludes archived subtrees from the read snapshot", () =>
       Effect.gen(function* () {
         const { cwd } = yield* installBoard("after-archive");
@@ -221,6 +261,7 @@ describe("TodoBoard service", () => {
           "archive/e0ae5-archive-target/df3cf-archive-child/df3cf-archive-child.md",
         );
         expect(group?.snapshot.issues.length).toBe(2);
+        expect(group?.snapshot.sequence).toEqual([]);
       }),
     );
 
@@ -564,6 +605,12 @@ describe("board watching", () => {
         const second = yield* Queue.take(seen);
         const changed = second.issues.find((issue) => issue.id === "762b5-comment-target");
         expect(changed?.body).toContain("watcher probe edit");
+        expect(second.sequence).toEqual([]);
+
+        yield* fs.writeFileString(path.join(boardDir, "SEQUENCE.md"), "762b5\n");
+
+        const third = yield* Queue.take(seen);
+        expect(third.sequence).toEqual(["762b5-comment-target"]);
       }).pipe(Effect.timeout("30 seconds"), Effect.scoped, Effect.provide(TestLayer)),
   );
 });
