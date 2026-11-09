@@ -36,6 +36,12 @@ const BOARD_DROP: SequenceDropOutcome = { kind: "board" };
 
 export const sequenceChipDragId = (id: string) => `${SEQUENCE_CHIP_DRAG_PREFIX}${id}`;
 
+export const isSequenceChipDragId = (dragId: string) =>
+  dragId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX);
+
+export const isSequenceDropId = (dropId: string) =>
+  dropId === SEQUENCE_STRIP_DROP_ID || isSequenceChipDragId(dropId);
+
 const isSequenceCandidate = (issue: TodoIssue) =>
   !issue.archived && !OUTSIDE_SEQUENCE_STATUSES.has(issue.status);
 
@@ -75,7 +81,7 @@ const changedOrNull = (next: ReadonlyArray<string>, current: ReadonlyArray<strin
 
 function sequenceDropBeforeId(overId: string): { readonly beforeId: string | null } | null {
   if (overId === SEQUENCE_STRIP_DROP_ID) return { beforeId: null };
-  if (overId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX)) {
+  if (isSequenceChipDragId(overId)) {
     return { beforeId: overId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length) };
   }
   return null;
@@ -125,7 +131,7 @@ export function resolveSequenceDrop({
   readonly issuesById: ReadonlyMap<string, TodoIssue>;
 }): SequenceDropOutcome {
   const target = sequenceDropBeforeId(overId);
-  if (activeId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX)) {
+  if (isSequenceChipDragId(activeId)) {
     const chipId = activeId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length);
     const nextIds = strip.next.map((chip) => chip.id);
     return {
