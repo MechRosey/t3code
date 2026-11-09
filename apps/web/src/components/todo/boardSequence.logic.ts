@@ -227,16 +227,19 @@ export function reconcilePendingWrites(
   writes: ReadonlyArray<PendingSequenceWrite>,
   snapshotSequence: ReadonlyArray<string>,
 ): ReadonlyArray<PendingSequenceWrite> {
-  const caughtUp = writes.findLastIndex((write) => sameOrder(write.ids, snapshotSequence));
-  if (caughtUp >= 0) {
-    return writes
-      .slice(caughtUp + 1)
-      .map((write) =>
-        write.base === snapshotSequence ? write : { ...write, base: snapshotSequence },
-      );
-  }
-  const kept = writes.filter((write) => !write.settled || write.base === snapshotSequence);
-  return kept.length === writes.length ? writes : kept;
+  const caughtUp = writes.findLastIndex(
+    (write, index) =>
+      sameOrder(write.ids, snapshotSequence) &&
+      writes.slice(0, index + 1).every((earlier) => earlier.settled),
+  );
+  const rebase = (write: PendingSequenceWrite) =>
+    write.base === snapshotSequence ? write : { ...write, base: snapshotSequence };
+  if (caughtUp >= 0) return writes.slice(caughtUp + 1).map(rebase);
+  const kept = writes
+    .filter((write) => !write.settled || write.base === snapshotSequence)
+    .map((write) => (write.settled ? write : rebase(write)));
+  const unchanged = kept.length === writes.length && kept.every((write, i) => write === writes[i]);
+  return unchanged ? writes : kept;
 }
 
 export function displayedSequence(
