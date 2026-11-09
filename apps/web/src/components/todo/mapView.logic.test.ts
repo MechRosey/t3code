@@ -648,7 +648,70 @@ describe("focus graph layout", () => {
     assert.equal(midX(centre) - (left!.x + left!.width), rightNear!.x - midX(centre));
   });
 
-  it("splits siblings around the gap above the centre with the label under the right-most one", () => {
+  const OLD_CENTRE_Y = 148;
+  const OLD_GRID_HEIGHT = 272;
+  const SIBLING_CLEARANCE_X = 6;
+  const SIBLING_CLEARANCE_Y = 10;
+  const TIER_WIDTHS = [
+    ["three", 420, true],
+    ["four", 502, true],
+    ["four and a half", 560, false],
+    ["five", 640, true],
+  ] as const;
+
+  it("pulls the siblings a quarter node onto the centre ticket where they clear it sideways, else keeps a gap above it", () => {
+    for (const [tier, width, overlapping] of TIER_WIDTHS) {
+      const graph = buildFocusGraph(neighbourhood(7), CENTRE, width);
+      const centre = centreOf(graph);
+      const siblings = zoneBoxes(graph, "siblings");
+      const siblingsBottom = Math.max(...siblings.map((box) => box.y + box.height));
+      const sidewaysGap = Math.min(
+        ...siblings.map((box) =>
+          Math.max(box.x - (centre.x + centre.width), centre.x - (box.x + box.width)),
+        ),
+      );
+
+      assert.equal(
+        siblingsBottom - centre.y,
+        overlapping ? centre.height / 4 : -SIBLING_CLEARANCE_Y,
+        tier,
+      );
+      assert.equal(
+        graph.layout.height,
+        OLD_GRID_HEIGHT - (OLD_CENTRE_Y - centre.y),
+        `${tier} height follows the centre`,
+      );
+      assert.ok(centre.y < OLD_CENTRE_Y, tier);
+      assert.equal(
+        sidewaysGap >= SIBLING_CLEARANCE_X,
+        overlapping,
+        `${tier} sideways gap ${sidewaysGap}`,
+      );
+    }
+  });
+
+  it("never lets a sibling touch the centre ticket in any size, overlapping vertically only with sideways clearance", () => {
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
+      const centre = centreOf(graph);
+
+      for (const sibling of zoneBoxes(graph, "siblings")) {
+        const sideways = Math.max(
+          sibling.x - (centre.x + centre.width),
+          centre.x - (sibling.x + sibling.width),
+        );
+        const above = centre.y - (sibling.y + sibling.height);
+
+        assert.equal(overlaps(sibling, centre), false);
+        assert.ok(
+          above >= SIBLING_CLEARANCE_Y || sideways >= SIBLING_CLEARANCE_X,
+          `count ${count} width ${width}`,
+        );
+      }
+    }
+  });
+
+  it("splits siblings around the gap above the centre with the label above the right-most one", () => {
     const siblingsOf = (count: number) => {
       const graph = buildFocusGraph(
         [
@@ -696,7 +759,7 @@ describe("focus graph layout", () => {
     height: Math.abs(line.y2 - line.y1),
   });
 
-  it("puts each overflow label under the last entry of its zone, clear of every node and connector", () => {
+  it("puts each overflow label under the last entry of its zone, above the right-most sibling, clear of every node and connector", () => {
     for (const [count, width] of CASES) {
       const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
       const alone = buildFocusGraph([centreWith()], CENTRE, width);
@@ -708,7 +771,13 @@ describe("focus graph layout", () => {
         assert.ok(overflow.hidden > 0);
         assert.equal(overflow.text, `+${overflow.hidden} more`);
         assert.equal(overflow.x, midX(last));
-        assert.ok(box.y >= last.y + last.height);
+        if (overflow.zone === "siblings") {
+          const parent = zoneBoxes(graph, "parent")[0]!;
+          assert.ok(box.y + box.height <= last.y);
+          assert.ok(box.y >= parent.y + parent.height);
+        } else {
+          assert.ok(box.y >= last.y + last.height);
+        }
         assert.ok(box.x >= 0 && box.x + box.width <= graph.layout.width);
         assert.ok(box.y + box.height <= graph.layout.height);
         assert.equal(
@@ -798,6 +867,7 @@ describe("focus graph layout", () => {
       for (const label of graph.labels) {
         const first = zoneBoxes(graph, label.zone)[0]!;
         assert.equal(label.x, midX(first));
+        assert.ok(label.y - LABEL_ASCENT >= 0);
         assert.ok(label.y < first.y);
         assert.ok(first.y - label.y <= first.height);
       }
