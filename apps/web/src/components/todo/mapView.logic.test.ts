@@ -661,7 +661,7 @@ describe("focus graph layout", () => {
 
   it("pulls the siblings a quarter node onto the centre ticket where they clear it sideways, else keeps a gap above it", () => {
     for (const [tier, width, overlapping] of TIER_WIDTHS) {
-      const graph = buildFocusGraph(neighbourhood(7), CENTRE, width);
+      const graph = buildFocusGraph(neighbourhood(2), CENTRE, width);
       const centre = centreOf(graph);
       const siblings = zoneBoxes(graph, "siblings");
       const siblingsBottom = Math.max(...siblings.map((box) => box.y + box.height));

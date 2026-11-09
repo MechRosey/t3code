@@ -49,14 +49,36 @@ const RELATION_TIERS: ReadonlyArray<RelationTier> = [
 
 const PARENT_Y = 0;
 const SIBLING_Y = PARENT_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
-const CENTRE_Y = SIBLING_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
-const CHILD_Y = CENTRE_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
-const CENTRE_MID_Y = CENTRE_Y + FOCUS_NODE_HEIGHT / 2;
+const SIBLING_BOTTOM_Y = SIBLING_Y + FOCUS_NODE_HEIGHT;
 const SIBLING_MID_Y = SIBLING_Y + FOCUS_NODE_HEIGHT / 2;
+const SIBLING_CENTRE_OVERLAP = FOCUS_NODE_HEIGHT / 4;
+const SIBLING_CENTRE_CLEARANCE_X = SLOT_GAP;
+const SIBLING_CENTRE_CLEARANCE_Y = 10;
 
 const COLUMN_HEIGHT = SIDE_COLUMN_SLOTS * FOCUS_NODE_HEIGHT + (SIDE_COLUMN_SLOTS - 1) * SLOT_GAP;
-const COLUMN_TOP = CENTRE_MID_Y - COLUMN_HEIGHT / 2;
-const GRID_HEIGHT = Math.max(CHILD_Y + FOCUS_NODE_HEIGHT, COLUMN_TOP + COLUMN_HEIGHT);
+
+interface FocusRows {
+  readonly centreY: number;
+  readonly centreMidY: number;
+  readonly childY: number;
+  readonly gridHeight: number;
+}
+
+function focusRowsFor(siblingsToCentreGapX: number): FocusRows {
+  const centreY =
+    siblingsToCentreGapX >= SIBLING_CENTRE_CLEARANCE_X
+      ? SIBLING_BOTTOM_Y - SIBLING_CENTRE_OVERLAP
+      : SIBLING_BOTTOM_Y + SIBLING_CENTRE_CLEARANCE_Y;
+  const centreMidY = centreY + FOCUS_NODE_HEIGHT / 2;
+  const childY = centreY + FOCUS_NODE_HEIGHT + ROW_GAP;
+  const columnTop = centreMidY - COLUMN_HEIGHT / 2;
+  return {
+    centreY,
+    centreMidY,
+    childY,
+    gridHeight: Math.max(childY + FOCUS_NODE_HEIGHT, columnTop + COLUMN_HEIGHT),
+  };
+}
 
 interface FocusGeometry {
   readonly tier: RelationTier;
@@ -70,6 +92,7 @@ interface FocusGeometry {
   readonly siblingGapRightX: number;
   readonly centreX: number;
   readonly centreMidX: number;
+  readonly rows: FocusRows;
   readonly layout: MapLayout;
 }
 
@@ -114,6 +137,8 @@ function focusGeometryFor(availableWidth: number): FocusGeometry {
   const blockX = leftColumnX + nodeWidth + COLUMN_GAP;
   const rightColumnX = blockX + blockWidth + COLUMN_GAP;
   const centreX = blockX + (blockWidth - nodeWidth) / 2;
+  const siblingGapLeftX = blockX + sideWidth;
+  const rows = focusRowsFor(centreX - siblingGapLeftX);
   return {
     tier,
     nodeWidth,
@@ -122,13 +147,14 @@ function focusGeometryFor(availableWidth: number): FocusGeometry {
     blockX,
     leftColumnX,
     rightColumnX,
-    siblingGapLeftX: blockX + sideWidth,
+    siblingGapLeftX,
     siblingGapRightX: blockX + blockWidth - sideWidth,
     centreX,
     centreMidX: centreX + nodeWidth / 2,
+    rows,
     layout: {
       width: rightColumnX + nodeWidth,
-      height: GRID_HEIGHT,
+      height: rows.gridHeight,
       titleChars: titleCharsFor(nodeWidth),
     },
   };
@@ -318,13 +344,13 @@ function placeChildren(geometry: FocusGeometry, count: number): Array<FocusRect>
   const rowWidth = count * geometry.slotPitch - SLOT_GAP;
   const rowX = geometry.blockX + (geometry.blockWidth - rowWidth) / 2;
   return Array.from({ length: count }, (_, position) =>
-    rectInRow(geometry, rowX + position * geometry.slotPitch, CHILD_Y),
+    rectInRow(geometry, rowX + position * geometry.slotPitch, geometry.rows.childY),
   );
 }
 
 function stackColumn(geometry: FocusGeometry, x: number, count: number): Array<FocusRect> {
   const stackHeight = count * FOCUS_NODE_HEIGHT + (count - 1) * SLOT_GAP;
-  const top = CENTRE_MID_Y - stackHeight / 2;
+  const top = geometry.rows.centreMidY - stackHeight / 2;
   return Array.from({ length: count }, (_, position) => ({
     x,
     y: top + position * (FOCUS_NODE_HEIGHT + SLOT_GAP),
@@ -362,16 +388,15 @@ function connectorsFor(
     y2: number,
   ): FocusConnectorViewModel => ({ zone, role, kind, x1, y1, x2, y2 });
   const { centreX, centreMidX, nodeWidth } = geometry;
+  const { centreY, centreMidY, childY } = geometry.rows;
   const busIfMany = (bus: FocusConnectorViewModel) => (rects.length > 1 ? [bus] : []);
   switch (zone) {
     case "parent":
-      return [
-        line("trunk", "tree", centreMidX, CENTRE_Y, centreMidX, PARENT_Y + FOCUS_NODE_HEIGHT),
-      ];
+      return [line("trunk", "tree", centreMidX, centreY, centreMidX, PARENT_Y + FOCUS_NODE_HEIGHT)];
     case "children":
       return [
-        line("trunk", "tree", centreMidX, CHILD_Y, centreMidX, CENTRE_Y + FOCUS_NODE_HEIGHT),
-        ...busIfMany(line("bus", "tree", midX(first), CHILD_Y, midX(last), CHILD_Y)),
+        line("trunk", "tree", centreMidX, childY, centreMidX, centreY + FOCUS_NODE_HEIGHT),
+        ...busIfMany(line("bus", "tree", midX(first), childY, midX(last), childY)),
       ];
     case "siblings": {
       const leftCount = siblingsOnLeft(rects.length);
@@ -389,20 +414,13 @@ function connectorsFor(
     case "blockedBy": {
       const innerX = geometry.leftColumnX + nodeWidth;
       return [
-        line("trunk", "blocks", innerX, CENTRE_MID_Y, centreX, CENTRE_MID_Y),
+        line("trunk", "blocks", innerX, centreMidY, centreX, centreMidY),
         ...busIfMany(line("bus", "blocks", innerX, midY(first), innerX, midY(last))),
       ];
     }
     case "blocking":
       return [
-        line(
-          "trunk",
-          "blocks",
-          centreX + nodeWidth,
-          CENTRE_MID_Y,
-          geometry.rightColumnX,
-          CENTRE_MID_Y,
-        ),
+        line("trunk", "blocks", centreX + nodeWidth, centreMidY, geometry.rightColumnX, centreMidY),
         ...busIfMany(
           line(
             "bus",
@@ -448,6 +466,9 @@ function toFocusNode(
   };
 }
 
+const overflowLabelY = (zone: FocusZone, last: FocusRect): number =>
+  zone === "siblings" ? last.y - LABEL_GAP : last.y + last.height + OVERFLOW_LABEL_DROP;
+
 function overflowsFor(
   zone: FocusZone,
   hidden: number,
@@ -455,15 +476,7 @@ function overflowsFor(
 ): Array<FocusOverflowViewModel> {
   const last = rects.at(-1);
   if (hidden === 0 || last === undefined) return [];
-  return [
-    {
-      zone,
-      hidden,
-      text: `+${hidden} more`,
-      x: midX(last),
-      y: last.y + last.height + OVERFLOW_LABEL_DROP,
-    },
-  ];
+  return [{ zone, hidden, text: `+${hidden} more`, x: midX(last), y: overflowLabelY(zone, last) }];
 }
 
 function placeZone(
@@ -494,18 +507,21 @@ function openParentIdsOf(issues: ReadonlyArray<TodoIssue>): Set<string> {
 function centreRectOf(geometry: FocusGeometry): FocusRect {
   return {
     x: geometry.centreX,
-    y: CENTRE_Y,
+    y: geometry.rows.centreY,
     width: geometry.nodeWidth,
     height: FOCUS_NODE_HEIGHT,
   };
 }
 
-function heightHolding(overflows: ReadonlyArray<FocusOverflowViewModel>): number {
+function heightHolding(
+  overflows: ReadonlyArray<FocusOverflowViewModel>,
+  gridHeight: number,
+): number {
   const lowestLabelBottom = Math.max(
     0,
     ...overflows.map((overflow) => overflow.y + OVERFLOW_LABEL_DESCENT),
   );
-  return Math.max(GRID_HEIGHT, lowestLabelBottom);
+  return Math.max(gridHeight, lowestLabelBottom);
 }
 
 export function buildFocusGraph(
@@ -531,7 +547,7 @@ export function buildFocusGraph(
     overflows,
     connectors: placed.flatMap((zone) => zone.connectors),
     labels: placed.flatMap((zone) => zone.labels),
-    layout: { ...geometry.layout, height: heightHolding(overflows) },
+    layout: { ...geometry.layout, height: heightHolding(overflows, geometry.rows.gridHeight) },
   };
 }
 
