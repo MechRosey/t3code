@@ -67,8 +67,8 @@ function idsIn(graph: FocusGraph, zone: Zone): Array<string> {
   return graph.nodes.filter((node) => node.zone === zone).map((node) => node.id);
 }
 
-function markerRows(graph: FocusGraph): Array<[string, number]> {
-  return graph.markers.map((marker) => [marker.zone, marker.hidden]);
+function overflowRows(graph: FocusGraph): Array<[string, number]> {
+  return graph.overflows.map((overflow) => [overflow.zone, overflow.hidden]);
 }
 
 function centreWith(overrides: Partial<TodoIssue> = {}): TodoIssue {
@@ -187,7 +187,7 @@ describe("focus graph zones", () => {
       ],
     );
     assert.equal(new Set(nodeIds(graph)).size, graph.nodes.length);
-    assert.deepEqual(graph.markers, []);
+    assert.deepEqual(graph.overflows, []);
   });
 
   it("gives a root ticket no siblings and a ticket with a missing parent neither parent nor siblings", () => {
@@ -211,7 +211,7 @@ describe("focus graph zones", () => {
   it("returns an empty graph for an unknown focus ticket", () => {
     const empty: FocusGraph = {
       nodes: [],
-      markers: [],
+      overflows: [],
       connectors: [],
       labels: [],
       layout: { width: 0, height: 0, titleChars: 12 },
@@ -276,7 +276,7 @@ describe("focus graph zone order and caps", () => {
     assert.deepEqual(blockedByIds(closedLast), ["z-doing", "x-unknown", "b-done", "a-cancelled"]);
   });
 
-  it("shows all open tickets when they fit the slots and a marker for the rest when they do not", () => {
+  it("shows all open tickets when they fit the slots and a label for the rest when they do not", () => {
     const fits = buildFocusGraph(
       [
         parentTicket(),
@@ -298,21 +298,45 @@ describe("focus graph zone order and caps", () => {
       CENTRE,
     );
 
-    assert.deepEqual(fits.markers, []);
+    assert.deepEqual(fits.overflows, []);
     assert.equal(idsIn(fits, "blockedBy").length, 4);
     assert.equal(idsIn(fits, "children").length, 3);
     assert.equal(idsIn(fits, "siblings").length, 2);
-    assert.deepEqual(idsIn(overflows, "blockedBy"), ["b0", "b1", "b2"]);
-    assert.deepEqual(idsIn(overflows, "children"), ["k0", "k1"]);
-    assert.deepEqual(idsIn(overflows, "siblings"), ["s0"]);
-    assert.deepEqual(markerRows(overflows), [
-      ["siblings", 2],
-      ["children", 3],
-      ["blockedBy", 3],
+    assert.deepEqual(idsIn(overflows, "blockedBy"), ["b0", "b1", "b2", "b3"]);
+    assert.deepEqual(idsIn(overflows, "children"), ["k0", "k1", "k2"]);
+    assert.deepEqual(idsIn(overflows, "siblings"), ["s0", "s1"]);
+    assert.deepEqual(overflowRows(overflows), [
+      ["siblings", 1],
+      ["children", 2],
+      ["blockedBy", 2],
     ]);
+    assert.deepEqual(
+      overflows.overflows.map((overflow) => overflow.text),
+      ["+1 more", "+2 more", "+2 more"],
+    );
   });
 
-  it("fills only spare slots with closed tickets and never counts closed tickets in the marker", () => {
+  it("shows no label for a zone with exactly as many open tickets as slots and one label with one more", () => {
+    const zoneOf = (count: number) => [
+      centreWith(),
+      ...openOnes(count, "k").map((id) => childOf(CENTRE, id)),
+    ];
+
+    const exact = buildFocusGraph(zoneOf(3), CENTRE);
+    const oneMore = buildFocusGraph(zoneOf(4), CENTRE);
+    const wideExact = buildFocusGraph(zoneOf(5), CENTRE, 640);
+    const wideOneMore = buildFocusGraph(zoneOf(6), CENTRE, 640);
+
+    assert.deepEqual([idsIn(exact, "children").length, exact.overflows], [3, []]);
+    assert.deepEqual([idsIn(oneMore, "children").length, overflowRows(oneMore)], [3, [["children", 1]]]);
+    assert.deepEqual([idsIn(wideExact, "children").length, wideExact.overflows], [5, []]);
+    assert.deepEqual(
+      [idsIn(wideOneMore, "children").length, overflowRows(wideOneMore)],
+      [5, [["children", 1]]],
+    );
+  });
+
+  it("fills only spare slots with closed tickets and never counts closed tickets in the label", () => {
     const spare = buildFocusGraph(
       [centreWith(), ...blockersWithStatus(["done", "backlog", "cancelled", "done", "read"])],
       CENTRE,
@@ -343,13 +367,13 @@ describe("focus graph zone order and caps", () => {
     );
 
     assert.deepEqual(blockedByIds(spare), ["b1", "b4", "b0", "b3"]);
-    assert.deepEqual(spare.markers, []);
-    assert.deepEqual(blockedByIds(crowded), ["b0", "b1", "b2"]);
-    assert.deepEqual(markerRows(crowded), [["blockedBy", 2]]);
+    assert.deepEqual(spare.overflows, []);
+    assert.deepEqual(blockedByIds(crowded), ["b0", "b1", "b2", "b3"]);
+    assert.deepEqual(overflowRows(crowded), [["blockedBy", 1]]);
     assert.deepEqual(blockedByIds(exact), ["b0", "b1", "b2", "b3"]);
-    assert.deepEqual(exact.markers, []);
+    assert.deepEqual(exact.overflows, []);
     assert.deepEqual(idsIn(kids, "children"), ["k-open", "k-closed0", "k-closed1"]);
-    assert.deepEqual(kids.markers, []);
+    assert.deepEqual(kids.overflows, []);
   });
 });
 
@@ -364,7 +388,7 @@ describe("focus graph layout", () => {
   type Connector = FocusGraph["connectors"][number];
   type ZoneBox = Box & { readonly zone: Zone | null };
 
-  const boxesOf = (graph: FocusGraph): Array<ZoneBox> => [...graph.nodes, ...graph.markers];
+  const boxesOf = (graph: FocusGraph): Array<ZoneBox> => graph.nodes;
 
   const zoneBoxes = (graph: FocusGraph, zone: Zone): Array<Box> =>
     boxesOf(graph).filter((box) => box.zone === zone);
@@ -417,7 +441,7 @@ describe("focus graph layout", () => {
   }
 
   const COUNTS = [1, 2, 3, 4, 5, 7];
-  const WIDTHS = [420, 640, 900];
+  const WIDTHS = [420, 501, 502, 545, 546, 583, 584, 640, 900, 1200];
   const CASES = COUNTS.flatMap((count) => WIDTHS.map((width) => [count, width] as const));
 
   const centreOf = (graph: FocusGraph): Box => {
@@ -435,14 +459,15 @@ describe("focus graph layout", () => {
 
     assert.deepEqual(alone.connectors, []);
     assert.deepEqual(alone.labels, []);
-    assert.deepEqual(alone.markers, []);
+    assert.deepEqual(alone.overflows, []);
     assert.deepEqual(centreOf(withParent), centreOf(alone));
     assert.deepEqual(centreOf(crowded), centreOf(alone));
     assert.deepEqual(withParent.layout, alone.layout);
-    assert.deepEqual(crowded.layout, alone.layout);
+    assert.equal(crowded.layout.width, alone.layout.width);
+    assert.equal(crowded.layout.titleChars, alone.layout.titleChars);
   });
 
-  it("places every zone size without overlap, centred on the centre ticket, marker last", () => {
+  it("places every zone size without overlap, centred on the centre ticket", () => {
     for (const [count, width] of CASES) {
       const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
       const centre = centreOf(graph);
@@ -467,12 +492,6 @@ describe("focus graph layout", () => {
       const rowRight = Math.max(...children.map((box) => box.x + box.width));
       assert.equal((rowLeft + rowRight) / 2, midX(centre));
       assert.equal(new Set(children.map((box) => box.y)).size, 1);
-      for (const marker of graph.markers) {
-        const vertical = marker.zone === "blockedBy" || marker.zone === "blocking";
-        for (const peer of graph.nodes.filter((node) => node.zone === marker.zone)) {
-          assert.ok(vertical ? marker.y > peer.y : marker.x > peer.x);
-        }
-      }
       assert.ok(
         graph.nodes
           .filter((node) => node.zone === "parent")
@@ -496,6 +515,53 @@ describe("focus graph layout", () => {
     );
   });
 
+  it("keeps the three-child layout for every width up to 501, scaled to the pane", () => {
+    for (const width of [420, 460, 501]) {
+      const graph = buildFocusGraph(neighbourhood(7), CENTRE, width);
+      const nodeWidth = Math.floor((width - 40) / 5);
+      const centre = centreOf(graph);
+      const blocking = zoneBoxes(graph, "blocking");
+
+      assert.equal(centre.width, nodeWidth);
+      assert.equal(graph.layout.width, 5 * nodeWidth + 40);
+      assert.equal(centre.x, 2 * nodeWidth + 20);
+      assert.equal(blocking[0]!.x, 4 * nodeWidth + 40);
+      assert.deepEqual(
+        [zoneBoxes(graph, "children").length, zoneBoxes(graph, "siblings").length],
+        [3, 2],
+      );
+    }
+  });
+
+  it("grows child and sibling capacity through the tiers at the thresholds", () => {
+    const capacities = (width: number) => {
+      const graph = buildFocusGraph(neighbourhood(7), CENTRE, width);
+      return [zoneBoxes(graph, "children").length, zoneBoxes(graph, "siblings").length];
+    };
+
+    assert.deepEqual(capacities(420), [3, 2]);
+    assert.deepEqual(capacities(501), [3, 2]);
+    assert.deepEqual(capacities(502), [4, 2]);
+    assert.deepEqual(capacities(520), [4, 2]);
+    assert.deepEqual(capacities(545), [4, 2]);
+    assert.deepEqual(capacities(546), [4, 4]);
+    assert.deepEqual(capacities(560), [4, 4]);
+    assert.deepEqual(capacities(583), [4, 4]);
+    assert.deepEqual(capacities(584), [5, 4]);
+    assert.deepEqual(capacities(640), [5, 4]);
+    assert.deepEqual(capacities(2000), [5, 4]);
+  });
+
+  it("keeps the layout inside the pane with nodes between the minimum and maximum width", () => {
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
+
+      assert.ok(graph.layout.width <= width);
+      assert.ok(graph.nodes.every((node) => node.width >= 76 && node.width <= 144));
+    }
+    assert.equal(buildFocusGraph(neighbourhood(7), CENTRE, 5000).layout.width, 7 * 144 + 52);
+  });
+
   it("widens nodes and the title budget with the pane up to a cap, never past the pane", () => {
     const widths = [420, 520, 640, 900, 2000];
     const graphs = widths.map((width) => buildFocusGraph(neighbourhood(3), CENTRE, width));
@@ -503,26 +569,81 @@ describe("focus graph layout", () => {
     const titleChars = graphs.map((graph) => graph.layout.titleChars);
     const layoutWidths = graphs.map((graph) => graph.layout.width);
 
-    assert.deepEqual(nodeWidths, [76, 96, 120, 144, 144]);
-    assert.deepEqual(titleChars, [12, 15, 20, 24, 24]);
-    assert.deepEqual(layoutWidths, [420, 520, 640, 760, 760]);
+    assert.deepEqual(nodeWidths, [76, 79, 84, 121, 144]);
+    assert.deepEqual(titleChars, [12, 12, 13, 20, 24]);
+    assert.deepEqual(layoutWidths, [420, 520, 640, 899, 1060]);
     for (const [position, graph] of graphs.entries()) {
       assert.ok(graph.nodes.every((node) => node.width === nodeWidths[position]));
-      assert.ok(graph.markers.every((marker) => marker.width === nodeWidths[position]));
       assert.ok(layoutWidths[position]! <= widths[position]!);
     }
   });
 
-  it("keeps the centre ticket's size and the grid fixed at a wide width whether the zones are empty or crowded", () => {
+  it("keeps the centre ticket's size and the grid width fixed at a wide width whether the zones are empty or crowded", () => {
     const alone = buildFocusGraph([centreWith()], CENTRE, 900);
     const crowded = buildFocusGraph(neighbourhood(7), CENTRE, 900);
 
     assert.deepEqual(centreOf(crowded), centreOf(alone));
-    assert.deepEqual(crowded.layout, alone.layout);
-    assert.ok(crowded.markers.every((marker) => marker.width === centreOf(alone).width));
+    assert.equal(crowded.layout.width, alone.layout.width);
+    assert.ok(crowded.nodes.every((node) => node.width === centreOf(alone).width));
   });
 
-  it("splits siblings around the gap above the centre with the marker on the right", () => {
+  it("places four siblings around a half-node-wide central gap that carries the parent trunk at the 4.5 tier", () => {
+    const width = 560;
+    const graph = buildFocusGraph(
+      [
+        parentTicket(),
+        centreWith({ parentId: PARENT, depth: 1 }),
+        ...openOnes(4, "s").map((id) => childOf(PARENT, id)),
+        ...openOnes(4, "k").map((id) => childOf(CENTRE, id)),
+      ],
+      CENTRE,
+      width,
+    );
+    const centre = centreOf(graph);
+    const siblings = zoneBoxes(graph, "siblings");
+    const children = zoneBoxes(graph, "children");
+    const gapLeft = siblings[1]!.x + siblings[1]!.width;
+    const gapRight = siblings[2]!.x;
+    const [parentTrunk] = graph.connectors.filter(
+      (line) => line.zone === "parent" && line.role === "trunk",
+    );
+    const [peer] = graph.connectors.filter((line) => line.zone === "siblings");
+
+    assert.deepEqual(idsIn(graph, "siblings"), ["s0", "s1", "s2", "s3"]);
+    assert.ok(siblings.every((box, position) => position === 0 || box.x > siblings[position - 1]!.x));
+    assert.equal(gapRight - gapLeft, centre.width / 2 + 2 * 6);
+    assert.ok(parentTrunk!.x1 > gapLeft && parentTrunk!.x1 < gapRight);
+    assert.equal(parentTrunk!.x1, midX(centre));
+    assert.equal((gapLeft + gapRight) / 2, midX(centre));
+    assert.equal(midX(centre), graph.layout.width / 2);
+    assert.equal(zoneBoxes(graph, "children").length, 4);
+    assert.equal((children[0]!.x + children.at(-1)!.x + centre.width) / 2, midX(centre));
+    assert.deepEqual(
+      [peer!.x1, peer!.x2, peer!.y1, peer!.y2],
+      [siblings[0]!.x + siblings[0]!.width, siblings[3]!.x, midY(siblings[0]!), midY(siblings[3]!)],
+    );
+  });
+
+  it("sits a lone sibling next to the central gap at the five-child tier", () => {
+    const graph = buildFocusGraph(
+      [
+        parentTicket(),
+        centreWith({ parentId: PARENT, depth: 1 }),
+        ...openOnes(3, "s").map((id) => childOf(PARENT, id)),
+      ],
+      CENTRE,
+      640,
+    );
+    const centre = centreOf(graph);
+    const [left, rightNear, rightFar] = zoneBoxes(graph, "siblings");
+
+    assert.ok(left!.x + left!.width < midX(centre));
+    assert.ok(rightNear!.x > midX(centre));
+    assert.equal(rightFar!.x - (rightNear!.x + rightNear!.width), 6);
+    assert.equal(midX(centre) - (left!.x + left!.width), rightNear!.x - midX(centre));
+  });
+
+  it("splits siblings around the gap above the centre with the label under the right-most one", () => {
     const siblingsOf = (count: number) => {
       const graph = buildFocusGraph(
         [
@@ -548,11 +669,74 @@ describe("focus graph layout", () => {
     assert.deepEqual([one.left.length, one.right.length], [0, 1]);
     assert.deepEqual([two.left.length, two.right.length], [1, 1]);
     assert.deepEqual([many.left.length, many.right.length], [1, 1]);
-    assert.deepEqual(
-      many.graph.markers.map((marker) => marker.hidden),
-      [2],
-    );
-    assert.equal(many.right[0], many.graph.markers[0]);
+    assert.deepEqual(overflowRows(many.graph), [["siblings", 1]]);
+    assert.equal(many.graph.overflows[0]!.x, midX(many.right[0]!));
+  });
+
+  const LABEL_CHAR_WIDTH = 6;
+  const LABEL_ASCENT = 8;
+  const LABEL_DESCENT = 3;
+
+  const labelBox = (overflow: FocusGraph["overflows"][number]): Box => ({
+    x: overflow.x - (overflow.text.length * LABEL_CHAR_WIDTH) / 2,
+    y: overflow.y - LABEL_ASCENT,
+    width: overflow.text.length * LABEL_CHAR_WIDTH,
+    height: LABEL_ASCENT + LABEL_DESCENT,
+  });
+
+  const lineBox = (line: Connector): Box => ({
+    x: Math.min(line.x1, line.x2),
+    y: Math.min(line.y1, line.y2),
+    width: Math.abs(line.x2 - line.x1),
+    height: Math.abs(line.y2 - line.y1),
+  });
+
+  it("puts each overflow label under the last entry of its zone, clear of every node and connector", () => {
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
+      const alone = buildFocusGraph([centreWith()], CENTRE, width);
+
+      for (const overflow of graph.overflows) {
+        const last = zoneBoxes(graph, overflow.zone).at(-1)!;
+        const box = labelBox(overflow);
+
+        assert.ok(overflow.hidden > 0);
+        assert.equal(overflow.text, `+${overflow.hidden} more`);
+        assert.equal(overflow.x, midX(last));
+        assert.ok(box.y >= last.y + last.height);
+        assert.ok(box.x >= 0 && box.x + box.width <= graph.layout.width);
+        assert.ok(box.y + box.height <= graph.layout.height);
+        assert.equal(
+          graph.nodes.some((node) => overlaps(box, node)),
+          false,
+        );
+        assert.equal(
+          graph.connectors.some((line) => overlaps(box, lineBox(line))),
+          false,
+        );
+      }
+      assert.ok(graph.layout.height >= alone.layout.height);
+      if (graph.overflows.length === 0) assert.equal(graph.layout.height, alone.layout.height);
+    }
+  });
+
+  it("grows the layout height to hold a label under the children row or a column", () => {
+    const kids = (count: number) => [
+      centreWith(),
+      ...openOnes(count, "k").map((id) => childOf(CENTRE, id)),
+    ];
+    const alone = buildFocusGraph([centreWith()], CENTRE);
+
+    const fits = buildFocusGraph(kids(3), CENTRE);
+    const overflowing = buildFocusGraph(kids(4), CENTRE);
+    const column = buildFocusGraph([centreWith(), ...blockersWithStatus(backlogs(5))], CENTRE);
+
+    assert.equal(fits.layout.height, alone.layout.height);
+    assert.ok(overflowing.layout.height > alone.layout.height);
+    assert.ok(column.layout.height > alone.layout.height);
+    for (const graph of [overflowing, column]) {
+      assert.ok(graph.layout.height >= Math.max(...graph.overflows.map((overflow) => overflow.y)));
+    }
   });
 
   it("runs one trunk per zone to the centre and adds a bus when a zone holds several items", () => {
