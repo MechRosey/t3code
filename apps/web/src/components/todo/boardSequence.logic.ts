@@ -23,9 +23,11 @@ export interface SequenceStrip {
   readonly next: ReadonlyArray<SequenceChip>;
 }
 
-export interface PendingSequence {
-  readonly base: ReadonlyArray<string>;
+export interface PendingSequenceWrite {
+  readonly token: number;
   readonly ids: ReadonlyArray<string>;
+  readonly base: ReadonlyArray<string>;
+  readonly settled: boolean;
 }
 
 export type SequenceDropOutcome =
@@ -154,9 +156,42 @@ export function removeFromSequence(
   return sequence.filter((entry) => entry !== id);
 }
 
+export const startPendingWrite = (
+  writes: ReadonlyArray<PendingSequenceWrite>,
+  write: Omit<PendingSequenceWrite, "settled">,
+): ReadonlyArray<PendingSequenceWrite> => [...writes, { ...write, settled: false }];
+
+export const settlePendingWrite = (
+  writes: ReadonlyArray<PendingSequenceWrite>,
+  token: number,
+  ids: ReadonlyArray<string>,
+): ReadonlyArray<PendingSequenceWrite> =>
+  writes.map((write) => (write.token === token ? { ...write, ids, settled: true } : write));
+
+export const failPendingWrite = (
+  writes: ReadonlyArray<PendingSequenceWrite>,
+  token: number,
+): ReadonlyArray<PendingSequenceWrite> => writes.filter((write) => write.token !== token);
+
+export function reconcilePendingWrites(
+  writes: ReadonlyArray<PendingSequenceWrite>,
+  snapshotSequence: ReadonlyArray<string>,
+): ReadonlyArray<PendingSequenceWrite> {
+  const caughtUp = writes.findLastIndex((write) => sameOrder(write.ids, snapshotSequence));
+  if (caughtUp >= 0) {
+    return writes
+      .slice(caughtUp + 1)
+      .map((write) =>
+        write.base === snapshotSequence ? write : { ...write, base: snapshotSequence },
+      );
+  }
+  const kept = writes.filter((write) => !write.settled || write.base === snapshotSequence);
+  return kept.length === writes.length ? writes : kept;
+}
+
 export function displayedSequence(
   snapshotSequence: ReadonlyArray<string>,
-  pending: PendingSequence | null,
+  writes: ReadonlyArray<PendingSequenceWrite>,
 ): ReadonlyArray<string> {
-  return pending !== null && pending.base === snapshotSequence ? pending.ids : snapshotSequence;
+  return writes.at(-1)?.ids ?? snapshotSequence;
 }

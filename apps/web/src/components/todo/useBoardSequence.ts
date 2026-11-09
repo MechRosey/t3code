@@ -1,11 +1,18 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { todoBoardSequence } from "../../state/todoBoard";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
-import { displayedSequence, type PendingSequence } from "./boardSequence.logic";
+import {
+  displayedSequence,
+  failPendingWrite,
+  reconcilePendingWrites,
+  settlePendingWrite,
+  startPendingWrite,
+  type PendingSequenceWrite,
+} from "./boardSequence.logic";
 
 export function useBoardSequence(
   environmentId: EnvironmentId,
@@ -13,12 +20,20 @@ export function useBoardSequence(
   snapshotSequence: ReadonlyArray<string>,
 ) {
   const sendSequence = useAtomCommand(todoBoardSequence, { reportFailure: false });
-  const [pending, setPending] = useState<PendingSequence | null>(null);
+  const [writes, setWrites] = useState<ReadonlyArray<PendingSequenceWrite>>([]);
+  const lastToken = useRef(0);
+  const live = reconcilePendingWrites(writes, snapshotSequence);
+  if (live !== writes) setWrites(live);
   const writeSequence = async (ids: ReadonlyArray<string>) => {
-    setPending({ base: snapshotSequence, ids });
+    lastToken.current += 1;
+    const token = lastToken.current;
+    setWrites((current) => startPendingWrite(current, { token, ids, base: snapshotSequence }));
     const result = await sendSequence({ environmentId, input: { cwd, ids } });
-    if (result._tag !== "Failure") return;
-    setPending(null);
+    if (result._tag === "Success") {
+      setWrites((current) => settlePendingWrite(current, token, result.value.sequence));
+      return;
+    }
+    setWrites((current) => failPendingWrite(current, token));
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
@@ -29,5 +44,5 @@ export function useBoardSequence(
           : "The board rejected the new order.",
     });
   };
-  return { sequence: displayedSequence(snapshotSequence, pending), writeSequence };
+  return { sequence: displayedSequence(snapshotSequence, live), writeSequence };
 }
