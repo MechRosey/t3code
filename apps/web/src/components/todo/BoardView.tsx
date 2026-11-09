@@ -88,7 +88,6 @@ import {
   resolveBoardDropAction,
   type BoardDispatchProgress,
   type BoardDropActionMode,
-  type BoardDropSpeed,
 } from "./boardDrop.logic";
 import {
   BOARD_DISPATCH_FAILURE_CODE,
@@ -138,7 +137,7 @@ import {
 } from "./boardUiState";
 import { ArchiveView } from "./ArchiveView";
 import { BoardSequenceStrip } from "./BoardSequenceStrip";
-import { buildSequenceStrip, removeFromSequence, resolveSequenceDrop } from "./boardSequence.logic";
+import { buildSequenceStrip, removeFromSequence, resolveBoardDragEnd } from "./boardSequence.logic";
 import { useBoardSequence } from "./useBoardSequence";
 
 export interface BoardViewProps {
@@ -937,32 +936,19 @@ export function BoardView({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over === null) return;
-    const sequenceDrop = resolveSequenceDrop({
+    const outcome = resolveBoardDragEnd({
       activeId: String(active.id),
       overId: String(over.id),
       sequence: boardSequence.sequence,
       strip: sequenceStrip,
       issuesById,
     });
-    if (sequenceDrop.kind === "sequence") {
-      if (sequenceDrop.ids !== null) void boardSequence.writeSequence(sequenceDrop.ids);
+    if (outcome.kind === "ignore") return;
+    if (outcome.kind === "sequence") {
+      void boardSequence.writeSequence(outcome.ids);
       return;
     }
-    const issue = issuesById.get(String(active.id).slice("card:".length));
-    if (issue === undefined) return;
-    const overId = String(over.id);
-    let target: string | null = null;
-    let speed: BoardDropSpeed = "confirm";
-    if (overId.startsWith("column:")) {
-      target = overId.slice("column:".length);
-    } else if (overId.startsWith("dispatch:")) {
-      target = overId.slice("dispatch:".length);
-      speed = "now";
-    } else if (overId.startsWith("force:")) {
-      target = overId.slice("force:".length);
-      speed = "force";
-    }
-    if (target === null) return;
+    const { issue, target, speed } = outcome;
     const action = resolveBoardDropAction(issue.status, target, speed);
     if (action.kind === "noop") return;
     if (action.kind === "status") {

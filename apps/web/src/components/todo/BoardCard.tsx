@@ -19,6 +19,7 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
+import { boardCardDragId, boardCardIssueId } from "./boardSequence.logic";
 
 const BOARD_CARD_RELATION_SLOTS = 4;
 const BOARD_CARD_RELATION_GLYPH = "\u276f";
@@ -275,7 +276,7 @@ export const BoardDraggableCard = memo(function BoardDraggableCard({
   readonly selected: boolean;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `card:${card.issue.id}`,
+    id: boardCardDragId(card.issue.id),
   });
   return (
     <div
@@ -305,7 +306,8 @@ export function BoardDragPreview({
 }) {
   const { active } = useDndContext();
   if (active === null) return null;
-  const issueId = String(active.id).slice("card:".length);
+  const issueId = boardCardIssueId(String(active.id));
+  if (issueId === null) return null;
   const card = model.columns
     .flatMap((column) => column.cards)
     .find((columnCard) => columnCard.issue.id === issueId);

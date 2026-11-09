@@ -3,6 +3,7 @@ import type { TodoIssue } from "@t3tools/contracts";
 import { sortBoardIssues } from "@t3tools/client-runtime/state/todo-board-view";
 
 import { shortBoardId } from "./boardCopy.logic";
+import type { BoardDropSpeed } from "./boardDrop.logic";
 
 export const SEQUENCE_STRIP_DROP_ID = "sequence:strip";
 const SEQUENCE_CHIP_DRAG_PREFIX = "seq:";
@@ -37,6 +38,11 @@ export type SequenceDropOutcome =
 const BOARD_DROP: SequenceDropOutcome = { kind: "board" };
 
 export const sequenceChipDragId = (id: string) => `${SEQUENCE_CHIP_DRAG_PREFIX}${id}`;
+
+export const boardCardDragId = (issueId: string) => `${BOARD_CARD_DRAG_PREFIX}${issueId}`;
+
+export const boardCardIssueId = (dragId: string): string | null =>
+  dragId.startsWith(BOARD_CARD_DRAG_PREFIX) ? dragId.slice(BOARD_CARD_DRAG_PREFIX.length) : null;
 
 export const isSequenceChipDragId = (dragId: string) =>
   dragId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX);
@@ -142,11 +148,55 @@ export function resolveSequenceDrop({
     };
   }
   if (target === null) return BOARD_DROP;
-  const issue = issuesById.get(activeId.slice(BOARD_CARD_DRAG_PREFIX.length));
+  const cardId = boardCardIssueId(activeId);
+  const issue = cardId === null ? undefined : issuesById.get(cardId);
   return {
     kind: "sequence",
     ids: issue === undefined ? null : placeCardInSequence(sequence, issue, target.beforeId),
   };
+}
+
+export type BoardDragOutcome =
+  | { readonly kind: "ignore" }
+  | { readonly kind: "sequence"; readonly ids: ReadonlyArray<string> }
+  | {
+      readonly kind: "column";
+      readonly issue: TodoIssue;
+      readonly target: string;
+      readonly speed: BoardDropSpeed;
+    };
+
+const COLUMN_DROP_TARGETS: ReadonlyArray<{
+  readonly prefix: string;
+  readonly speed: BoardDropSpeed;
+}> = [
+  { prefix: "column:", speed: "confirm" },
+  { prefix: "dispatch:", speed: "now" },
+  { prefix: "force:", speed: "force" },
+];
+
+export function resolveBoardDragEnd(input: {
+  readonly activeId: string;
+  readonly overId: string;
+  readonly sequence: ReadonlyArray<string>;
+  readonly strip: SequenceStrip;
+  readonly issuesById: ReadonlyMap<string, TodoIssue>;
+}): BoardDragOutcome {
+  const sequenceDrop = resolveSequenceDrop(input);
+  if (sequenceDrop.kind === "sequence") {
+    return sequenceDrop.ids === null
+      ? { kind: "ignore" }
+      : { kind: "sequence", ids: sequenceDrop.ids };
+  }
+  const cardId = boardCardIssueId(input.activeId);
+  const issue = cardId === null ? undefined : input.issuesById.get(cardId);
+  if (issue === undefined) return { kind: "ignore" };
+  for (const { prefix, speed } of COLUMN_DROP_TARGETS) {
+    if (input.overId.startsWith(prefix)) {
+      return { kind: "column", issue, target: input.overId.slice(prefix.length), speed };
+    }
+  }
+  return { kind: "ignore" };
 }
 
 export function removeFromSequence(
