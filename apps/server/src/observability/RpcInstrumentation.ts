@@ -156,6 +156,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.projectsWriteFile]: "workspace",
   [WS_METHODS.todoBoardRead]: "workspace",
   [WS_METHODS.todoBoardMutate]: "workspace",
+  [WS_METHODS.todoBoardSequence]: "workspace",
   [WS_METHODS.todoBoardRegenerate]: "workspace",
   [WS_METHODS.todoBoardSubscribe]: "workspace",
   [WS_METHODS.todoArchiveRead]: "workspace",

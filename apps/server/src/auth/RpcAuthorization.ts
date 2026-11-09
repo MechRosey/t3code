@@ -155,6 +155,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.projectsCreateNew]: AuthOrchestrationOperateScope,
   [WS_METHODS.todoBoardRead]: AuthOrchestrationReadScope,
   [WS_METHODS.todoBoardMutate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.todoBoardSequence]: AuthOrchestrationOperateScope,
   [WS_METHODS.todoBoardRegenerate]: AuthOrchestrationOperateScope,
   [WS_METHODS.todoBoardSubscribe]: AuthOrchestrationReadScope,
   [WS_METHODS.todoArchiveRead]: AuthOrchestrationReadScope,

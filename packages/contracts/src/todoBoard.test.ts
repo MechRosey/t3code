@@ -7,10 +7,12 @@ import {
   TodoBoardMutateInput,
   TodoBoardRegenerateInput,
   TodoBoardRegenerateResult,
+  TodoBoardSequenceInput,
   TodoIssue,
 } from "./todoBoard.ts";
 
 const decodeMutate = Schema.decodeUnknownSync(TodoBoardMutateInput);
+const decodeSequence = Schema.decodeUnknownSync(TodoBoardSequenceInput);
 const decodeIssue = Schema.decodeUnknownSync(TodoIssue);
 const decodeRegenerate = Schema.decodeUnknownSync(TodoBoardRegenerateInput);
 const decodeRegenerateResult = Schema.decodeUnknownSync(TodoBoardRegenerateResult);
@@ -181,6 +183,17 @@ describe("TodoBoardRegenerateResult", () => {
 
   it("rejects non-string artifacts", () => {
     expect(() => decodeRegenerateResult({ artifacts: [1] })).toThrow();
+  });
+});
+
+describe("TodoBoardSequenceInput", () => {
+  it("accepts an ordered id list and rejects a blank id", () => {
+    expect(decodeSequence({ cwd: "C:/proj", ids: ["abc12", "def34-x"] }).ids).toEqual([
+      "abc12",
+      "def34-x",
+    ]);
+    expect(decodeSequence({ cwd: "C:/proj", ids: [] }).ids).toEqual([]);
+    expect(() => decodeSequence({ cwd: "C:/proj", ids: [" "] })).toThrow();
   });
 });
 

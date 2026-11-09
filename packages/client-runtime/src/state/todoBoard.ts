@@ -1,4 +1,8 @@
-import { WS_METHODS, type TodoBoardMutateInput } from "@t3tools/contracts";
+import {
+  WS_METHODS,
+  type TodoBoardMutateInput,
+  type TodoBoardSequenceInput,
+} from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -38,6 +42,18 @@ export function createTodoBoardAtoms<R, E>(runtime: Atom.AtomRuntime<Environment
       } satisfies AtomCommandConcurrency<{
         environmentId: string;
         input: TodoBoardMutateInput;
+      }>,
+    }),
+    sequence: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:todo-board:sequence",
+      tag: WS_METHODS.todoBoardSequence,
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId, input }: { environmentId: string; input: TodoBoardSequenceInput }) =>
+          JSON.stringify([environmentId, input.cwd]),
+      } satisfies AtomCommandConcurrency<{
+        environmentId: string;
+        input: TodoBoardSequenceInput;
       }>,
     }),
     regenerate: createEnvironmentRpcCommand(runtime, {
