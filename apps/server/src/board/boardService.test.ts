@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -44,6 +45,31 @@ const conflictLayer = Layer.effect(
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 const conflictTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(conflictLayer));
+
+const sequenceRenameTrap: { failing: boolean } = { failing: false };
+
+const sequenceRenameLayer = Layer.effect(
+  FileSystem.FileSystem,
+  Effect.map(FileSystem.FileSystem, (inner) =>
+    FileSystem.make({
+      ...inner,
+      rename: (from, to) =>
+        sequenceRenameTrap.failing && to.endsWith("SEQUENCE.md")
+          ? Effect.fail(
+              PlatformError.systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "rename",
+                pathOrDescriptor: to,
+                description: "EPERM",
+              }),
+            )
+          : inner.rename(from, to),
+    }),
+  ),
+).pipe(Layer.provideMerge(NodeServices.layer));
+
+const sequenceRenameTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(sequenceRenameLayer));
 
 const TodoPointerContent = Schema.Struct({
   central: Schema.String,
@@ -207,6 +233,21 @@ describe("TodoBoard service", () => {
         ]);
         expect(snapshot.issues.length).toBe(16);
         expectSameBytes(Buffer.from(yield* fs.readFile(sequencePath)), Buffer.from(raw, "utf8"));
+      }),
+    );
+
+    it.effect("treats an unreadable SEQUENCE.md as an empty sequence", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        yield* fs.makeDirectory(path.join(boardDir, "SEQUENCE.md"));
+
+        const snapshot = yield* board.read({ cwd });
+
+        expect(snapshot.sequence).toEqual([]);
+        expect(snapshot.issues.length).toBe(16);
       }),
     );
 
@@ -649,6 +690,28 @@ describe("TodoBoard service", () => {
       }),
     );
   });
+});
+
+describe("sequence prune failure", () => {
+  it.effect("still completes the status change when the prune cannot rewrite SEQUENCE.md", () =>
+    Effect.gen(function* () {
+      const { boardDir, cwd } = yield* installBoard("board-before");
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const board = yield* TodoBoard.TodoBoard;
+      const sequencePath = path.join(boardDir, "SEQUENCE.md");
+      yield* fs.writeFileString(sequencePath, "762b5\n55041\n");
+      sequenceRenameTrap.failing = true;
+
+      const result = yield* board
+        .mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" })
+        .pipe(Effect.ensuring(Effect.sync(() => (sequenceRenameTrap.failing = false))));
+
+      expect(result.issue.status).toBe("done");
+      expect(yield* fs.readFileString(sequencePath)).toBe("762b5\n55041\n");
+      expect((yield* board.read({ cwd })).sequence).toEqual(["55041-tag-target"]);
+    }).pipe(Effect.provide(sequenceRenameTestLayer)),
+  );
 });
 
 describe("ensureUnchanged", () => {
