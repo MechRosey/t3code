@@ -54,7 +54,7 @@ const TodoReadTool = Tool.make("t3_todo_read", {
 
 const TodoSetSequenceTool = Tool.make("t3_todo_set_sequence", {
   description:
-    "Replace a project's whole planned ticket order with `ids` (todo ticket ids, short or full). Closed tickets are dropped; unknown ids fail. Returns the saved `sequence`.",
+    "Replace a project's whole planned ticket order with `ids` (todo ticket ids, short or full). Omitted ids leave the order, so keep `doing` ids. Closed tickets are dropped; unknown ids fail. Returns the saved `sequence`.",
   parameters: Schema.Struct({ projectId, ids: TodoBoardSequenceInput.fields.ids }),
   success: TodoBoardSequenceResult,
   failure: OrchestratorMcpFailure,
