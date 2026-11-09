@@ -2,16 +2,20 @@ import type { TodoIssue } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  boardCardDragId,
+  boardCardIssueId,
   buildSequenceStrip,
   displayedSequence,
   failPendingWrite,
   reconcilePendingWrites,
   removeFromSequence,
+  resolveBoardDragEnd,
   resolveSequenceDrop,
   sequenceChipDragId,
   settlePendingWrite,
   startPendingWrite,
   SEQUENCE_STRIP_DROP_ID,
+  type BoardDragOutcome,
   type PendingSequenceWrite,
   type SequenceDropOutcome,
 } from "./boardSequence.logic";
@@ -346,5 +350,97 @@ describe("pending sequence writes", () => {
     const reconciled = reconcilePendingWrites(writes, [BLOCKED_PLANNED]);
 
     assert.strictEqual(displayedSequence([BLOCKED_PLANNED], reconciled), requested);
+  });
+});
+
+describe("resolveBoardDragEnd", () => {
+  it("resolveBoardDragEnd_EachDragAndTarget_RoutesToTheSequenceOrTheStatusColumnsNeverBoth", () => {
+    const sequence = [BACKLOG_PLANNED, READ_PLANNED];
+    const strip = buildSequenceStrip(ISSUES, sequence, matchesEverything);
+    const card = boardCardDragId;
+    const column = (id: string, target: string, speed: "confirm" | "now" | "force") =>
+      ({ kind: "column", issue: ISSUES_BY_ID.get(id), target, speed }) as BoardDragOutcome;
+    const ignore: BoardDragOutcome = { kind: "ignore" };
+    const cases: ReadonlyArray<{
+      readonly name: string;
+      readonly activeId: string;
+      readonly overId: string;
+      readonly expected: BoardDragOutcome;
+    }> = [
+      {
+        name: "card on the strip writes the order and changes no status",
+        activeId: card(READ_UNPLANNED),
+        overId: SEQUENCE_STRIP_DROP_ID,
+        expected: { kind: "sequence", ids: [...sequence, READ_UNPLANNED] },
+      },
+      {
+        name: "card on a chip writes the order and changes no status",
+        activeId: card(BACKLOG_UNPLANNED),
+        overId: sequenceChipDragId(READ_PLANNED),
+        expected: {
+          kind: "sequence",
+          ids: [BACKLOG_PLANNED, BACKLOG_UNPLANNED, READ_PLANNED],
+        },
+      },
+      {
+        name: "ineligible card on the strip does nothing",
+        activeId: card(DOING_NEW),
+        overId: SEQUENCE_STRIP_DROP_ID,
+        expected: ignore,
+      },
+      {
+        name: "chip on a column does nothing",
+        activeId: sequenceChipDragId(READ_PLANNED),
+        overId: "column:doing",
+        expected: ignore,
+      },
+      {
+        name: "card on a column confirms",
+        activeId: card(READ_UNPLANNED),
+        overId: "column:doing",
+        expected: column(READ_UNPLANNED, "doing", "confirm"),
+      },
+      {
+        name: "card on an action-now target dispatches now",
+        activeId: card(READ_UNPLANNED),
+        overId: "dispatch:read",
+        expected: column(READ_UNPLANNED, "read", "now"),
+      },
+      {
+        name: "card on a force target forces",
+        activeId: card(READ_UNPLANNED),
+        overId: "force:done",
+        expected: column(READ_UNPLANNED, "done", "force"),
+      },
+      {
+        name: "card on an unknown target does nothing",
+        activeId: card(READ_UNPLANNED),
+        overId: "elsewhere",
+        expected: ignore,
+      },
+      {
+        name: "unknown card on a column does nothing",
+        activeId: card("zzzzz-missing"),
+        overId: "column:doing",
+        expected: ignore,
+      },
+    ];
+
+    for (const { name, activeId, overId, expected } of cases) {
+      const outcome = resolveBoardDragEnd({
+        activeId,
+        overId,
+        sequence,
+        strip,
+        issuesById: ISSUES_BY_ID,
+      });
+      assert.deepEqual(outcome, expected, name);
+    }
+  });
+
+  it("boardCardIssueId_CardOrOtherDragId_ReturnsTheIssueIdOnlyForACard", () => {
+    assert.strictEqual(boardCardIssueId(boardCardDragId(READ_PLANNED)), READ_PLANNED);
+    assert.strictEqual(boardCardIssueId(sequenceChipDragId(READ_PLANNED)), null);
+    assert.strictEqual(boardCardIssueId(READ_PLANNED), null);
   });
 });
