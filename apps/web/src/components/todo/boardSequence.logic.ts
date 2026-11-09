@@ -1,6 +1,14 @@
+import { arrayMove } from "@dnd-kit/sortable";
 import type { TodoIssue } from "@t3tools/contracts";
+import { sortBoardIssues } from "@t3tools/client-runtime/state/todo-board-view";
+
+import { shortBoardId } from "./boardCopy.logic";
 
 export const SEQUENCE_STRIP_DROP_ID = "sequence:strip";
+const SEQUENCE_CHIP_DRAG_PREFIX = "seq:";
+const BOARD_CARD_DRAG_PREFIX = "card:";
+const DOING_STATUS = "doing";
+const OUTSIDE_SEQUENCE_STATUSES: ReadonlySet<string> = new Set([DOING_STATUS, "done", "cancelled"]);
 
 export interface SequenceChip {
   readonly id: string;
@@ -24,36 +32,125 @@ export type SequenceDropOutcome =
   | { readonly kind: "board" }
   | { readonly kind: "sequence"; readonly ids: ReadonlyArray<string> | null };
 
-export const sequenceChipDragId = (id: string) => id;
+const BOARD_DROP: SequenceDropOutcome = { kind: "board" };
+
+export const sequenceChipDragId = (id: string) => `${SEQUENCE_CHIP_DRAG_PREFIX}${id}`;
+
+const isSequenceCandidate = (issue: TodoIssue) =>
+  !issue.archived && !OUTSIDE_SEQUENCE_STATUSES.has(issue.status);
+
+const toChip = (issue: TodoIssue, matches: (issue: TodoIssue) => boolean): SequenceChip => ({
+  id: issue.id,
+  shortId: shortBoardId(issue.id),
+  title: issue.title,
+  status: issue.status,
+  matches: matches(issue),
+});
 
 export function buildSequenceStrip(
-  _issues: ReadonlyArray<TodoIssue>,
-  _sequence: ReadonlyArray<string>,
-  _matches: (issue: TodoIssue) => boolean,
+  issues: ReadonlyArray<TodoIssue>,
+  sequence: ReadonlyArray<string>,
+  matches: (issue: TodoIssue) => boolean,
 ): SequenceStrip {
-  return { doing: [], next: [] };
+  const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
+  const doing = sortBoardIssues(
+    issues.filter((issue) => !issue.archived && issue.status === DOING_STATUS),
+    "updated-desc",
+  );
+  const next = sequence.flatMap((id) => {
+    const issue = issuesById.get(id);
+    return issue !== undefined && isSequenceCandidate(issue) ? [issue] : [];
+  });
+  return {
+    doing: doing.map((issue) => toChip(issue, matches)),
+    next: next.map((issue) => toChip(issue, matches)),
+  };
 }
 
-export function resolveSequenceDrop(_drop: {
+const sameOrder = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) =>
+  left.length === right.length && left.every((id, index) => id === right[index]);
+
+const changedOrNull = (next: ReadonlyArray<string>, current: ReadonlyArray<string>) =>
+  sameOrder(next, current) ? null : next;
+
+function sequenceDropBeforeId(overId: string): { readonly beforeId: string | null } | null {
+  if (overId === SEQUENCE_STRIP_DROP_ID) return { beforeId: null };
+  if (overId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX)) {
+    return { beforeId: overId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length) };
+  }
+  return null;
+}
+
+function placeCardInSequence(
+  sequence: ReadonlyArray<string>,
+  issue: TodoIssue,
+  beforeId: string | null,
+): ReadonlyArray<string> | null {
+  if (!isSequenceCandidate(issue) || issue.id === beforeId) return null;
+  const without = sequence.filter((id) => id !== issue.id);
+  const index = beforeId === null ? -1 : without.indexOf(beforeId);
+  const placed =
+    index < 0
+      ? [...without, issue.id]
+      : [...without.slice(0, index), issue.id, ...without.slice(index)];
+  return changedOrNull(placed, sequence);
+}
+
+function reorderSequenceChip(
+  sequence: ReadonlyArray<string>,
+  nextIds: ReadonlyArray<string>,
+  activeId: string,
+  overId: string | null,
+): ReadonlyArray<string> | null {
+  const from = nextIds.indexOf(activeId);
+  const to = overId === null ? nextIds.length - 1 : nextIds.indexOf(overId);
+  if (from < 0 || to < 0 || from === to) return null;
+  const reordered = arrayMove([...nextIds], from, to);
+  const nextSlots = new Set(nextIds);
+  let slot = 0;
+  return sequence.map((id) => (nextSlots.has(id) ? (reordered[slot++] ?? id) : id));
+}
+
+export function resolveSequenceDrop({
+  activeId,
+  overId,
+  sequence,
+  strip,
+  issuesById,
+}: {
   readonly activeId: string;
   readonly overId: string;
   readonly sequence: ReadonlyArray<string>;
   readonly strip: SequenceStrip;
   readonly issuesById: ReadonlyMap<string, TodoIssue>;
 }): SequenceDropOutcome {
-  return { kind: "board" };
+  const target = sequenceDropBeforeId(overId);
+  if (activeId.startsWith(SEQUENCE_CHIP_DRAG_PREFIX)) {
+    const chipId = activeId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length);
+    const nextIds = strip.next.map((chip) => chip.id);
+    return {
+      kind: "sequence",
+      ids: target === null ? null : reorderSequenceChip(sequence, nextIds, chipId, target.beforeId),
+    };
+  }
+  if (target === null) return BOARD_DROP;
+  const issue = issuesById.get(activeId.slice(BOARD_CARD_DRAG_PREFIX.length));
+  return {
+    kind: "sequence",
+    ids: issue === undefined ? null : placeCardInSequence(sequence, issue, target.beforeId),
+  };
 }
 
 export function removeFromSequence(
   sequence: ReadonlyArray<string>,
-  _id: string,
+  id: string,
 ): ReadonlyArray<string> {
-  return sequence;
+  return sequence.filter((entry) => entry !== id);
 }
 
 export function displayedSequence(
   snapshotSequence: ReadonlyArray<string>,
-  _pending: PendingSequence | null,
+  pending: PendingSequence | null,
 ): ReadonlyArray<string> {
-  return snapshotSequence;
+  return pending !== null && pending.base === snapshotSequence ? pending.ids : snapshotSequence;
 }
