@@ -127,6 +127,17 @@ export const TodoBoardMutateResult = Schema.Struct({
 });
 export type TodoBoardMutateResult = typeof TodoBoardMutateResult.Type;
 
+export const TodoBoardSequenceInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  ids: Schema.Array(TrimmedNonEmptyString),
+});
+export type TodoBoardSequenceInput = typeof TodoBoardSequenceInput.Type;
+
+export const TodoBoardSequenceResult = Schema.Struct({
+  sequence: Schema.Array(Schema.String),
+});
+export type TodoBoardSequenceResult = typeof TodoBoardSequenceResult.Type;
+
 export const TodoBoardRegenerateTarget = Schema.Literals(["board", "index"]);
 export type TodoBoardRegenerateTarget = typeof TodoBoardRegenerateTarget.Type;
 
