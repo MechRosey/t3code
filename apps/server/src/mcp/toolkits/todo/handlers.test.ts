@@ -60,7 +60,10 @@ const harness = (input: {
         Layer.mock(ThreadManagement.ThreadManagementService)({
           getThreadShell: (id) =>
             Effect.succeed({
-              ...liveThreadShell(id, { runtimeMode: input.runtimeMode }),
+              ...liveThreadShell(
+                id,
+                input.runtimeMode === undefined ? {} : { runtimeMode: input.runtimeMode },
+              ),
               ...(input.linkOrigin === undefined ? {} : { linkOrigin: input.linkOrigin }),
             }),
         }),
