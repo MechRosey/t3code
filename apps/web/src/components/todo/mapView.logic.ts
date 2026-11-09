@@ -17,7 +17,11 @@ type ConnectorKind = "tree" | "blocks" | "peer";
 
 type ConnectorRole = "trunk" | "bus";
 
-const FOCUS_NODE_WIDTH = 76;
+export const BASE_AVAILABLE_WIDTH = 420;
+export const TEXT_INSET_X = 6;
+const MIN_NODE_WIDTH = 76;
+const MAX_NODE_WIDTH = 144;
+const TITLE_CHAR_WIDTH = 5.3;
 const FOCUS_NODE_HEIGHT = 46;
 const FOCUS_MARKER_HEIGHT = 28;
 const SLOT_GAP = 6;
@@ -31,16 +35,8 @@ const SIBLING_SLOTS_PER_SIDE = 1;
 const SIBLING_SLOTS = SIBLING_SLOTS_PER_SIDE * 2;
 const CENTRE_BLOCK_SLOTS = SIBLING_SLOTS + 1;
 const CHILD_ROW_SLOTS = CENTRE_BLOCK_SLOTS;
-
-const SLOT_PITCH = FOCUS_NODE_WIDTH + SLOT_GAP;
-const BLOCK_WIDTH = CENTRE_BLOCK_SLOTS * FOCUS_NODE_WIDTH + (CENTRE_BLOCK_SLOTS - 1) * SLOT_GAP;
-const LEFT_COLUMN_X = 0;
-const BLOCK_X = LEFT_COLUMN_X + FOCUS_NODE_WIDTH + COLUMN_GAP;
-const RIGHT_COLUMN_X = BLOCK_X + BLOCK_WIDTH + COLUMN_GAP;
-const SIBLING_LEFT_X = BLOCK_X;
-const SIBLING_RIGHT_X = BLOCK_X + (CENTRE_BLOCK_SLOTS - 1) * SLOT_PITCH;
-const CENTRE_X = BLOCK_X + SIBLING_SLOTS_PER_SIDE * SLOT_PITCH;
-const CENTRE_MID_X = CENTRE_X + FOCUS_NODE_WIDTH / 2;
+const GRID_NODE_COLUMNS = CENTRE_BLOCK_SLOTS + 2;
+const GRID_FIXED_WIDTH = 2 * COLUMN_GAP + (CENTRE_BLOCK_SLOTS - 1) * SLOT_GAP;
 
 const PARENT_Y = 0;
 const SIBLING_Y = PARENT_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
@@ -51,11 +47,58 @@ const SIBLING_MID_Y = SIBLING_Y + FOCUS_NODE_HEIGHT / 2;
 
 const COLUMN_HEIGHT = SIDE_COLUMN_SLOTS * FOCUS_NODE_HEIGHT + (SIDE_COLUMN_SLOTS - 1) * SLOT_GAP;
 const COLUMN_TOP = CENTRE_MID_Y - COLUMN_HEIGHT / 2;
+const GRID_HEIGHT = Math.max(CHILD_Y + FOCUS_NODE_HEIGHT, COLUMN_TOP + COLUMN_HEIGHT);
 
-const GRID_LAYOUT: MapLayout = {
-  width: RIGHT_COLUMN_X + FOCUS_NODE_WIDTH,
-  height: Math.max(CHILD_Y + FOCUS_NODE_HEIGHT, COLUMN_TOP + COLUMN_HEIGHT),
-};
+interface FocusGeometry {
+  readonly nodeWidth: number;
+  readonly slotPitch: number;
+  readonly blockWidth: number;
+  readonly blockX: number;
+  readonly leftColumnX: number;
+  readonly rightColumnX: number;
+  readonly siblingLeftX: number;
+  readonly siblingRightX: number;
+  readonly centreX: number;
+  readonly centreMidX: number;
+  readonly layout: MapLayout;
+}
+
+function nodeWidthFor(availableWidth: number): number {
+  if (!Number.isFinite(availableWidth) || availableWidth <= 0) return MIN_NODE_WIDTH;
+  const fitted = Math.floor((availableWidth - GRID_FIXED_WIDTH) / GRID_NODE_COLUMNS);
+  return Math.min(MAX_NODE_WIDTH, Math.max(MIN_NODE_WIDTH, fitted));
+}
+
+function titleCharsFor(nodeWidth: number): number {
+  return Math.floor((nodeWidth - 2 * TEXT_INSET_X) / TITLE_CHAR_WIDTH);
+}
+
+function focusGeometryFor(availableWidth: number): FocusGeometry {
+  const nodeWidth = nodeWidthFor(availableWidth);
+  const slotPitch = nodeWidth + SLOT_GAP;
+  const blockWidth = CENTRE_BLOCK_SLOTS * nodeWidth + (CENTRE_BLOCK_SLOTS - 1) * SLOT_GAP;
+  const leftColumnX = 0;
+  const blockX = leftColumnX + nodeWidth + COLUMN_GAP;
+  const rightColumnX = blockX + blockWidth + COLUMN_GAP;
+  const centreX = blockX + SIBLING_SLOTS_PER_SIDE * slotPitch;
+  return {
+    nodeWidth,
+    slotPitch,
+    blockWidth,
+    blockX,
+    leftColumnX,
+    rightColumnX,
+    siblingLeftX: blockX,
+    siblingRightX: blockX + (CENTRE_BLOCK_SLOTS - 1) * slotPitch,
+    centreX,
+    centreMidX: centreX + nodeWidth / 2,
+    layout: {
+      width: rightColumnX + nodeWidth,
+      height: GRID_HEIGHT,
+      titleChars: titleCharsFor(nodeWidth),
+    },
+  };
+}
 
 const ZONE_RENDER_ORDER: ReadonlyArray<FocusZone> = [
   "parent",
@@ -73,9 +116,11 @@ const ZONE_SLOTS: Record<FocusZone, number> = {
   blocking: SIDE_COLUMN_SLOTS,
 };
 
-const COLUMN_LABELS: Partial<Record<FocusZone, { readonly text: string; readonly x: number }>> = {
-  blockedBy: { text: "Blocked by", x: LEFT_COLUMN_X + FOCUS_NODE_WIDTH / 2 },
-  blocking: { text: "Blocking", x: RIGHT_COLUMN_X + FOCUS_NODE_WIDTH / 2 },
+const COLUMN_LABELS: Partial<
+  Record<FocusZone, { readonly text: string; readonly x: (geometry: FocusGeometry) => number }>
+> = {
+  blockedBy: { text: "Blocked by", x: (geometry) => geometry.leftColumnX + geometry.nodeWidth / 2 },
+  blocking: { text: "Blocking", x: (geometry) => geometry.rightColumnX + geometry.nodeWidth / 2 },
 };
 
 const STATUS_RANK: ReadonlyMap<string, number> = new Map(
@@ -86,6 +131,7 @@ const UNKNOWN_STATUS_RANK = BOARD_STATUS_ORDER.length;
 interface MapLayout {
   readonly width: number;
   readonly height: number;
+  readonly titleChars: number;
 }
 
 interface FocusRect {
@@ -158,7 +204,7 @@ const EMPTY_FOCUS_GRAPH: FocusGraph = {
   markers: [],
   connectors: [],
   labels: [],
-  layout: { width: 0, height: 0 },
+  layout: { width: 0, height: 0, titleChars: titleCharsFor(MIN_NODE_WIDTH) },
 };
 
 const compareStrings = (left: string, right: string): number =>
@@ -223,46 +269,59 @@ function zoneItems(capped: CappedZone): Array<ZoneItem> {
 const itemHeight = (item: ZoneItem): number =>
   item.kind === "issue" ? FOCUS_NODE_HEIGHT : FOCUS_MARKER_HEIGHT;
 
-function rectInRow(x: number, rowY: number, height: number): FocusRect {
-  return { x, y: rowY + (FOCUS_NODE_HEIGHT - height) / 2, width: FOCUS_NODE_WIDTH, height };
+function rectInRow(geometry: FocusGeometry, x: number, rowY: number, height: number): FocusRect {
+  return { x, y: rowY + (FOCUS_NODE_HEIGHT - height) / 2, width: geometry.nodeWidth, height };
 }
 
 const siblingsOnLeft = (count: number): number => Math.floor(count / 2);
 
-function placeSiblings(heights: ReadonlyArray<number>): Array<FocusRect> {
+function placeSiblings(geometry: FocusGeometry, heights: ReadonlyArray<number>): Array<FocusRect> {
   const leftCount = siblingsOnLeft(heights.length);
   return heights.map((height, position) =>
-    rectInRow(position < leftCount ? SIBLING_LEFT_X : SIBLING_RIGHT_X, SIBLING_Y, height),
+    rectInRow(
+      geometry,
+      position < leftCount ? geometry.siblingLeftX : geometry.siblingRightX,
+      SIBLING_Y,
+      height,
+    ),
   );
 }
 
-function placeChildren(heights: ReadonlyArray<number>): Array<FocusRect> {
-  const rowWidth = heights.length * FOCUS_NODE_WIDTH + (heights.length - 1) * SLOT_GAP;
-  let rowX = BLOCK_X + (BLOCK_WIDTH - rowWidth) / 2;
+function placeChildren(geometry: FocusGeometry, heights: ReadonlyArray<number>): Array<FocusRect> {
+  const rowWidth = heights.length * geometry.nodeWidth + (heights.length - 1) * SLOT_GAP;
+  let rowX = geometry.blockX + (geometry.blockWidth - rowWidth) / 2;
   return heights.map((height) => {
-    const rect = { x: rowX, y: CHILD_Y, width: FOCUS_NODE_WIDTH, height };
-    rowX += SLOT_PITCH;
+    const rect = { x: rowX, y: CHILD_Y, width: geometry.nodeWidth, height };
+    rowX += geometry.slotPitch;
     return rect;
   });
 }
 
-function stackColumn(x: number, heights: ReadonlyArray<number>): Array<FocusRect> {
+function stackColumn(
+  geometry: FocusGeometry,
+  x: number,
+  heights: ReadonlyArray<number>,
+): Array<FocusRect> {
   const stackHeight =
     heights.reduce((sum, height) => sum + height, 0) + (heights.length - 1) * SLOT_GAP;
   let y = CENTRE_MID_Y - stackHeight / 2;
   return heights.map((height) => {
-    const rect = { x, y, width: FOCUS_NODE_WIDTH, height };
+    const rect = { x, y, width: geometry.nodeWidth, height };
     y += height + SLOT_GAP;
     return rect;
   });
 }
 
-const PLACERS: Record<FocusZone, (heights: ReadonlyArray<number>) => Array<FocusRect>> = {
-  parent: (heights) => heights.map((height) => rectInRow(CENTRE_X, PARENT_Y, height)),
+const PLACERS: Record<
+  FocusZone,
+  (geometry: FocusGeometry, heights: ReadonlyArray<number>) => Array<FocusRect>
+> = {
+  parent: (geometry, heights) =>
+    heights.map((height) => rectInRow(geometry, geometry.centreX, PARENT_Y, height)),
   siblings: placeSiblings,
   children: placeChildren,
-  blockedBy: (heights) => stackColumn(LEFT_COLUMN_X, heights),
-  blocking: (heights) => stackColumn(RIGHT_COLUMN_X, heights),
+  blockedBy: (geometry, heights) => stackColumn(geometry, geometry.leftColumnX, heights),
+  blocking: (geometry, heights) => stackColumn(geometry, geometry.rightColumnX, heights),
 };
 
 const midX = (rect: FocusRect): number => rect.x + rect.width / 2;
@@ -271,6 +330,7 @@ const midY = (rect: FocusRect): number => rect.y + rect.height / 2;
 function connectorsFor(
   zone: FocusZone,
   rects: ReadonlyArray<FocusRect>,
+  geometry: FocusGeometry,
 ): Array<FocusConnectorViewModel> {
   const first = rects[0];
   const last = rects[rects.length - 1];
@@ -283,15 +343,16 @@ function connectorsFor(
     x2: number,
     y2: number,
   ): FocusConnectorViewModel => ({ zone, role, kind, x1, y1, x2, y2 });
+  const { centreX, centreMidX, nodeWidth } = geometry;
   const busIfMany = (bus: FocusConnectorViewModel) => (rects.length > 1 ? [bus] : []);
   switch (zone) {
     case "parent":
       return [
-        line("trunk", "tree", CENTRE_MID_X, CENTRE_Y, CENTRE_MID_X, PARENT_Y + FOCUS_NODE_HEIGHT),
+        line("trunk", "tree", centreMidX, CENTRE_Y, centreMidX, PARENT_Y + FOCUS_NODE_HEIGHT),
       ];
     case "children":
       return [
-        line("trunk", "tree", CENTRE_MID_X, CHILD_Y, CENTRE_MID_X, CENTRE_Y + FOCUS_NODE_HEIGHT),
+        line("trunk", "tree", centreMidX, CHILD_Y, centreMidX, CENTRE_Y + FOCUS_NODE_HEIGHT),
         ...busIfMany(line("bus", "tree", midX(first), CHILD_Y, midX(last), CHILD_Y)),
       ];
     case "siblings": {
@@ -301,17 +362,17 @@ function connectorsFor(
         line(
           "trunk",
           "peer",
-          hasLeft ? SIBLING_LEFT_X + FOCUS_NODE_WIDTH : CENTRE_MID_X,
+          hasLeft ? geometry.siblingLeftX + nodeWidth : centreMidX,
           SIBLING_MID_Y,
-          hasRight ? SIBLING_RIGHT_X : CENTRE_MID_X,
+          hasRight ? geometry.siblingRightX : centreMidX,
           SIBLING_MID_Y,
         ),
       ];
     }
     case "blockedBy": {
-      const innerX = LEFT_COLUMN_X + FOCUS_NODE_WIDTH;
+      const innerX = geometry.leftColumnX + nodeWidth;
       return [
-        line("trunk", "blocks", innerX, CENTRE_MID_Y, CENTRE_X, CENTRE_MID_Y),
+        line("trunk", "blocks", innerX, CENTRE_MID_Y, centreX, CENTRE_MID_Y),
         ...busIfMany(line("bus", "blocks", innerX, midY(first), innerX, midY(last))),
       ];
     }
@@ -320,23 +381,34 @@ function connectorsFor(
         line(
           "trunk",
           "blocks",
-          CENTRE_X + FOCUS_NODE_WIDTH,
+          centreX + nodeWidth,
           CENTRE_MID_Y,
-          RIGHT_COLUMN_X,
+          geometry.rightColumnX,
           CENTRE_MID_Y,
         ),
         ...busIfMany(
-          line("bus", "blocks", RIGHT_COLUMN_X, midY(first), RIGHT_COLUMN_X, midY(last)),
+          line(
+            "bus",
+            "blocks",
+            geometry.rightColumnX,
+            midY(first),
+            geometry.rightColumnX,
+            midY(last),
+          ),
         ),
       ];
   }
 }
 
-function labelsFor(zone: FocusZone, rects: ReadonlyArray<FocusRect>): Array<FocusLabelViewModel> {
+function labelsFor(
+  zone: FocusZone,
+  rects: ReadonlyArray<FocusRect>,
+  geometry: FocusGeometry,
+): Array<FocusLabelViewModel> {
   const label = COLUMN_LABELS[zone];
   const first = rects[0];
   if (label === undefined || first === undefined) return [];
-  return [{ zone, text: label.text, x: label.x, y: first.y - LABEL_GAP }];
+  return [{ zone, text: label.text, x: label.x(geometry), y: first.y - LABEL_GAP }];
 }
 
 function toFocusNode(
@@ -363,9 +435,10 @@ function placeZone(
   zone: FocusZone,
   capped: CappedZone,
   openParentIds: ReadonlySet<string>,
+  geometry: FocusGeometry,
 ): PlacedZone {
   const items = zoneItems(capped);
-  const rects = PLACERS[zone](items.map(itemHeight));
+  const rects = PLACERS[zone](geometry, items.map(itemHeight));
   const nodes: Array<FocusNodeViewModel> = [];
   const markers: Array<FocusMarkerViewModel> = [];
   items.forEach((item, position) => {
@@ -376,8 +449,8 @@ function placeZone(
   return {
     nodes,
     markers,
-    connectors: connectorsFor(zone, rects),
-    labels: labelsFor(zone, rects),
+    connectors: connectorsFor(zone, rects, geometry),
+    labels: labelsFor(zone, rects, geometry),
   };
 }
 
@@ -389,29 +462,37 @@ function openParentIdsOf(issues: ReadonlyArray<TodoIssue>): Set<string> {
   return ids;
 }
 
-export function buildFocusGraph(issues: ReadonlyArray<TodoIssue>, centreId: string): FocusGraph {
+function centreRectOf(geometry: FocusGeometry): FocusRect {
+  return {
+    x: geometry.centreX,
+    y: CENTRE_Y,
+    width: geometry.nodeWidth,
+    height: FOCUS_NODE_HEIGHT,
+  };
+}
+
+export function buildFocusGraph(
+  issues: ReadonlyArray<TodoIssue>,
+  centreId: string,
+  availableWidth = BASE_AVAILABLE_WIDTH,
+): FocusGraph {
   const centre = issues.find((issue) => issue.id === centreId);
   if (centre === undefined) return EMPTY_FOCUS_GRAPH;
+  const geometry = focusGeometryFor(availableWidth);
   const openParentIds = openParentIdsOf(issues);
   const neighbours = partitionNeighbours(issues, centre, new Set(issues.map((issue) => issue.id)));
   const placed = ZONE_RENDER_ORDER.map((zone) =>
-    placeZone(zone, capZone(neighbours[zone], ZONE_SLOTS[zone]), openParentIds),
+    placeZone(zone, capZone(neighbours[zone], ZONE_SLOTS[zone]), openParentIds, geometry),
   );
-  const centreRect = {
-    x: CENTRE_X,
-    y: CENTRE_Y,
-    width: FOCUS_NODE_WIDTH,
-    height: FOCUS_NODE_HEIGHT,
-  };
   return {
     nodes: [
-      toFocusNode(centre, openParentIds, null, centreRect),
+      toFocusNode(centre, openParentIds, null, centreRectOf(geometry)),
       ...placed.flatMap((zone) => zone.nodes),
     ],
     markers: placed.flatMap((zone) => zone.markers),
     connectors: placed.flatMap((zone) => zone.connectors),
     labels: placed.flatMap((zone) => zone.labels),
-    layout: GRID_LAYOUT,
+    layout: geometry.layout,
   };
 }
 

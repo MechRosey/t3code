@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import { shortBoardId } from "./boardCopy.logic";
 import {
   mapTitleLines,
+  TEXT_INSET_X,
   type FocusConnectorViewModel,
   type FocusGraph,
   type FocusLabelViewModel,
@@ -11,7 +12,6 @@ import {
   type FocusZone,
 } from "./mapView.logic";
 
-const TITLE_MAX_CHARS = 12;
 const NODE_CORNER_RADIUS = 8;
 const FOCUS_RING_GAP = 3;
 const VIEW_MARGIN = 5;
@@ -19,7 +19,6 @@ const FLAGGED_STROKE_WIDTH = 2;
 const DEFAULT_STROKE_WIDTH = 1;
 const BUS_STROKE_WIDTH = 1.5;
 const BLOCKED_DASH = "4 3";
-const TEXT_INSET_X = 6;
 const TITLE_FIRST_LINE_Y = 19;
 const TITLE_SECOND_LINE_Y = 30;
 const FOOTER_Y = 41;
@@ -124,8 +123,14 @@ function nodeStrokeClass(node: FocusNodeViewModel): string {
   return STROKE_BY_STATUS[node.status] ?? FALLBACK_STROKE;
 }
 
-function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
-  const titleLines = mapTitleLines(node.title, TITLE_MAX_CHARS);
+function MapNodeFace({
+  node,
+  titleChars,
+}: {
+  readonly node: FocusNodeViewModel;
+  readonly titleChars: number;
+}) {
+  const titleLines = mapTitleLines(node.title, titleChars);
   return (
     <>
       <rect
@@ -210,9 +215,11 @@ function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
 
 function MapNode({
   node,
+  titleChars,
   onFocusIssue,
 }: {
   readonly node: FocusNodeViewModel;
+  readonly titleChars: number;
   readonly onFocusIssue: (issueId: string) => void;
 }) {
   const transform = `translate(${node.x}, ${node.y})`;
@@ -225,7 +232,7 @@ function MapNode({
         aria-current="true"
         aria-label={`${node.title} - ${node.statusLabel} - this ticket`}
       >
-        <MapNodeFace node={node} />
+        <MapNodeFace node={node} titleChars={titleChars} />
       </g>
     );
   }
@@ -244,7 +251,7 @@ function MapNode({
       onClick={() => onFocusIssue(node.id)}
       onKeyDown={handleKeyDown}
     >
-      <MapNodeFace node={node} />
+      <MapNodeFace node={node} titleChars={titleChars} />
     </g>
   );
 }
@@ -338,7 +345,12 @@ export function MapView({ graph, onFocusIssue }: MapViewProps) {
         <MapZoneLabel key={label.zone} label={label} />
       ))}
       {graph.nodes.map((node) => (
-        <MapNode key={node.id} node={node} onFocusIssue={onFocusIssue} />
+        <MapNode
+          key={node.id}
+          node={node}
+          titleChars={graph.layout.titleChars}
+          onFocusIssue={onFocusIssue}
+        />
       ))}
       {graph.markers.map((marker) => (
         <MapMarker key={marker.zone} marker={marker} />
