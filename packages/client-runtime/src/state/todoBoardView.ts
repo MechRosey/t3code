@@ -428,18 +428,24 @@ type BoardFilterAndSort = {
   readonly sort: BoardSortOrder;
 } & BoardFilterUiState;
 
+export function boardFilterMatcher(uiState: BoardFilterUiState): (issue: TodoIssue) => boolean {
+  const tag = uiState.tag ?? null;
+  const epic = uiState.epic ?? "";
+  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
+  const query = uiState.query ?? "";
+  return (issue) =>
+    (tag === null || issue.tags.includes(tag)) &&
+    matchesEpicFilter(issue.tags, epic) &&
+    matchesTagSpec(issue.tags, specTerms) &&
+    matchesIssueFreeText(issue, query);
+}
+
 function filterAndSortIssues(
   issues: ReadonlyArray<TodoIssue>,
   uiState: BoardFilterAndSort,
 ): Array<TodoIssue> {
   const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
-  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
-  const matched = filterIssuesByTag(issues, uiState.tag).filter(
-    (issue) =>
-      matchesEpicFilter(issue.tags, uiState.epic ?? "") &&
-      matchesTagSpec(issue.tags, specTerms) &&
-      matchesIssueFreeText(issue, uiState.query ?? ""),
-  );
+  const matched = issues.filter(boardFilterMatcher(uiState));
   return sortBoardIssues(expandTagFilterAncestors(matched, issuesById), uiState.sort);
 }
 

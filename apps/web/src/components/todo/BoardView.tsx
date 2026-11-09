@@ -121,6 +121,7 @@ import {
 import {
   BOARD_SORT_OPTIONS,
   BOARD_STATUS_ORDER,
+  boardFilterMatcher,
   buildBoardViewModel,
   EMPTY_BOARD_SNAPSHOT,
   isBoardFilterActive,
@@ -137,6 +138,9 @@ import {
 } from "./boardUiState";
 import { ArchiveView } from "./ArchiveView";
 import { buildFocusGraph } from "./mapView.logic";
+import { BoardSequenceStrip } from "./BoardSequenceStrip";
+import { buildSequenceStrip, removeFromSequence, resolveSequenceDrop } from "./boardSequence.logic";
+import { useBoardSequence } from "./useBoardSequence";
 
 export interface BoardViewProps {
   readonly environmentId: EnvironmentId;
@@ -154,6 +158,8 @@ const BOARD_SORT_LABELS = new Map(
 const BOARD_TAG_ALL = "\u0000all";
 
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
+
+const EMPTY_BOARD_SEQUENCE: ReadonlyArray<string> = [];
 
 const currentIsoTimestamp = () => new Date().toISOString();
 
@@ -572,6 +578,11 @@ export function BoardView({
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_BOARD_PROVIDERS;
   const threadSnapshot = useAtomValue(threadEnvironment.snapshotAtom(environmentId));
+  const boardSequence = useBoardSequence(
+    environmentId,
+    cwd,
+    snapshotQuery.data?.sequence ?? EMPTY_BOARD_SEQUENCE,
+  );
 
   const model = (() => {
     if (snapshotQuery.data !== null) return buildBoardViewModel(snapshotQuery.data, uiState);
@@ -582,6 +593,14 @@ export function BoardView({
     (snapshotQuery.data?.issues ?? []).map((issue) => [issue.id, issue] as const),
   );
   const selectedIssue = selectedIssueId === null ? null : (issuesById.get(selectedIssueId) ?? null);
+  const sequenceStrip = buildSequenceStrip(
+    snapshotQuery.data?.issues ?? [],
+    boardSequence.sequence,
+    boardFilterMatcher(uiState),
+  );
+  const removeFromBoardSequence = (issueId: string) => {
+    void boardSequence.writeSequence(removeFromSequence(boardSequence.sequence, issueId));
+  };
   const focusGraph =
     snapshotQuery.data === null || selectedIssue === null
       ? null
@@ -923,6 +942,17 @@ export function BoardView({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over === null) return;
+    const sequenceDrop = resolveSequenceDrop({
+      activeId: String(active.id),
+      overId: String(over.id),
+      sequence: boardSequence.sequence,
+      strip: sequenceStrip,
+      issuesById,
+    });
+    if (sequenceDrop.kind === "sequence") {
+      if (sequenceDrop.ids !== null) void boardSequence.writeSequence(sequenceDrop.ids);
+      return;
+    }
     const issue = issuesById.get(String(active.id).slice("card:".length));
     if (issue === undefined) return;
     const overId = String(over.id);
@@ -1182,10 +1212,10 @@ export function BoardView({
           detail={issueDetail}
           onClose={() => setSelectedIssueId(null)}
           primary={
-            totalCards === 0 && filterActive ? (
-              <BoardFilteredEmpty onClearFilters={clearFilters} />
-            ) : (
-              <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
+            <DndContext sensors={dndSensors} onDragEnd={handleDragEnd}>
+              {totalCards === 0 && filterActive ? (
+                <BoardFilteredEmpty onClearFilters={clearFilters} />
+              ) : (
                 <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-2">
                   {model.columns.map((column) => {
                     const columnWindow = boardColumnWindow(
@@ -1233,9 +1263,14 @@ export function BoardView({
                     );
                   })}
                 </div>
-                <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
-              </DndContext>
-            )
+              )}
+              <BoardSequenceStrip
+                strip={sequenceStrip}
+                onOpen={setSelectedIssueId}
+                onRemove={removeFromBoardSequence}
+              />
+              <BoardDragPreview model={model} progressByIssueId={progressByIssueId} />
+            </DndContext>
           }
         />
       )}
