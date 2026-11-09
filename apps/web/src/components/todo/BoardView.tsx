@@ -137,7 +137,6 @@ import {
   BOARD_VIEW_OPTIONS,
 } from "./boardUiState";
 import { ArchiveView } from "./ArchiveView";
-import { buildFocusGraph } from "./mapView.logic";
 import { BoardSequenceStrip } from "./BoardSequenceStrip";
 import { buildSequenceStrip, removeFromSequence, resolveSequenceDrop } from "./boardSequence.logic";
 import { useBoardSequence } from "./useBoardSequence";
@@ -601,10 +600,6 @@ export function BoardView({
   const removeFromBoardSequence = (issueId: string) => {
     void boardSequence.writeSequence(removeFromSequence(boardSequence.sequence, issueId));
   };
-  const focusGraph =
-    snapshotQuery.data === null || selectedIssue === null
-      ? null
-      : buildFocusGraph(snapshotQuery.data.issues, selectedIssue.id);
   const statusOptions: Array<string> = [...BOARD_STATUS_ORDER];
   if (selectedIssue !== null && !statusOptions.includes(selectedIssue.status)) {
     statusOptions.push(selectedIssue.status);
@@ -999,7 +994,7 @@ export function BoardView({
               boardTags={model?.tags ?? []}
               dispatchInFlight={dispatchInFlight.has(selectedIssue.id)}
               viewDiff={selectedIssueViewDiff}
-              focusGraph={focusGraph}
+              issues={snapshotQuery.data?.issues ?? null}
               onFocusIssue={setSelectedIssueId}
               onDrawerModeChange={changeDrawerMode}
               onStatusChange={(issue, status) => void changeStatus(issue, status)}

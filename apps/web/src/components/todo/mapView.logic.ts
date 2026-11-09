@@ -19,6 +19,7 @@ type ConnectorRole = "trunk" | "bus";
 
 export const BASE_AVAILABLE_WIDTH = 420;
 export const TEXT_INSET_X = 6;
+const AVAILABLE_WIDTH_STEP = 8;
 const MIN_NODE_WIDTH = 76;
 const MAX_NODE_WIDTH = 144;
 const TITLE_CHAR_WIDTH = 5.3;
@@ -68,6 +69,9 @@ function nodeWidthFor(availableWidth: number): number {
   const fitted = Math.floor((availableWidth - GRID_FIXED_WIDTH) / GRID_NODE_COLUMNS);
   return Math.min(MAX_NODE_WIDTH, Math.max(MIN_NODE_WIDTH, fitted));
 }
+
+export const snapAvailableWidth = (width: number): number =>
+  Math.floor(width / AVAILABLE_WIDTH_STEP) * AVAILABLE_WIDTH_STEP;
 
 function titleCharsFor(nodeWidth: number): number {
   return Math.floor((nodeWidth - 2 * TEXT_INSET_X) / TITLE_CHAR_WIDTH);
