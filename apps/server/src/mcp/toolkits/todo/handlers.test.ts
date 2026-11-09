@@ -2,8 +2,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
+  type OrchestrationV2LinkOrigin,
   ProjectId,
   ProviderInstanceId,
+  type RuntimeMode,
   ThreadId,
   type Project as ProjectRecord,
 } from "@t3tools/contracts";
@@ -32,6 +34,8 @@ const harness = (input: {
   readonly workspaceRoot: string;
   readonly capabilities?: ReadonlySet<McpInvocationContext.McpCapability>;
   readonly readOnlyClient?: true;
+  readonly runtimeMode?: RuntimeMode;
+  readonly linkOrigin?: OrchestrationV2LinkOrigin;
 }) =>
   McpToolAccess.HandlersLayer.layer(TodoHandlers.layer).pipe(
     Layer.provideMerge(
@@ -54,7 +58,11 @@ const harness = (input: {
           issuedAt: 0,
         }),
         Layer.mock(ThreadManagement.ThreadManagementService)({
-          getThreadShell: (id) => Effect.succeed(liveThreadShell(id)),
+          getThreadShell: (id) =>
+            Effect.succeed({
+              ...liveThreadShell(id, { runtimeMode: input.runtimeMode }),
+              ...(input.linkOrigin === undefined ? {} : { linkOrigin: input.linkOrigin }),
+            }),
         }),
         Layer.mock(Project.ProjectService)({
           getById: (id) =>
@@ -189,5 +197,40 @@ it.layer(NodeServices.layer)("todo MCP tools", (it) => {
       expect(readOnlyClient.write).toMatchObject({ code: "capability_denied" });
       expect(yield* fs.exists(path.join(boardDir, "SEQUENCE.md"))).toBe(false);
     }),
+  );
+
+  it.effect(
+    "refuses a caller below full access and a fenced link, and lets a full-access link in",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { boardDir, workspaceRoot } = yield* installProjectBoard;
+        const writeAs = (options: Omit<Parameters<typeof harness>[0], "workspaceRoot">) =>
+          Effect.flatMap(callTools, (tools) => tools.setSequence({ ids: ["762b5"] })).pipe(
+            Effect.provide(harness({ workspaceRoot, ...options })),
+          );
+
+        const belowFullAccess = yield* writeAs({ runtimeMode: "approval-required" });
+        const fencedLink = yield* writeAs({
+          linkOrigin: { sessionId: "session:link", label: "Peer", access: "approval-required" },
+        });
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const refusedWrites = yield* fs.exists(sequencePath);
+        const fullAccessLink = yield* writeAs({
+          linkOrigin: { sessionId: "session:link", label: "Peer", access: "full-access" },
+        });
+
+        expect(belowFullAccess).toMatchObject({
+          code: "capability_denied",
+          message: expect.stringContaining("full-access"),
+        });
+        expect(fencedLink).toMatchObject({
+          code: "capability_denied",
+          message: expect.stringContaining("projects or environment settings"),
+        });
+        expect(refusedWrites).toBe(false);
+        expect(fullAccessLink).toEqual({ sequence: ["762b5-comment-target"] });
+      }),
   );
 });
