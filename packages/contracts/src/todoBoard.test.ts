@@ -8,9 +8,11 @@ import {
   TodoBoardRegenerateInput,
   TodoBoardRegenerateResult,
   TodoBoardSequenceInput,
+  TodoBoardSnapshot,
   TodoIssue,
 } from "./todoBoard.ts";
 
+const decodeSnapshot = Schema.decodeUnknownSync(TodoBoardSnapshot);
 const decodeMutate = Schema.decodeUnknownSync(TodoBoardMutateInput);
 const decodeSequence = Schema.decodeUnknownSync(TodoBoardSequenceInput);
 const decodeIssue = Schema.decodeUnknownSync(TodoIssue);
@@ -183,6 +185,15 @@ describe("TodoBoardRegenerateResult", () => {
 
   it("rejects non-string artifacts", () => {
     expect(() => decodeRegenerateResult({ artifacts: [1] })).toThrow();
+  });
+});
+
+describe("TodoBoardSnapshot", () => {
+  it("decodes a snapshot from an older server without a sequence key as an empty sequence", () => {
+    const older = { root: "C:/board/.todo", repoName: "board", issues: [] };
+
+    expect(decodeSnapshot(older).sequence).toEqual([]);
+    expect(decodeSnapshot({ ...older, sequence: ["abc12-x"] }).sequence).toEqual(["abc12-x"]);
   });
 });
 
