@@ -327,6 +327,8 @@ function toFocusNode(
   };
 }
 
+const listOrEmpty = <T>(value: T | null): Array<T> => (value === null ? [] : [value]);
+
 function placeZone(
   zone: FocusZone,
   capped: CappedZone,
@@ -344,8 +346,8 @@ function placeZone(
   return {
     nodes,
     markers,
-    connectors: connectorFor(zone, items.length) ?? [],
-    labels: labelFor(zone, items.length) ?? [],
+    connectors: listOrEmpty(connectorFor(zone, items.length)),
+    labels: listOrEmpty(labelFor(zone, items.length)),
   };
 }
 
