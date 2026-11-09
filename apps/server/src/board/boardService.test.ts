@@ -595,6 +595,58 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("prunes on done, cancelled and doing-to-backlog, and keeps on doing-to-read", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const setStatus = (id: string, status: string) =>
+          board.mutate({ action: "status", cwd, id, status });
+        yield* board.setSequence({
+          cwd,
+          ids: ["762b5", "e20d1", "55041", "4b42b", "67e0c", "890fa"],
+        });
+
+        yield* setStatus("e20d1-status-target", "doing");
+        yield* setStatus("e20d1-status-target", "read");
+        yield* setStatus("4b42b-epic-carrier", "read");
+        expect(yield* fs.readFileString(sequencePath)).toBe(
+          "762b5\ne20d1\n55041\n4b42b\n67e0c\n890fa\n",
+        );
+
+        yield* setStatus("67e0c-link-target", "doing");
+        yield* setStatus("67e0c-link-target", "backlog");
+        yield* setStatus("762b5-comment-target", "done");
+        yield* setStatus("55041-tag-target", "cancelled");
+
+        expect(yield* fs.readFileString(sequencePath)).toBe("e20d1\n4b42b\n890fa\n");
+      }),
+    );
+
+    it.effect("never creates the file and never rewrites it when the ticket is absent", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+
+        yield* board.mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" });
+        expect(yield* fs.exists(sequencePath)).toBe(false);
+
+        yield* fs.writeFileString(sequencePath, "55041\r\n");
+        yield* board.mutate({
+          action: "status",
+          cwd,
+          id: "890fa-link-destination",
+          status: "done",
+        });
+        expect(yield* fs.readFileString(sequencePath)).toBe("55041\r\n");
+      }),
+    );
+
     it.effect("drops an archived id instead of rejecting it", () =>
       Effect.gen(function* () {
         const { cwd } = yield* installBoard("after-archive");
