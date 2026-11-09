@@ -342,6 +342,36 @@ describe("pending sequence writes", () => {
     assert.strictEqual(displayedSequence(external, writes), external);
   });
 
+  it("pendingWrites_UnrelatedSnapshotWhileInFlight_StillShowsTheResultAfterTheWriteSettles", () => {
+    const base = [BACKLOG_PLANNED];
+    const requested = [READ_PLANNED, BACKLOG_PLANNED];
+    let writes = startPendingWrite([], { token: 1, ids: requested, base });
+
+    const unrelated = [...base];
+    writes = reconcilePendingWrites(writes, unrelated);
+    writes = settled(writes, 1, [...requested]);
+    writes = reconcilePendingWrites(writes, unrelated);
+
+    assert.deepEqual(displayedSequence(unrelated, writes), requested);
+  });
+
+  it("pendingWrites_LaterDropRevertsToTheSnapshotOrder_KeepsTheEarlierWriteInFlight", () => {
+    const base = [BACKLOG_PLANNED, READ_PLANNED];
+    const swapped = [READ_PLANNED, BACKLOG_PLANNED];
+    let writes = startPendingWrite([], { token: 1, ids: swapped, base });
+    writes = startPendingWrite(writes, { token: 2, ids: [...base], base });
+
+    writes = reconcilePendingWrites(writes, base);
+
+    assert.strictEqual(writes.length, 2);
+    writes = settled(writes, 1, [...swapped]);
+    writes = settled(writes, 2, [...base]);
+    writes = reconcilePendingWrites(writes, swapped);
+    assert.deepEqual(displayedSequence(swapped, writes), base);
+    writes = reconcilePendingWrites(writes, [...base]);
+    assert.deepEqual(writes, []);
+  });
+
   it("pendingWrites_InFlightWriteAndUnrelatedSnapshot_KeepsTheInFlightOrder", () => {
     const base = [BACKLOG_PLANNED];
     const requested = [READ_PLANNED, BACKLOG_PLANNED];
