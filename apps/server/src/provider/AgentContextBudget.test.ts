@@ -21,6 +21,7 @@ import {
 } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
 import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import { ProviderAdapterRegistryV2 } from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import { TodoBoard } from "../board/TodoBoard.ts";
 import { ThreadLaunchService } from "../orchestration-v2/ThreadLaunchService.ts";
 import { ThreadManagementService } from "../orchestration-v2/ThreadManagementService.ts";
 import { ThreadSearch } from "../orchestration-v2/ThreadSearch.ts";
@@ -79,6 +80,7 @@ const toolHandlerServices = Layer.mergeAll(
   Layer.mock(ThreadLaunchService)({}),
   Layer.mock(ThreadManagementService)({}),
   Layer.mock(ThreadSearch)({}),
+  Layer.mock(TodoBoard)({}),
   Layer.mock(VcsStatusBroadcaster)({}),
 ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
 

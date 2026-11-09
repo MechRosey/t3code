@@ -10,7 +10,6 @@ import {
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -23,11 +22,11 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
 import * as TodoHandlers from "./handlers.ts";
-import { TodoBoardOverview, TodoToolkit } from "./tools.ts";
+import { TodoToolkit } from "./tools.ts";
 
 const threadId = ThreadId.make("thread:todo");
 const projectId = ProjectId.make("project:mcp-test");
-const decodeOverview = Schema.decodeUnknownSync(TodoBoardOverview);
+const decodeOverview = Schema.decodeUnknownSync(TodoToolkit.tools.t3_todo_read.successSchema);
 
 const harness = (input: {
   readonly workspaceRoot: string;
@@ -59,9 +58,10 @@ const harness = (input: {
         }),
         Layer.mock(Project.ProjectService)({
           getById: (id) =>
-            Effect.succeed(
-              Option.some({ id, workspaceRoot: input.workspaceRoot } as unknown as ProjectRecord),
-            ),
+            Effect.succeedSome({
+              id,
+              workspaceRoot: input.workspaceRoot,
+            } as unknown as ProjectRecord),
         }),
       ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),

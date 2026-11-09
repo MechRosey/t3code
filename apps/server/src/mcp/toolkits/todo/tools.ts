@@ -34,7 +34,7 @@ const TodoTicket = Schema.Struct({
   blockedBy: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-export const TodoBoardOverview = Schema.Struct({
+const TodoBoardOverview = Schema.Struct({
   root: Schema.String,
   sequence: Schema.Array(Schema.String),
   open: Schema.Array(TodoTicket),

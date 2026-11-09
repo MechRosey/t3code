@@ -13,7 +13,7 @@ export interface SequenceIssue {
   readonly status: string;
 }
 
-const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
+export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
 
 export const leavesSequence = (from: string, to: string): boolean =>
   isClosedStatus(to) || (from === DOING_STATUS && to === BACKLOG_STATUS);
