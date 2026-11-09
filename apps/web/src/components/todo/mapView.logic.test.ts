@@ -328,7 +328,10 @@ describe("focus graph zone order and caps", () => {
     const wideOneMore = buildFocusGraph(zoneOf(6), CENTRE, 640);
 
     assert.deepEqual([idsIn(exact, "children").length, exact.overflows], [3, []]);
-    assert.deepEqual([idsIn(oneMore, "children").length, overflowRows(oneMore)], [3, [["children", 1]]]);
+    assert.deepEqual(
+      [idsIn(oneMore, "children").length, overflowRows(oneMore)],
+      [3, [["children", 1]]],
+    );
     assert.deepEqual([idsIn(wideExact, "children").length, wideExact.overflows], [5, []]);
     assert.deepEqual(
       [idsIn(wideOneMore, "children").length, overflowRows(wideOneMore)],
@@ -388,7 +391,7 @@ describe("focus graph layout", () => {
   type Connector = FocusGraph["connectors"][number];
   type ZoneBox = Box & { readonly zone: Zone | null };
 
-  const boxesOf = (graph: FocusGraph): Array<ZoneBox> => graph.nodes;
+  const boxesOf = (graph: FocusGraph): ReadonlyArray<ZoneBox> => graph.nodes;
 
   const zoneBoxes = (graph: FocusGraph, zone: Zone): Array<Box> =>
     boxesOf(graph).filter((box) => box.zone === zone);
@@ -610,7 +613,9 @@ describe("focus graph layout", () => {
     const [peer] = graph.connectors.filter((line) => line.zone === "siblings");
 
     assert.deepEqual(idsIn(graph, "siblings"), ["s0", "s1", "s2", "s3"]);
-    assert.ok(siblings.every((box, position) => position === 0 || box.x > siblings[position - 1]!.x));
+    assert.ok(
+      siblings.every((box, position) => position === 0 || box.x > siblings[position - 1]!.x),
+    );
     assert.equal(gapRight - gapLeft, centre.width / 2 + 2 * 6);
     assert.ok(parentTrunk!.x1 > gapLeft && parentTrunk!.x1 < gapRight);
     assert.equal(parentTrunk!.x1, midX(centre));

@@ -7,8 +7,8 @@ import {
   type FocusConnectorViewModel,
   type FocusGraph,
   type FocusLabelViewModel,
-  type FocusMarkerViewModel,
   type FocusNodeViewModel,
+  type FocusOverflowViewModel,
   type FocusZone,
 } from "./mapView.logic";
 
@@ -256,32 +256,18 @@ function MapNode({
   );
 }
 
-function MapMarker({ marker }: { readonly marker: FocusMarkerViewModel }) {
-  const { x, y, width, height, hidden, zone } = marker;
+function MapOverflow({ overflow }: { readonly overflow: FocusOverflowViewModel }) {
   return (
-    <g
-      transform={`translate(${x}, ${y})`}
+    <text
+      x={overflow.x}
+      y={overflow.y}
+      textAnchor="middle"
       role="img"
-      aria-label={`${hidden} more ${ZONE_NOUNS[zone]}`}
+      aria-label={`${overflow.hidden} more ${ZONE_NOUNS[overflow.zone]}`}
+      className="fill-muted-foreground text-3xs"
     >
-      <rect
-        width={width}
-        height={height}
-        rx={NODE_CORNER_RADIUS}
-        fill="none"
-        strokeDasharray={BLOCKED_DASH}
-        className="stroke-muted-foreground/40"
-      />
-      <text
-        x={width / 2}
-        y={height / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        className="fill-muted-foreground text-3xs"
-      >
-        {`+${hidden} more`}
-      </text>
-    </g>
+      {overflow.text}
+    </text>
   );
 }
 
@@ -352,8 +338,8 @@ export function MapView({ graph, onFocusIssue }: MapViewProps) {
           onFocusIssue={onFocusIssue}
         />
       ))}
-      {graph.markers.map((marker) => (
-        <MapMarker key={marker.zone} marker={marker} />
+      {graph.overflows.map((overflow) => (
+        <MapOverflow key={overflow.zone} overflow={overflow} />
       ))}
     </svg>
   );

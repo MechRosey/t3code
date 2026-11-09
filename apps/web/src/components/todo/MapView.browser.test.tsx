@@ -69,6 +69,7 @@ describe("MapView", () => {
 
     const buttons = [...screen.container.querySelectorAll<SVGGElement>('g[role="button"]')];
     const inert = [...screen.container.querySelectorAll<SVGGElement>('g[role="img"]')];
+    const overflows = [...screen.container.querySelectorAll<SVGTextElement>('text[role="img"]')];
     const zoneLabels = [...screen.container.querySelectorAll("text")]
       .map((text) => text.textContent)
       .filter((text) => text === "Blocked by" || text === "Blocking");
@@ -76,11 +77,13 @@ describe("MapView", () => {
     expect(labels(buttons)).toEqual([
       "Parent: Parent ticket - Doing",
       "Sibling: Sibling A - Doing",
+      "Sibling: Sibling B - Doing",
       "Child: Child ticket - Doing",
       "Blocked by: Blocker ticket - Doing",
       "Blocking: Blockee ticket - Doing",
     ]);
-    expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket", "2 more siblings"]);
+    expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket"]);
+    expect(labels(overflows)).toEqual(["1 more siblings"]);
     expect(zoneLabels).toEqual(["Blocked by", "Blocking"]);
 
     const keydown = (key: string) =>
@@ -89,14 +92,15 @@ describe("MapView", () => {
       buttons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await act(() => {
-      buttons[2]!.dispatchEvent(keydown(" "));
+      buttons[3]!.dispatchEvent(keydown(" "));
     });
     await act(() => {
-      buttons[2]!.dispatchEvent(keydown("a"));
+      buttons[3]!.dispatchEvent(keydown("a"));
     });
     await act(() => {
       inert[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      inert[1]!.dispatchEvent(keydown("Enter"));
+      overflows[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      overflows[0]!.dispatchEvent(keydown("Enter"));
     });
     expect(onFocusIssue.mock.calls).toEqual([["abc12-parent"], ["ghi56-child"]]);
   });
