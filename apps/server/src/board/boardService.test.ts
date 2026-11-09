@@ -654,6 +654,26 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("prune keeps every line it cannot resolve verbatim", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* fs.writeFileString(
+          sequencePath,
+          "<<<<<<< HEAD\r\n762b5\r\n=======\r\ne20d1-archived-elsewhere\r\n55041\r\n>>>>>>> branch\r\n",
+        );
+
+        yield* board.mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" });
+
+        expect(yield* fs.readFileString(sequencePath)).toBe(
+          "<<<<<<< HEAD\r\n=======\r\ne20d1-archived-elsewhere\r\n55041\r\n>>>>>>> branch\r\n",
+        );
+      }),
+    );
+
     it.effect("never creates the file and never rewrites it when the ticket is absent", () =>
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
