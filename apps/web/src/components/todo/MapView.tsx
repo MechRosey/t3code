@@ -11,14 +11,15 @@ import {
   type FocusZone,
 } from "./mapView.logic";
 
-const TITLE_MAX_CHARS = 17;
+const TITLE_MAX_CHARS = 12;
 const NODE_CORNER_RADIUS = 8;
 const FOCUS_RING_GAP = 3;
 const VIEW_MARGIN = 5;
 const FLAGGED_STROKE_WIDTH = 2;
 const DEFAULT_STROKE_WIDTH = 1;
+const BUS_STROKE_WIDTH = 1.5;
 const BLOCKED_DASH = "4 3";
-const TEXT_INSET_X = 8;
+const TEXT_INSET_X = 6;
 const TITLE_FIRST_LINE_Y = 19;
 const TITLE_SECOND_LINE_Y = 30;
 const FOOTER_Y = 41;
@@ -52,6 +53,14 @@ interface MapViewProps {
   readonly onFocusIssue: (issueId: string) => void;
 }
 
+const ZONE_NODE_PREFIX: Record<FocusZone, string> = {
+  parent: "Parent",
+  siblings: "Sibling",
+  children: "Child",
+  blockedBy: "Blocked by",
+  blocking: "Blocking",
+};
+
 const ZONE_NOUNS: Record<FocusZone, string> = {
   parent: "parent",
   siblings: "siblings",
@@ -66,6 +75,16 @@ function connectorPath(connector: FocusConnectorViewModel): string {
 
 function MapConnector({ connector }: { readonly connector: FocusConnectorViewModel }) {
   const path = connectorPath(connector);
+  if (connector.role === "bus") {
+    return (
+      <path
+        d={path}
+        className={connector.kind === "blocks" ? "stroke-error/80" : "stroke-muted-foreground/50"}
+        strokeWidth={BUS_STROKE_WIDTH}
+        fill="none"
+      />
+    );
+  }
   if (connector.kind === "blocks") {
     return (
       <path
@@ -83,7 +102,7 @@ function MapConnector({ connector }: { readonly connector: FocusConnectorViewMod
       <path
         d={path}
         className="stroke-muted-foreground/40"
-        strokeWidth={1}
+        strokeWidth={DEFAULT_STROKE_WIDTH}
         strokeDasharray="2 4"
         fill="none"
       />
@@ -197,7 +216,8 @@ function MapNode({
   readonly onFocusIssue: (issueId: string) => void;
 }) {
   const transform = `translate(${node.x}, ${node.y})`;
-  if (node.isFocus) {
+  const { zone } = node;
+  if (zone === null) {
     return (
       <g
         transform={transform}
@@ -219,7 +239,7 @@ function MapNode({
       transform={transform}
       role="button"
       tabIndex={0}
-      aria-label={`${node.title} - ${node.statusLabel}`}
+      aria-label={`${ZONE_NODE_PREFIX[zone]}: ${node.title} - ${node.statusLabel}`}
       className="cursor-pointer outline-none hover:opacity-80 focus-visible:outline-1 focus-visible:outline-primary"
       onClick={() => onFocusIssue(node.id)}
       onKeyDown={handleKeyDown}
@@ -275,56 +295,54 @@ export function MapView({ graph, onFocusIssue }: MapViewProps) {
   const width = graph.layout.width + VIEW_MARGIN * 2;
   const height = graph.layout.height + VIEW_MARGIN * 2;
   return (
-    <div>
-      <svg
-        viewBox={`${-VIEW_MARGIN} ${-VIEW_MARGIN} ${width} ${height}`}
-        style={{ maxWidth: width }}
-        className="mx-auto block h-auto w-full"
-        role="group"
-        aria-label="Ticket relation map"
-      >
-        <defs>
-          <marker
-            id="bc-map-arrow-muted"
-            viewBox="0 0 10 10"
-            refX={9}
-            refY={5}
-            markerWidth={7}
-            markerHeight={7}
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground/60" />
-          </marker>
-          <marker
-            id="bc-map-cross"
-            viewBox="0 0 12 12"
-            refX={6}
-            refY={6}
-            markerWidth={9}
-            markerHeight={9}
-            orient="auto"
-          >
-            <path
-              d="M 2 2 L 10 10 M 10 2 L 2 10"
-              className="stroke-error/80"
-              strokeWidth={2}
-              fill="none"
-            />
-          </marker>
-        </defs>
-        {graph.connectors.map((connector) => (
-          <MapConnector key={connector.zone} connector={connector} />
-        ))}
-        {graph.labels.map((label) => (
-          <MapZoneLabel key={label.zone} label={label} />
-        ))}
-        {graph.nodes.map((node) => (
-          <MapNode key={node.id} node={node} onFocusIssue={onFocusIssue} />
-        ))}
-        {graph.markers.map((marker) => (
-          <MapMarker key={marker.zone} marker={marker} />
-        ))}
-      </svg>
-    </div>
+    <svg
+      viewBox={`${-VIEW_MARGIN} ${-VIEW_MARGIN} ${width} ${height}`}
+      style={{ maxWidth: width }}
+      className="mx-auto block h-auto w-full"
+      role="group"
+      aria-label="Ticket relation map"
+    >
+      <defs>
+        <marker
+          id="bc-map-arrow-muted"
+          viewBox="0 0 10 10"
+          refX={9}
+          refY={5}
+          markerWidth={7}
+          markerHeight={7}
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground/60" />
+        </marker>
+        <marker
+          id="bc-map-cross"
+          viewBox="0 0 12 12"
+          refX={6}
+          refY={6}
+          markerWidth={9}
+          markerHeight={9}
+          orient="auto"
+        >
+          <path
+            d="M 2 2 L 10 10 M 10 2 L 2 10"
+            className="stroke-error/80"
+            strokeWidth={2}
+            fill="none"
+          />
+        </marker>
+      </defs>
+      {graph.connectors.map((connector) => (
+        <MapConnector key={`${connector.zone}-${connector.role}`} connector={connector} />
+      ))}
+      {graph.labels.map((label) => (
+        <MapZoneLabel key={label.zone} label={label} />
+      ))}
+      {graph.nodes.map((node) => (
+        <MapNode key={node.id} node={node} onFocusIssue={onFocusIssue} />
+      ))}
+      {graph.markers.map((marker) => (
+        <MapMarker key={marker.zone} marker={marker} />
+      ))}
+    </svg>
   );
 }

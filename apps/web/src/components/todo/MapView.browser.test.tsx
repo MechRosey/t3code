@@ -74,11 +74,11 @@ describe("MapView", () => {
       .filter((text) => text === "Blocked by" || text === "Blocking");
 
     expect(labels(buttons)).toEqual([
-      "Parent ticket - Doing",
-      "Sibling A - Doing",
-      "Child ticket - Doing",
-      "Blocker ticket - Doing",
-      "Blockee ticket - Doing",
+      "Parent: Parent ticket - Doing",
+      "Sibling: Sibling A - Doing",
+      "Child: Child ticket - Doing",
+      "Blocked by: Blocker ticket - Doing",
+      "Blocking: Blockee ticket - Doing",
     ]);
     expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket", "2 more siblings"]);
     expect(zoneLabels).toEqual(["Blocked by", "Blocking"]);
