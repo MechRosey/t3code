@@ -147,13 +147,16 @@ const toRootHue = (colour: string | undefined): number | null => {
   return Number.isInteger(value) ? value : null;
 };
 
+const isBoardRuleError = Schema.is(BoardRuleError);
+const isMarkerConflictError = Schema.is(MarkerConflictError);
+
 const runRule = <A>(thunk: () => A): Effect.Effect<A, TodoBoardError> =>
   Effect.suspend(() => {
     try {
       return Effect.succeed(thunk());
     } catch (error) {
-      if (Schema.is(BoardRuleError)(error)) return Effect.fail(fromRuleError(error));
-      if (Schema.is(MarkerConflictError)(error)) {
+      if (isBoardRuleError(error)) return Effect.fail(fromRuleError(error));
+      if (isMarkerConflictError(error)) {
         return Effect.fail(
           toError("conflict", error.message, { baseline: error.baseline, current: error.current }),
         );
