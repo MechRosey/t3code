@@ -5,13 +5,18 @@ export const SEQUENCE_TEMP_FILE = `${SEQUENCE_FILE}.tmp`;
 
 const SHORT_ID_LENGTH = 5;
 const CLOSED_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
+const DOING_STATUS = "doing";
+const BACKLOG_STATUS = "backlog";
 
 export interface SequenceIssue {
   readonly id: string;
   readonly status: string;
 }
 
-export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
+const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
+
+export const leavesSequence = (from: string, to: string): boolean =>
+  isClosedStatus(to) || (from === DOING_STATUS && to === BACKLOG_STATUS);
 
 export const parseSequenceRefs = (text: string): Array<string> =>
   text
@@ -38,7 +43,7 @@ export const resolveSequence = (
   return resolved;
 };
 
-export const toShortId = (id: string, allIds: ReadonlyArray<string>): string => {
+const toShortId = (id: string, allIds: ReadonlyArray<string>): string => {
   const short = id.slice(0, SHORT_ID_LENGTH);
   const lowerShort = short.toLowerCase();
   const sharing = allIds.filter((other) => other.toLowerCase().startsWith(lowerShort));

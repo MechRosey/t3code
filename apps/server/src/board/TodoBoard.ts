@@ -56,6 +56,7 @@ import {
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
 import {
+  leavesSequence,
   parseSequenceRefs,
   resolveSequence,
   SEQUENCE_FILE,
@@ -445,6 +446,21 @@ const make = Effect.gen(function* () {
     return issue;
   });
 
+  const removeFromSequence = Effect.fn("TodoBoard.removeFromSequence")(function* (
+    root: string,
+    dirs: ReadonlyArray<IssueDir>,
+    target: IssueDir,
+  ) {
+    const refs = yield* readSequenceRefs(root);
+    const names = dirs.map((dir) => dir.name);
+    const kept = refs.filter((ref) => {
+      const lookup = findIssueDirName(names, ref);
+      return lookup.tag !== "found" || lookup.name !== target.name;
+    });
+    if (kept.length === refs.length) return;
+    yield* writeSequenceFile(root, serializeSequence(kept, names));
+  });
+
   const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (
     root: string,
     input: TodoBoardMutateInput,
@@ -471,6 +487,9 @@ const make = Effect.gen(function* () {
         const parsed = parseIssue(text, target.name);
         const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
         yield* writeMarker(root, target, next, stat);
+        if (leavesSequence(canonicalStatus(parsed.fm.status), next.fm.status)) {
+          yield* removeFromSequence(root, dirs, target);
+        }
         return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
       }
       case "comment": {
