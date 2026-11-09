@@ -3,10 +3,12 @@ import type { KeyboardEvent } from "react";
 import { shortBoardId } from "./boardCopy.logic";
 import {
   mapTitleLines,
-  type FocusAnchor,
-  type FocusEdgeViewModel,
+  type FocusConnectorViewModel,
   type FocusGraph,
+  type FocusLabelViewModel,
+  type FocusMarkerViewModel,
   type FocusNodeViewModel,
+  type FocusZone,
 } from "./mapView.logic";
 
 const TITLE_MAX_CHARS = 17;
@@ -15,7 +17,6 @@ const FOCUS_RING_GAP = 3;
 const VIEW_MARGIN = 5;
 const FLAGGED_STROKE_WIDTH = 2;
 const DEFAULT_STROKE_WIDTH = 1;
-const CURVE_REACH = 0.5;
 const BLOCKED_DASH = "4 3";
 const TEXT_INSET_X = 8;
 const TITLE_FIRST_LINE_Y = 19;
@@ -46,57 +47,26 @@ const STROKE_BY_STATUS: Record<string, string> = {
 const FALLBACK_FILL = "fill-card";
 const FALLBACK_STROKE = "stroke-muted-foreground/40";
 
-interface Point {
-  readonly x: number;
-  readonly y: number;
-}
-
-const ANCHOR_NORMALS: Record<FocusAnchor, Point> = {
-  top: { x: 0, y: -1 },
-  bottom: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 },
-};
-
 interface MapViewProps {
   readonly graph: FocusGraph;
   readonly onFocusIssue: (issueId: string) => void;
 }
 
-function anchorPoint(node: FocusNodeViewModel, anchor: FocusAnchor) {
-  const centreX = node.x + node.width / 2;
-  const centreY = node.y + node.height / 2;
-  switch (anchor) {
-    case "top":
-      return { x: centreX, y: node.y };
-    case "bottom":
-      return { x: centreX, y: node.y + node.height };
-    case "left":
-      return { x: node.x, y: centreY };
-    case "right":
-      return { x: node.x + node.width, y: centreY };
-  }
+const ZONE_NOUNS: Record<FocusZone, string> = {
+  parent: "parent",
+  siblings: "siblings",
+  children: "children",
+  blockedBy: "blockers",
+  blocking: "blocked tickets",
+};
+
+function connectorPath(connector: FocusConnectorViewModel): string {
+  return `M ${connector.x1} ${connector.y1} L ${connector.x2} ${connector.y2}`;
 }
 
-function anchorReach(start: Point, end: Point, normal: Point): number {
-  const span = normal.x === 0 ? Math.abs(end.y - start.y) : Math.abs(end.x - start.x);
-  return span * CURVE_REACH;
-}
-
-function edgePath(from: FocusNodeViewModel, to: FocusNodeViewModel, edge: FocusEdgeViewModel) {
-  const start = anchorPoint(from, edge.fromAnchor);
-  const end = anchorPoint(to, edge.toAnchor);
-  const startNormal = ANCHOR_NORMALS[edge.fromAnchor];
-  const endNormal = ANCHOR_NORMALS[edge.toAnchor];
-  const startReach = anchorReach(start, end, startNormal);
-  const endReach = anchorReach(start, end, endNormal);
-  const startControl = `${start.x + startNormal.x * startReach} ${start.y + startNormal.y * startReach}`;
-  const endControl = `${end.x + endNormal.x * endReach} ${end.y + endNormal.y * endReach}`;
-  return `M ${start.x} ${start.y} C ${startControl}, ${endControl}, ${end.x} ${end.y}`;
-}
-
-function MapEdge({ edge, path }: { readonly edge: FocusEdgeViewModel; readonly path: string }) {
-  if (edge.kind === "blocks") {
+function MapConnector({ connector }: { readonly connector: FocusConnectorViewModel }) {
+  const path = connectorPath(connector);
+  if (connector.kind === "blocks") {
     return (
       <path
         d={path}
@@ -108,15 +78,14 @@ function MapEdge({ edge, path }: { readonly edge: FocusEdgeViewModel; readonly p
       />
     );
   }
-  if (edge.kind === "relates") {
+  if (connector.kind === "peer") {
     return (
       <path
         d={path}
-        className="stroke-muted-foreground/60"
-        strokeWidth={1.5}
+        className="stroke-muted-foreground/40"
+        strokeWidth={1}
         strokeDasharray="2 4"
         fill="none"
-        markerEnd="url(#bc-map-arrow-muted)"
       />
     );
   }
@@ -260,11 +229,14 @@ function MapNode({
   );
 }
 
-function MapOverflow({ graph }: { readonly graph: FocusGraph }) {
-  if (graph.overflow === null) return null;
-  const { x, y, width, height } = graph.overflow;
+function MapMarker({ marker }: { readonly marker: FocusMarkerViewModel }) {
+  const { x, y, width, height, hidden, zone } = marker;
   return (
-    <g transform={`translate(${x}, ${y})`} role="img" aria-label={`${graph.hidden} more outside`}>
+    <g
+      transform={`translate(${x}, ${y})`}
+      role="img"
+      aria-label={`${hidden} more ${ZONE_NOUNS[zone]}`}
+    >
       <rect
         width={width}
         height={height}
@@ -280,23 +252,34 @@ function MapOverflow({ graph }: { readonly graph: FocusGraph }) {
         dominantBaseline="central"
         className="fill-muted-foreground text-3xs"
       >
-        {`${graph.hidden} more outside`}
+        {`+${hidden} more`}
       </text>
     </g>
   );
 }
 
+function MapZoneLabel({ label }: { readonly label: FocusLabelViewModel }) {
+  return (
+    <text
+      x={label.x}
+      y={label.y}
+      textAnchor="middle"
+      className="fill-muted-foreground text-3xs font-medium"
+    >
+      {label.text}
+    </text>
+  );
+}
+
 export function MapView({ graph, onFocusIssue }: MapViewProps) {
-  const nodesById = new Map(graph.nodes.map((node) => [node.id, node] as const));
   const width = graph.layout.width + VIEW_MARGIN * 2;
   const height = graph.layout.height + VIEW_MARGIN * 2;
   return (
-    <div className="overflow-x-auto">
+    <div>
       <svg
         viewBox={`${-VIEW_MARGIN} ${-VIEW_MARGIN} ${width} ${height}`}
-        width={width}
-        height={height}
-        className="mx-auto"
+        style={{ maxWidth: width }}
+        className="mx-auto block h-auto w-full"
         role="group"
         aria-label="Ticket relation map"
       >
@@ -329,16 +312,18 @@ export function MapView({ graph, onFocusIssue }: MapViewProps) {
             />
           </marker>
         </defs>
-        {graph.edges.map((edge) => {
-          const from = nodesById.get(edge.from);
-          const to = nodesById.get(edge.to);
-          if (from === undefined || to === undefined) return null;
-          return <MapEdge key={edge.key} edge={edge} path={edgePath(from, to, edge)} />;
-        })}
+        {graph.connectors.map((connector) => (
+          <MapConnector key={connector.zone} connector={connector} />
+        ))}
+        {graph.labels.map((label) => (
+          <MapZoneLabel key={label.zone} label={label} />
+        ))}
         {graph.nodes.map((node) => (
           <MapNode key={node.id} node={node} onFocusIssue={onFocusIssue} />
         ))}
-        <MapOverflow graph={graph} />
+        {graph.markers.map((marker) => (
+          <MapMarker key={marker.zone} marker={marker} />
+        ))}
       </svg>
     </div>
   );

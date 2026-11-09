@@ -37,21 +37,51 @@ describe("MapView", () => {
   it("MapView_NodesActivated_RefocusesOtherTicketsAndLeavesFocusAndOverflowInert", async () => {
     const graph = buildFocusGraph(
       [
-        issue({ id: "abc12-centre", title: "Centre ticket" }),
-        issue({ id: "def34-near", title: "Near ticket", parentId: "abc12-centre", depth: 1 }),
-        issue({ id: "ghi56-far", title: "Far ticket", parentId: "def34-near", depth: 2 }),
-        issue({ id: "jkl78-beyond", title: "Beyond ticket", parentId: "ghi56-far", depth: 3 }),
+        issue({ id: "abc12-parent", title: "Parent ticket" }),
+        issue({
+          id: "def34-centre",
+          title: "Centre ticket",
+          parentId: "abc12-parent",
+          depth: 1,
+          links: { blocks: ["jkl78-blockee"], relates: [] },
+        }),
+        issue({ id: "sib1a-first", title: "Sibling A", parentId: "abc12-parent", depth: 1 }),
+        issue({ id: "sib2b-second", title: "Sibling B", parentId: "abc12-parent", depth: 1 }),
+        issue({ id: "sib3c-third", title: "Sibling C", parentId: "abc12-parent", depth: 1 }),
+        issue({ id: "ghi56-child", title: "Child ticket", parentId: "def34-centre", depth: 2 }),
+        issue({
+          id: "mno90-grandchild",
+          title: "Grandchild ticket",
+          parentId: "ghi56-child",
+          depth: 3,
+        }),
+        issue({
+          id: "pqr12-blocker",
+          title: "Blocker ticket",
+          links: { blocks: ["def34-centre"], relates: [] },
+        }),
+        issue({ id: "jkl78-blockee", title: "Blockee ticket" }),
       ],
-      "abc12-centre",
+      "def34-centre",
     );
     const onFocusIssue = vi.fn();
     await using screen = await render(<MapView graph={graph} onFocusIssue={onFocusIssue} />);
 
     const buttons = [...screen.container.querySelectorAll<SVGGElement>('g[role="button"]')];
     const inert = [...screen.container.querySelectorAll<SVGGElement>('g[role="img"]')];
+    const zoneLabels = [...screen.container.querySelectorAll("text")]
+      .map((text) => text.textContent)
+      .filter((text) => text === "Blocked by" || text === "Blocking");
 
-    expect(labels(buttons)).toEqual(["Near ticket - Doing", "Far ticket - Doing"]);
-    expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket", "1 more outside"]);
+    expect(labels(buttons)).toEqual([
+      "Parent ticket - Doing",
+      "Sibling A - Doing",
+      "Child ticket - Doing",
+      "Blocker ticket - Doing",
+      "Blockee ticket - Doing",
+    ]);
+    expect(labels(inert)).toEqual(["Centre ticket - Doing - this ticket", "2 more siblings"]);
+    expect(zoneLabels).toEqual(["Blocked by", "Blocking"]);
 
     const keydown = (key: string) =>
       new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
@@ -59,15 +89,15 @@ describe("MapView", () => {
       buttons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await act(() => {
-      buttons[1]!.dispatchEvent(keydown(" "));
+      buttons[2]!.dispatchEvent(keydown(" "));
     });
     await act(() => {
-      buttons[1]!.dispatchEvent(keydown("a"));
+      buttons[2]!.dispatchEvent(keydown("a"));
     });
     await act(() => {
       inert[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       inert[1]!.dispatchEvent(keydown("Enter"));
     });
-    expect(onFocusIssue.mock.calls).toEqual([["def34-near"], ["ghi56-far"]]);
+    expect(onFocusIssue.mock.calls).toEqual([["abc12-parent"], ["ghi56-child"]]);
   });
 });
