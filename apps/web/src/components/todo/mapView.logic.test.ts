@@ -458,7 +458,7 @@ describe("focus graph layout", () => {
       ],
     );
     assert.deepEqual(overflowing.markers, [
-      { zone: "blockedBy", hidden: 3, x: 0, y: 260, width: NODE_WIDTH, height: MARKER_HEIGHT },
+      { zone: "blockedBy", hidden: 2, x: 0, y: 260, width: NODE_WIDTH, height: MARKER_HEIGHT },
     ]);
   });
 

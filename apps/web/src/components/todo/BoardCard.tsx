@@ -3,6 +3,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import type { TodoIssue } from "@t3tools/contracts";
 import {
+  capToSlots,
   cardHueStyle,
   type BoardCardRelation,
   type BoardCardViewModel,
@@ -20,7 +21,6 @@ import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
 
 const BOARD_CARD_RELATION_SLOTS = 4;
-const BOARD_CARD_RELATION_OVERFLOW_VISIBLE = BOARD_CARD_RELATION_SLOTS - 1;
 const BOARD_CARD_RELATION_GLYPH = "\u276f";
 
 const BOARD_DRAG_ACTIVATION_DISTANCE = 6;
@@ -50,16 +50,6 @@ function TooltipSpan({
       <TooltipPopup>{tooltip}</TooltipPopup>
     </Tooltip>
   );
-}
-
-function capRelations(relations: ReadonlyArray<BoardCardRelation>) {
-  if (relations.length <= BOARD_CARD_RELATION_SLOTS) {
-    return { shown: relations, hidden: 0 };
-  }
-  return {
-    shown: relations.slice(0, BOARD_CARD_RELATION_OVERFLOW_VISIBLE),
-    hidden: relations.length - BOARD_CARD_RELATION_OVERFLOW_VISIBLE,
-  };
 }
 
 function RelationId({
@@ -101,7 +91,7 @@ function RelationColumn({
   readonly side: "left" | "right";
   readonly tooltipPrefix: string;
 }) {
-  const { shown, hidden } = capRelations(relations);
+  const { shown, hidden } = capToSlots(relations, BOARD_CARD_RELATION_SLOTS);
   return (
     <div
       className={cn("flex min-w-0 flex-col gap-0.5", side === "left" ? "items-end" : "items-start")}
@@ -126,7 +116,7 @@ function RelationRow({
   readonly relations: ReadonlyArray<BoardCardRelation>;
   readonly tooltipPrefix: string;
 }) {
-  const { shown, hidden } = capRelations(relations);
+  const { shown, hidden } = capToSlots(relations, BOARD_CARD_RELATION_SLOTS);
   return (
     <div className="flex min-w-0 flex-wrap justify-center gap-x-1">
       {shown.map((relation) => (

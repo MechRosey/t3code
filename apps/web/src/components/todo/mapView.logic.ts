@@ -1,56 +1,90 @@
 import type { TodoIssue } from "@t3tools/contracts";
 
 import {
+  BOARD_STATUS_ORDER,
   boardQuestionBadge,
   boardStatusColourClass,
   boardStatusGlyph,
   boardStatusLabel,
+  capToSlots,
+  isClosedStatus,
   type BoardQuestionBadge,
 } from "@t3tools/client-runtime/state/todo-board-view";
 
-type MapEdgeKind = "tree" | "blocks" | "relates";
+export type FocusZone = "parent" | "siblings" | "children" | "blockedBy" | "blocking";
+
+type ConnectorKind = "tree" | "blocks" | "peer";
+
+const FOCUS_NODE_WIDTH = 104;
+const FOCUS_NODE_HEIGHT = 46;
+const FOCUS_MARKER_HEIGHT = 28;
+const SLOT_GAP = 12;
+const COLUMN_GAP = 36;
+const ROW_GAP = 36;
+const LABEL_GAP = 6;
+
+const SIDE_COLUMN_SLOTS = 4;
+const CHILD_ROW_SLOTS = 3;
+const SIBLING_SLOTS = 2;
+const CENTRE_BLOCK_SLOTS = 3;
+const PARENT_SLOTS = 1;
+
+const SLOT_PITCH = FOCUS_NODE_WIDTH + SLOT_GAP;
+const BLOCK_WIDTH = CENTRE_BLOCK_SLOTS * FOCUS_NODE_WIDTH + (CENTRE_BLOCK_SLOTS - 1) * SLOT_GAP;
+const LEFT_COLUMN_X = 0;
+const BLOCK_X = LEFT_COLUMN_X + FOCUS_NODE_WIDTH + COLUMN_GAP;
+const RIGHT_COLUMN_X = BLOCK_X + BLOCK_WIDTH + COLUMN_GAP;
+const SIBLING_LEFT_X = BLOCK_X;
+const SIBLING_RIGHT_X = BLOCK_X + (CENTRE_BLOCK_SLOTS - 1) * SLOT_PITCH;
+const CENTRE_X = BLOCK_X + SLOT_PITCH;
+const CENTRE_MID_X = CENTRE_X + FOCUS_NODE_WIDTH / 2;
+
+const PARENT_Y = 0;
+const SIBLING_Y = PARENT_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
+const CENTRE_Y = SIBLING_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
+const CHILD_Y = CENTRE_Y + FOCUS_NODE_HEIGHT + ROW_GAP;
+const CENTRE_MID_Y = CENTRE_Y + FOCUS_NODE_HEIGHT / 2;
+const SIBLING_MID_Y = SIBLING_Y + FOCUS_NODE_HEIGHT / 2;
+
+const COLUMN_HEIGHT = SIDE_COLUMN_SLOTS * FOCUS_NODE_HEIGHT + (SIDE_COLUMN_SLOTS - 1) * SLOT_GAP;
+const COLUMN_TOP = CENTRE_MID_Y - COLUMN_HEIGHT / 2;
+const LABEL_Y = COLUMN_TOP - LABEL_GAP;
+
+const GRID_LAYOUT: MapLayout = {
+  width: RIGHT_COLUMN_X + FOCUS_NODE_WIDTH,
+  height: Math.max(CHILD_Y + FOCUS_NODE_HEIGHT, COLUMN_TOP + COLUMN_HEIGHT),
+};
+
+const ZONE_ORDER: ReadonlyArray<FocusZone> = [
+  "parent",
+  "siblings",
+  "children",
+  "blockedBy",
+  "blocking",
+];
+
+const ZONE_SLOTS: Record<FocusZone, number> = {
+  parent: PARENT_SLOTS,
+  siblings: SIBLING_SLOTS,
+  children: CHILD_ROW_SLOTS,
+  blockedBy: SIDE_COLUMN_SLOTS,
+  blocking: SIDE_COLUMN_SLOTS,
+};
+
+const COLUMN_LABELS: Partial<Record<FocusZone, { readonly text: string; readonly x: number }>> = {
+  blockedBy: { text: "Blocked by", x: LEFT_COLUMN_X + FOCUS_NODE_WIDTH / 2 },
+  blocking: { text: "Blocking", x: RIGHT_COLUMN_X + FOCUS_NODE_WIDTH / 2 },
+};
+
+const STATUS_RANK: ReadonlyMap<string, number> = new Map(
+  BOARD_STATUS_ORDER.map((status, position) => [status, position] as const),
+);
+const UNKNOWN_STATUS_RANK = BOARD_STATUS_ORDER.length;
 
 interface MapLayout {
   readonly width: number;
   readonly height: number;
 }
-
-const dedupKey = (left: string, right: string): string =>
-  left < right ? `${left}|${right}` : `${right}|${left}`;
-
-const FOCUS_NODE_WIDTH = 104;
-const FOCUS_NODE_HEIGHT = 46;
-const FOCUS_OVERFLOW_HEIGHT = 28;
-const TRAVERSE_HOPS = 3;
-const RENDER_HOPS = 2;
-const WIDE_RING_NODE_COUNT = 5;
-const FOCUS_NODE_CAP = 7;
-const DROP_CLASS_RANK = { cancelled: 0, done: 1, open: 2 } as const;
-const CLOSED_DROP_CLASS: ReadonlyMap<string, DropClass> = new Map<string, DropClass>([
-  ["cancelled", "cancelled"],
-  ["done", "done"],
-]);
-const EDGE_KIND_RANK: Record<MapEdgeKind, number> = { tree: 0, blocks: 1, relates: 2 };
-const RING_GAPS = {
-  TD: { betweenRings: 36, withinRing: 12 },
-  LR: { betweenRings: 36, withinRing: 10 },
-} as const;
-const ANCHOR_SIDES = {
-  TD: {
-    ring: { towardLater: "bottom", towardEarlier: "top" },
-    withinRing: { towardLater: "right", towardEarlier: "left" },
-  },
-  LR: {
-    ring: { towardLater: "right", towardEarlier: "left" },
-    withinRing: { towardLater: "bottom", towardEarlier: "top" },
-  },
-} as const;
-
-type FocusOrientation = "TD" | "LR";
-
-type DropClass = keyof typeof DROP_CLASS_RANK;
-
-export type FocusAnchor = "top" | "bottom" | "left" | "right";
 
 interface FocusRect {
   readonly x: number;
@@ -69,278 +103,213 @@ export interface FocusNodeViewModel extends FocusRect {
   readonly badge: BoardQuestionBadge;
   readonly isFocus: boolean;
   readonly flagged: boolean;
-  readonly hop: number;
+  readonly zone: FocusZone | null;
 }
 
-export interface FocusEdgeViewModel {
-  readonly key: string;
-  readonly kind: MapEdgeKind;
-  readonly from: string;
-  readonly to: string;
-  readonly fromAnchor: FocusAnchor;
-  readonly toAnchor: FocusAnchor;
+export interface FocusMarkerViewModel extends FocusRect {
+  readonly zone: FocusZone;
+  readonly hidden: number;
+}
+
+export interface FocusConnectorViewModel {
+  readonly zone: FocusZone;
+  readonly kind: ConnectorKind;
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+}
+
+export interface FocusLabelViewModel {
+  readonly zone: FocusZone;
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface FocusGraph {
-  readonly orientation: FocusOrientation;
   readonly nodes: ReadonlyArray<FocusNodeViewModel>;
-  readonly edges: ReadonlyArray<FocusEdgeViewModel>;
-  readonly hidden: number;
-  readonly overflow: FocusRect | null;
+  readonly markers: ReadonlyArray<FocusMarkerViewModel>;
+  readonly connectors: ReadonlyArray<FocusConnectorViewModel>;
+  readonly labels: ReadonlyArray<FocusLabelViewModel>;
   readonly layout: MapLayout;
 }
 
-interface FocusEdgeDraft {
-  readonly key: string;
-  readonly kind: MapEdgeKind;
-  readonly from: string;
-  readonly to: string;
+type ZoneItem =
+  | { readonly kind: "issue"; readonly issue: TodoIssue }
+  | { readonly kind: "more"; readonly hidden: number };
+
+interface CappedZone {
+  readonly shown: ReadonlyArray<TodoIssue>;
+  readonly hidden: number;
 }
 
-interface FocusIndex {
-  readonly byId: ReadonlyMap<string, TodoIssue>;
-  readonly childrenOf: ReadonlyMap<string, ReadonlyArray<string>>;
-  readonly blockersOf: ReadonlyMap<string, ReadonlyArray<string>>;
-}
-
-interface FocusReach {
-  readonly hopById: ReadonlyMap<string, number>;
-  readonly discoveredVia: ReadonlyMap<string, MapEdgeKind>;
-  readonly edges: ReadonlyArray<FocusEdgeDraft>;
-}
-
-interface Size {
-  readonly width: number;
-  readonly height: number;
+interface PlacedZone {
+  readonly nodes: ReadonlyArray<FocusNodeViewModel>;
+  readonly markers: ReadonlyArray<FocusMarkerViewModel>;
+  readonly connectors: ReadonlyArray<FocusConnectorViewModel>;
+  readonly labels: ReadonlyArray<FocusLabelViewModel>;
 }
 
 const EMPTY_FOCUS_GRAPH: FocusGraph = {
-  orientation: "TD",
   nodes: [],
-  edges: [],
-  hidden: 0,
-  overflow: null,
+  markers: [],
+  connectors: [],
+  labels: [],
   layout: { width: 0, height: 0 },
 };
 
 const compareStrings = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
-function appendTo(map: Map<string, Array<string>>, key: string, value: string): void {
-  const list = map.get(key);
-  if (list === undefined) {
-    map.set(key, [value]);
-  } else {
-    list.push(value);
-  }
+const statusRankOf = (issue: TodoIssue): number =>
+  STATUS_RANK.get(issue.status) ?? UNKNOWN_STATUS_RANK;
+
+const compareByStatusThenId = (left: TodoIssue, right: TodoIssue): number =>
+  statusRankOf(left) - statusRankOf(right) || compareStrings(left.id, right.id);
+
+function zoneOf(
+  candidate: TodoIssue,
+  centre: TodoIssue,
+  parentId: string | null,
+): FocusZone | null {
+  if (candidate.id === parentId) return "parent";
+  if (candidate.parentId === centre.id) return "children";
+  if (candidate.links.blocks.includes(centre.id)) return "blockedBy";
+  if (centre.links.blocks.includes(candidate.id)) return "blocking";
+  if (parentId !== null && candidate.parentId === parentId) return "siblings";
+  return null;
 }
 
-function indexIssues(issues: ReadonlyArray<TodoIssue>): FocusIndex {
-  const sorted = [...issues].sort((left, right) => compareStrings(left.id, right.id));
-  const childrenOf = new Map<string, Array<string>>();
-  const blockersOf = new Map<string, Array<string>>();
-  for (const issue of sorted) {
-    if (issue.parentId !== null) appendTo(childrenOf, issue.parentId, issue.id);
-    for (const target of issue.links.blocks) appendTo(blockersOf, target, issue.id);
-  }
-  return {
-    byId: new Map(sorted.map((issue) => [issue.id, issue] as const)),
-    childrenOf,
-    blockersOf,
+function partitionNeighbours(
+  issues: ReadonlyArray<TodoIssue>,
+  centre: TodoIssue,
+  knownIds: ReadonlySet<string>,
+): Record<FocusZone, Array<TodoIssue>> {
+  const parentId =
+    centre.parentId !== null && knownIds.has(centre.parentId) ? centre.parentId : null;
+  const zones: Record<FocusZone, Array<TodoIssue>> = {
+    parent: [],
+    siblings: [],
+    children: [],
+    blockedBy: [],
+    blocking: [],
   };
+  for (const candidate of issues) {
+    if (candidate.id === centre.id) continue;
+    const zone = zoneOf(candidate, centre, parentId);
+    if (zone !== null) zones[zone].push(candidate);
+  }
+  return zones;
 }
 
-function neighbourIds(issue: TodoIssue, index: FocusIndex): Array<string> {
-  return [
-    ...(issue.parentId === null ? [] : [issue.parentId]),
-    ...(index.childrenOf.get(issue.id) ?? []),
-    ...issue.links.blocks,
-    ...(index.blockersOf.get(issue.id) ?? []),
-    ...issue.links.relates,
-  ];
+function capZone(neighbours: ReadonlyArray<TodoIssue>, slots: number): CappedZone {
+  const ranked = [...neighbours].sort(compareByStatusThenId);
+  const open = ranked.filter((issue) => !isClosedStatus(issue.status));
+  const capped = capToSlots(open, slots);
+  if (capped.hidden > 0) return capped;
+  const closed = ranked.filter((issue) => isClosedStatus(issue.status));
+  return { shown: [...open, ...closed.slice(0, slots - open.length)], hidden: 0 };
 }
 
-function edgeDraft(kind: MapEdgeKind, from: TodoIssue, to: TodoIssue): FocusEdgeDraft {
-  return { key: dedupKey(from.id, to.id), kind, from: from.id, to: to.id };
+function zoneItems(capped: CappedZone): Array<ZoneItem> {
+  const items: Array<ZoneItem> = capped.shown.map((issue) => ({ kind: "issue", issue }));
+  if (capped.hidden > 0) items.push({ kind: "more", hidden: capped.hidden });
+  return items;
 }
 
-function resolveEdge(current: TodoIssue, other: TodoIssue): FocusEdgeDraft {
-  if (current.parentId === other.id) return edgeDraft("tree", current, other);
-  if (other.parentId === current.id) return edgeDraft("tree", other, current);
-  if (current.links.blocks.includes(other.id)) return edgeDraft("blocks", current, other);
-  if (other.links.blocks.includes(current.id)) return edgeDraft("blocks", other, current);
-  return current.id < other.id
-    ? edgeDraft("relates", current, other)
-    : edgeDraft("relates", other, current);
+const itemHeight = (item: ZoneItem): number =>
+  item.kind === "issue" ? FOCUS_NODE_HEIGHT : FOCUS_MARKER_HEIGHT;
+
+function rectInRow(x: number, rowY: number, height: number): FocusRect {
+  return { x, y: rowY + (FOCUS_NODE_HEIGHT - height) / 2, width: FOCUS_NODE_WIDTH, height };
 }
 
-function walkFromFocus(index: FocusIndex, centreId: string): FocusReach {
-  const hopById = new Map<string, number>([[centreId, 0]]);
-  const discoveredVia = new Map<string, MapEdgeKind>();
-  const seenPairs = new Set<string>();
-  const edges: Array<FocusEdgeDraft> = [];
-  let frontier = [centreId];
-  for (let hop = 0; hop < TRAVERSE_HOPS && frontier.length > 0; hop += 1) {
-    const nextHop = hop + 1;
-    const next: Array<string> = [];
-    for (const currentId of frontier) {
-      const current = index.byId.get(currentId)!;
-      for (const neighbourId of neighbourIds(current, index)) {
-        const neighbour = index.byId.get(neighbourId);
-        if (neighbour === undefined || neighbourId === currentId) continue;
-        const isNew = !hopById.has(neighbourId);
-        const pairKey = dedupKey(currentId, neighbourId);
-        if (!seenPairs.has(pairKey)) {
-          seenPairs.add(pairKey);
-          if (nextHop <= RENDER_HOPS) {
-            const edge = resolveEdge(current, neighbour);
-            edges.push(edge);
-            if (isNew) discoveredVia.set(neighbourId, edge.kind);
-          }
-        }
-        if (!isNew) continue;
-        hopById.set(neighbourId, nextHop);
-        if (nextHop < TRAVERSE_HOPS) next.push(neighbourId);
-      }
+const siblingsOnLeft = (count: number): number => Math.floor(count / 2);
+
+function placeSiblings(heights: ReadonlyArray<number>): Array<FocusRect> {
+  const leftCount = siblingsOnLeft(heights.length);
+  return heights.map((height, position) =>
+    rectInRow(position < leftCount ? SIBLING_LEFT_X : SIBLING_RIGHT_X, SIBLING_Y, height),
+  );
+}
+
+function placeChildren(heights: ReadonlyArray<number>): Array<FocusRect> {
+  const rowWidth = heights.length * FOCUS_NODE_WIDTH + (heights.length - 1) * SLOT_GAP;
+  const rowX = BLOCK_X + (BLOCK_WIDTH - rowWidth) / 2;
+  return heights.map((height, position) =>
+    rectInRow(rowX + position * SLOT_PITCH, CHILD_Y, height),
+  );
+}
+
+function stackColumn(x: number, heights: ReadonlyArray<number>): Array<FocusRect> {
+  const stackHeight =
+    heights.reduce((sum, height) => sum + height, 0) + (heights.length - 1) * SLOT_GAP;
+  let y = CENTRE_MID_Y - stackHeight / 2;
+  return heights.map((height) => {
+    const rect = { x, y, width: FOCUS_NODE_WIDTH, height };
+    y += height + SLOT_GAP;
+    return rect;
+  });
+}
+
+const PLACERS: Record<FocusZone, (heights: ReadonlyArray<number>) => Array<FocusRect>> = {
+  parent: (heights) => heights.map((height) => rectInRow(CENTRE_X, PARENT_Y, height)),
+  siblings: placeSiblings,
+  children: placeChildren,
+  blockedBy: (heights) => stackColumn(LEFT_COLUMN_X, heights),
+  blocking: (heights) => stackColumn(RIGHT_COLUMN_X, heights),
+};
+
+function connectorFor(zone: FocusZone, itemCount: number): FocusConnectorViewModel | null {
+  if (itemCount === 0) return null;
+  const line = (kind: ConnectorKind, x1: number, y1: number, x2: number, y2: number) => ({
+    zone,
+    kind,
+    x1,
+    y1,
+    x2,
+    y2,
+  });
+  switch (zone) {
+    case "parent":
+      return line("tree", CENTRE_MID_X, CENTRE_Y, CENTRE_MID_X, PARENT_Y + FOCUS_NODE_HEIGHT);
+    case "children":
+      return line("tree", CENTRE_MID_X, CHILD_Y, CENTRE_MID_X, CENTRE_Y + FOCUS_NODE_HEIGHT);
+    case "siblings": {
+      const hasLeft = siblingsOnLeft(itemCount) > 0;
+      const hasRight = itemCount > siblingsOnLeft(itemCount);
+      return line(
+        "peer",
+        hasLeft ? SIBLING_LEFT_X + FOCUS_NODE_WIDTH : CENTRE_MID_X,
+        SIBLING_MID_Y,
+        hasRight ? SIBLING_RIGHT_X : CENTRE_MID_X,
+        SIBLING_MID_Y,
+      );
     }
-    frontier = next;
+    case "blockedBy":
+      return line("blocks", LEFT_COLUMN_X + FOCUS_NODE_WIDTH, CENTRE_MID_Y, CENTRE_X, CENTRE_MID_Y);
+    case "blocking":
+      return line(
+        "blocks",
+        CENTRE_X + FOCUS_NODE_WIDTH,
+        CENTRE_MID_Y,
+        RIGHT_COLUMN_X,
+        CENTRE_MID_Y,
+      );
   }
-  return { hopById, discoveredVia, edges };
 }
 
-const isClosed = (status: string): boolean => CLOSED_DROP_CLASS.has(status);
-
-const dropClassOf = (issue: TodoIssue): DropClass => CLOSED_DROP_CLASS.get(issue.status) ?? "open";
-
-function protectedIds(
-  index: FocusIndex,
-  reach: FocusReach,
-  centreId: string,
-  drawn: ReadonlySet<string>,
-): Set<string> {
-  const isOpenFirstHop = (id: string): boolean =>
-    reach.hopById.get(id) === 1 && !isClosed(index.byId.get(id)!.status);
-  return new Set([...drawn].filter((id) => id === centreId || isOpenFirstHop(id)));
-}
-
-function dropOrder(
-  index: FocusIndex,
-  reach: FocusReach,
-  droppable: ReadonlyArray<string>,
-): Array<string> {
-  const rankById = new Map(
-    droppable.map((id) => [id, DROP_CLASS_RANK[dropClassOf(index.byId.get(id)!)]] as const),
-  );
-  const hopOf = (id: string): number => reach.hopById.get(id)!;
-  const updatedOf = (id: string): string => index.byId.get(id)!.updated;
-  return [...droppable].sort(
-    (left, right) =>
-      rankById.get(left)! - rankById.get(right)! ||
-      hopOf(right) - hopOf(left) ||
-      compareStrings(updatedOf(left), updatedOf(right)) ||
-      compareStrings(left, right),
-  );
-}
-
-function drawnLinks(edges: ReadonlyArray<FocusEdgeDraft>): Map<string, Array<string>> {
-  const links = new Map<string, Array<string>>();
-  for (const edge of edges) {
-    appendTo(links, edge.from, edge.to);
-    appendTo(links, edge.to, edge.from);
-  }
-  return links;
-}
-
-function dropOrphans(
-  kept: Set<string>,
-  links: ReadonlyMap<string, ReadonlyArray<string>>,
-  protectedSet: ReadonlySet<string>,
-): void {
-  const hasKeptLink = (id: string): boolean =>
-    (links.get(id) ?? []).some((other) => kept.has(other));
-  const orphans = [...kept].filter((id) => !protectedSet.has(id) && !hasKeptLink(id));
-  for (const id of orphans) kept.delete(id);
-}
-
-function capDrawnIds(
-  index: FocusIndex,
-  reach: FocusReach,
-  centreId: string,
-  maxNodes: number,
-): ReadonlySet<string> {
-  const kept = new Set(
-    [...reach.hopById].filter(([, hop]) => hop <= RENDER_HOPS).map(([id]) => id),
-  );
-  const protectedSet = protectedIds(index, reach, centreId, kept);
-  const links = drawnLinks(reach.edges);
-  const droppable = [...kept].filter((id) => !protectedSet.has(id));
-  for (const id of dropOrder(index, reach, droppable)) {
-    if (kept.size <= maxNodes) break;
-    if (!kept.delete(id)) continue;
-    dropOrphans(kept, links, protectedSet);
-  }
-  return kept;
-}
-
-function ringsByHop(reach: FocusReach, drawn: ReadonlySet<string>): Array<Array<string>> {
-  const rings: Array<Array<string>> = [];
-  for (const [id, hop] of reach.hopById) {
-    if (!drawn.has(id)) continue;
-    const ring = rings[hop];
-    if (ring === undefined) rings[hop] = [id];
-    else ring.push(id);
-  }
-  const rank = (id: string): number => EDGE_KIND_RANK[reach.discoveredVia.get(id) ?? "tree"];
-  return rings.map((ring) =>
-    ring.sort((left, right) => rank(left) - rank(right) || compareStrings(left, right)),
-  );
-}
-
-function layoutRings(
-  rings: ReadonlyArray<ReadonlyArray<Size>>,
-  orientation: FocusOrientation,
-): { readonly rects: Array<Array<FocusRect>>; readonly layout: MapLayout } {
-  const gaps = RING_GAPS[orientation];
-  const isTopDown = orientation === "TD";
-  const thicknessOf = (size: Size): number => (isTopDown ? size.height : size.width);
-  const extentOf = (size: Size): number => (isTopDown ? size.width : size.height);
-  const ringExtent = (ring: ReadonlyArray<Size>): number =>
-    ring.reduce((sum, size) => sum + extentOf(size), 0) + gaps.withinRing * (ring.length - 1);
-  const widestExtent = Math.max(0, ...rings.map(ringExtent));
-  let mainOffset = 0;
-  const rects = rings.map((ring) => {
-    let crossOffset = (widestExtent - ringExtent(ring)) / 2;
-    const placed = ring.map((size) => {
-      const rect = isTopDown
-        ? { ...size, x: crossOffset, y: mainOffset }
-        : { ...size, x: mainOffset, y: crossOffset };
-      crossOffset += extentOf(size) + gaps.withinRing;
-      return rect;
-    });
-    mainOffset += Math.max(...ring.map(thicknessOf)) + gaps.betweenRings;
-    return placed;
-  });
-  const totalThickness = rings.length === 0 ? 0 : mainOffset - gaps.betweenRings;
-  return {
-    rects,
-    layout: isTopDown
-      ? { width: widestExtent, height: totalThickness }
-      : { width: totalThickness, height: widestExtent },
-  };
-}
-
-function hasOpenChild(id: string, index: FocusIndex): boolean {
-  return (index.childrenOf.get(id) ?? []).some((childId) => {
-    const child = index.byId.get(childId);
-    return child !== undefined && !isClosed(child.status);
-  });
+function labelFor(zone: FocusZone, itemCount: number): FocusLabelViewModel | null {
+  const label = COLUMN_LABELS[zone];
+  if (label === undefined || itemCount === 0) return null;
+  return { zone, text: label.text, x: label.x, y: LABEL_Y };
 }
 
 function toFocusNode(
   issue: TodoIssue,
-  index: FocusIndex,
-  isFocus: boolean,
-  hop: number,
+  openParentIds: ReadonlySet<string>,
+  zone: FocusZone | null,
   rect: FocusRect,
 ): FocusNodeViewModel {
   return {
@@ -351,63 +320,67 @@ function toFocusNode(
     glyph: boardStatusGlyph(issue.status),
     colourClass: boardStatusColourClass(issue.status),
     badge: boardQuestionBadge(issue),
-    isFocus,
-    flagged: hasOpenChild(issue.id, index),
-    hop,
+    isFocus: zone === null,
+    flagged: openParentIds.has(issue.id),
+    zone,
     ...rect,
   };
 }
 
-function edgeAnchors(
-  from: FocusNodeViewModel,
-  to: FocusNodeViewModel,
-  orientation: FocusOrientation,
-): Pick<FocusEdgeViewModel, "fromAnchor" | "toAnchor"> {
-  const sides = ANCHOR_SIDES[orientation];
-  if (from.hop !== to.hop) {
-    return from.hop < to.hop
-      ? { fromAnchor: sides.ring.towardLater, toAnchor: sides.ring.towardEarlier }
-      : { fromAnchor: sides.ring.towardEarlier, toAnchor: sides.ring.towardLater };
-  }
-  const fromComesFirst = orientation === "TD" ? from.x < to.x : from.y < to.y;
-  return fromComesFirst
-    ? { fromAnchor: sides.withinRing.towardLater, toAnchor: sides.withinRing.towardEarlier }
-    : { fromAnchor: sides.withinRing.towardEarlier, toAnchor: sides.withinRing.towardLater };
+function placeZone(
+  zone: FocusZone,
+  capped: CappedZone,
+  openParentIds: ReadonlySet<string>,
+): PlacedZone {
+  const items = zoneItems(capped);
+  const rects = PLACERS[zone](items.map(itemHeight));
+  const nodes: Array<FocusNodeViewModel> = [];
+  const markers: Array<FocusMarkerViewModel> = [];
+  items.forEach((item, position) => {
+    const rect = rects[position]!;
+    if (item.kind === "issue") nodes.push(toFocusNode(item.issue, openParentIds, zone, rect));
+    else markers.push({ zone, hidden: item.hidden, ...rect });
+  });
+  return {
+    nodes,
+    markers,
+    connectors: connectorFor(zone, items.length) ?? [],
+    labels: labelFor(zone, items.length) ?? [],
+  };
 }
 
-export function buildFocusGraph(
-  issues: ReadonlyArray<TodoIssue>,
-  centreId: string,
-  maxNodes = FOCUS_NODE_CAP,
-): FocusGraph {
-  const index = indexIssues(issues);
-  if (!index.byId.has(centreId)) return EMPTY_FOCUS_GRAPH;
-  const reach = walkFromFocus(index, centreId);
-  const drawn = capDrawnIds(index, reach, centreId, maxNodes);
-  const hidden = reach.hopById.size - drawn.size;
-  const rings = ringsByHop(reach, drawn);
-  const orientation = rings.some((ring) => ring.length > WIDE_RING_NODE_COUNT) ? "LR" : "TD";
-  const ringSizes: Array<Array<Size>> = rings.map((ring) =>
-    ring.map(() => ({ width: FOCUS_NODE_WIDTH, height: FOCUS_NODE_HEIGHT })),
-  );
-  if (hidden > 0) {
-    ringSizes.push([{ width: FOCUS_NODE_WIDTH, height: FOCUS_OVERFLOW_HEIGHT }]);
+function openParentIdsOf(issues: ReadonlyArray<TodoIssue>): Set<string> {
+  const ids = new Set<string>();
+  for (const issue of issues) {
+    if (issue.parentId !== null && !isClosedStatus(issue.status)) ids.add(issue.parentId);
   }
-  const { rects, layout } = layoutRings(ringSizes, orientation);
-  const nodes = rings.flatMap((ring, hop) =>
-    ring.map((id, position) =>
-      toFocusNode(index.byId.get(id)!, index, id === centreId, hop, rects[hop]![position]!),
-    ),
+  return ids;
+}
+
+export function buildFocusGraph(issues: ReadonlyArray<TodoIssue>, centreId: string): FocusGraph {
+  const centre = issues.find((issue) => issue.id === centreId);
+  if (centre === undefined) return EMPTY_FOCUS_GRAPH;
+  const openParentIds = openParentIdsOf(issues);
+  const neighbours = partitionNeighbours(issues, centre, new Set(issues.map((issue) => issue.id)));
+  const placed = ZONE_ORDER.map((zone) =>
+    placeZone(zone, capZone(neighbours[zone], ZONE_SLOTS[zone]), openParentIds),
   );
-  const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
-  const edges = reach.edges
-    .filter((draft) => drawn.has(draft.from) && drawn.has(draft.to))
-    .map((draft) => ({
-      ...draft,
-      ...edgeAnchors(nodesById.get(draft.from)!, nodesById.get(draft.to)!, orientation),
-    }));
-  const overflow = hidden > 0 ? rects[rings.length]![0]! : null;
-  return { orientation, nodes, edges, hidden, overflow, layout };
+  const centreRect = {
+    x: CENTRE_X,
+    y: CENTRE_Y,
+    width: FOCUS_NODE_WIDTH,
+    height: FOCUS_NODE_HEIGHT,
+  };
+  return {
+    nodes: [
+      toFocusNode(centre, openParentIds, null, centreRect),
+      ...placed.flatMap((zone) => zone.nodes),
+    ],
+    markers: placed.flatMap((zone) => zone.markers),
+    connectors: placed.flatMap((zone) => zone.connectors),
+    labels: placed.flatMap((zone) => zone.labels),
+    layout: GRID_LAYOUT,
+  };
 }
 
 export function mapTitleLines(title: string, maxChars = 26): Array<string> {

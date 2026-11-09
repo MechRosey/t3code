@@ -32,7 +32,16 @@ const BOARD_COLUMN_LABELS: Record<string, string> = {
 
 const CLOSED_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 
-const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.has(status);
+export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.has(status);
+
+export function capToSlots<T>(
+  items: ReadonlyArray<T>,
+  slots: number,
+): { readonly shown: ReadonlyArray<T>; readonly hidden: number } {
+  if (items.length <= slots) return { shown: items, hidden: 0 };
+  const visible = slots - 1;
+  return { shown: items.slice(0, visible), hidden: items.length - visible };
+}
 
 function isDelegatedIssue(issue: TodoIssue, childrenByParent: Map<string, Array<TodoIssue>>) {
   if (issue.status !== "done") return false;
