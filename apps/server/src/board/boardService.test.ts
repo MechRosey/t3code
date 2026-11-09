@@ -14,7 +14,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as TodoBoard from "./TodoBoard.ts";
 import { TodoBoardReadResult, type TodoBoardSnapshot } from "@t3tools/contracts";
 import { ensureUnchanged } from "./issues.ts";
-import { fixturesRoot, readFixture } from "./fixtures.ts";
+import { installBoard, readFixture } from "./fixtures.ts";
 
 const TestLayer = TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -44,18 +44,6 @@ const conflictLayer = Layer.effect(
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 const conflictTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(conflictLayer));
-
-const installBoard = (fixtureBoard: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const target = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-board-" });
-    const boardDir = path.join(target, "project", ".todo");
-    yield* fs.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
-    const cwd = path.join(target, "project", "sub", "deep");
-    yield* fs.makeDirectory(cwd, { recursive: true });
-    return { target, boardDir, cwd };
-  });
 
 const TodoPointerContent = Schema.Struct({
   central: Schema.String,
