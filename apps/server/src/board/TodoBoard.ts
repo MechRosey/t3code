@@ -58,6 +58,7 @@ import { getSectionMap, type IssueSections } from "./sections.ts";
 import {
   leavesSequence,
   parseSequenceRefs,
+  removeSequenceRef,
   resolveSequence,
   SEQUENCE_FILE,
   SEQUENCE_TEMP_FILE,
@@ -325,12 +326,15 @@ const make = Effect.gen(function* () {
     }
   });
 
-  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (root: string) {
+  const readSequenceText = Effect.fn("TodoBoard.readSequenceText")(function* (root: string) {
     const file = path.join(root, SEQUENCE_FILE);
     const failed = (cause: unknown) => toError("operation_failed", `Failed to read ${file}`, cause);
-    if (!(yield* fs.exists(file).pipe(Effect.mapError(failed)))) return [];
-    const text = yield* fs.readFileString(file).pipe(Effect.mapError(failed));
-    return parseSequenceRefs(text);
+    if (!(yield* fs.exists(file).pipe(Effect.mapError(failed)))) return "";
+    return yield* fs.readFileString(file).pipe(Effect.mapError(failed));
+  });
+
+  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (root: string) {
+    return parseSequenceRefs(yield* readSequenceText(root));
   });
 
   const readBoardAt = Effect.fn("TodoBoard.readBoardAt")(function* (
@@ -459,14 +463,14 @@ const make = Effect.gen(function* () {
     dirs: ReadonlyArray<IssueDir>,
     target: IssueDir,
   ) {
-    const refs = yield* readSequenceRefs(root);
-    const names = dirs.map((dir) => dir.name);
-    const kept = refs.filter((ref) => {
-      const lookup = findIssueDirName(names, ref);
-      return lookup.tag !== "found" || lookup.name !== target.name;
-    });
-    if (kept.length === refs.length) return;
-    yield* writeSequenceFile(root, serializeSequence(kept, names));
+    const text = yield* readSequenceText(root);
+    const pruned = removeSequenceRef(
+      text,
+      dirs.map((dir) => dir.name),
+      target.name,
+    );
+    if (pruned === text) return;
+    yield* writeSequenceFile(root, pruned);
   });
 
   const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (

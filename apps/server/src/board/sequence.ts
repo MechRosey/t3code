@@ -43,6 +43,21 @@ export const resolveSequence = (
   return resolved;
 };
 
+export const removeSequenceRef = (
+  text: string,
+  allIds: ReadonlyArray<string>,
+  targetId: string,
+): string =>
+  text
+    .split(/(?<=\n)/)
+    .filter((line) => {
+      const ref = line.trim();
+      if (ref === "") return true;
+      const lookup = findIssueDirName(allIds, ref);
+      return lookup.tag !== "found" || lookup.name !== targetId;
+    })
+    .join("");
+
 const toShortId = (id: string, allIds: ReadonlyArray<string>): string => {
   const short = id.slice(0, SHORT_ID_LENGTH);
   const lowerShort = short.toLowerCase();
