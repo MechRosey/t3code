@@ -57,7 +57,7 @@ const GRID_LAYOUT: MapLayout = {
   height: Math.max(CHILD_Y + FOCUS_NODE_HEIGHT, COLUMN_TOP + COLUMN_HEIGHT),
 };
 
-const ZONE_ORDER: ReadonlyArray<FocusZone> = [
+const ZONE_RENDER_ORDER: ReadonlyArray<FocusZone> = [
   "parent",
   "siblings",
   "children",
@@ -103,7 +103,6 @@ export interface FocusNodeViewModel extends FocusRect {
   readonly glyph: string;
   readonly colourClass: string;
   readonly badge: BoardQuestionBadge;
-  readonly isFocus: boolean;
   readonly flagged: boolean;
   readonly zone: FocusZone | null;
 }
@@ -354,7 +353,6 @@ function toFocusNode(
     glyph: boardStatusGlyph(issue.status),
     colourClass: boardStatusColourClass(issue.status),
     badge: boardQuestionBadge(issue),
-    isFocus: zone === null,
     flagged: openParentIds.has(issue.id),
     zone,
     ...rect,
@@ -396,7 +394,7 @@ export function buildFocusGraph(issues: ReadonlyArray<TodoIssue>, centreId: stri
   if (centre === undefined) return EMPTY_FOCUS_GRAPH;
   const openParentIds = openParentIdsOf(issues);
   const neighbours = partitionNeighbours(issues, centre, new Set(issues.map((issue) => issue.id)));
-  const placed = ZONE_ORDER.map((zone) =>
+  const placed = ZONE_RENDER_ORDER.map((zone) =>
     placeZone(zone, capZone(neighbours[zone], ZONE_SLOTS[zone]), openParentIds),
   );
   const centreRect = {

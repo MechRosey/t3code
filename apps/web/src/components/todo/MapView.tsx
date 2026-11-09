@@ -142,7 +142,7 @@ function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
         strokeDasharray={node.status === "blocked" ? BLOCKED_DASH : undefined}
         className={`${FILL_BY_STATUS[node.status] ?? FALLBACK_FILL} ${nodeStrokeClass(node)}`}
       />
-      {node.isFocus ? (
+      {node.zone === null ? (
         <rect
           x={-FOCUS_RING_GAP}
           y={-FOCUS_RING_GAP}

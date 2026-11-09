@@ -186,10 +186,6 @@ describe("focus graph zones", () => {
         ["sib-blockee", "blocking"],
       ],
     );
-    assert.deepEqual(
-      graph.nodes.filter((node) => node.isFocus).map((node) => node.id),
-      [CENTRE],
-    );
     assert.equal(new Set(nodeIds(graph)).size, graph.nodes.length);
     assert.deepEqual(graph.markers, []);
   });
@@ -597,7 +593,7 @@ describe("focus graph nodes", () => {
     const wrapped = buildFocusGraph(issues, "wrapped");
 
     assert.deepEqual(
-      epic.nodes.map((node) => [node.id, node.isFocus, node.flagged]),
+      epic.nodes.map((node) => [node.id, node.zone === null, node.flagged]),
       [
         ["epic", true, true],
         ["kid-open", false, false],
