@@ -389,7 +389,12 @@ const make = Effect.gen(function* () {
         },
       });
     }
-    const sequence = archived ? [] : resolveSequence(yield* readSequenceRefs(root), issues);
+    const sequence = archived
+      ? []
+      : resolveSequence(
+          yield* readSequenceRefs(root).pipe(Effect.orElseSucceed(() => [] as Array<string>)),
+          issues,
+        );
     return { root, repoName: repoDisplayName(root), issues, sequence };
   });
 
@@ -491,7 +496,14 @@ const make = Effect.gen(function* () {
         const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
         yield* writeMarker(root, target, next, stat);
         if (leavesSequence(canonicalStatus(parsed.fm.status), next.fm.status)) {
-          yield* removeFromSequence(root, dirs, target);
+          yield* removeFromSequence(root, dirs, target).pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning("Failed to prune the sequence after a status change.", {
+                issueId: target.name,
+                cause,
+              }),
+            ),
+          );
         }
         return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
       }
