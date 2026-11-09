@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { shortBoardId } from "./boardCopy.logic";
 import {
@@ -25,6 +25,12 @@ const FOOTER_Y = 41;
 const BADGE_RADIUS = 6;
 const BADGE_INSET = 8;
 const BADGE_GLYPH_DROP = 2.5;
+const KEY_SWATCH_WIDTH = 24;
+const KEY_SWATCH_HEIGHT = 12;
+const KEY_ARROW_LENGTH = 6;
+const KEY_ARROW_HALF_HEIGHT = 3;
+const KEY_CROSS_SIZE = 6;
+const KEY_NODE_CORNER_RADIUS = 3;
 
 const FILL_BY_STATUS: Record<string, string> = {
   backlog: "fill-card",
@@ -284,7 +290,147 @@ function MapZoneLabel({ label }: { readonly label: FocusLabelViewModel }) {
   );
 }
 
+function KeySwatch({ children }: { readonly children: ReactNode }) {
+  return (
+    <svg
+      width={KEY_SWATCH_WIDTH}
+      height={KEY_SWATCH_HEIGHT}
+      viewBox={`0 0 ${KEY_SWATCH_WIDTH} ${KEY_SWATCH_HEIGHT}`}
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      {children}
+    </svg>
+  );
+}
+
+const KEY_LINE_Y = KEY_SWATCH_HEIGHT / 2;
+
+function KeyTreeSwatch() {
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y}`}
+        className="stroke-muted-foreground/50"
+        strokeWidth={BUS_STROKE_WIDTH}
+        fill="none"
+      />
+      <path
+        d={`M ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y - KEY_ARROW_HALF_HEIGHT} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y + KEY_ARROW_HALF_HEIGHT} z`}
+        className="fill-muted-foreground/60"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyPeerSwatch() {
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y}`}
+        className="stroke-muted-foreground/40"
+        strokeWidth={DEFAULT_STROKE_WIDTH}
+        strokeDasharray="2 4"
+        fill="none"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyBlocksSwatch() {
+  const crossStart = KEY_SWATCH_WIDTH - KEY_CROSS_SIZE;
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${crossStart} ${KEY_LINE_Y}`}
+        className="stroke-error/80"
+        strokeWidth={BUS_STROKE_WIDTH}
+        strokeDasharray="6 4"
+        fill="none"
+      />
+      <path
+        d={`M ${crossStart} ${KEY_LINE_Y - KEY_CROSS_SIZE / 2} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y + KEY_CROSS_SIZE / 2} M ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y - KEY_CROSS_SIZE / 2} L ${crossStart} ${KEY_LINE_Y + KEY_CROSS_SIZE / 2}`}
+        className="stroke-error/80"
+        strokeWidth={FLAGGED_STROKE_WIDTH}
+        fill="none"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyNodeSwatch({
+  strokeClass,
+  strokeWidth,
+}: {
+  readonly strokeClass: string;
+  readonly strokeWidth: number;
+}) {
+  return (
+    <KeySwatch>
+      <rect
+        x={strokeWidth}
+        y={strokeWidth}
+        width={KEY_SWATCH_WIDTH - strokeWidth * 2}
+        height={KEY_SWATCH_HEIGHT - strokeWidth * 2}
+        rx={KEY_NODE_CORNER_RADIUS}
+        fill="none"
+        strokeWidth={strokeWidth}
+        className={strokeClass}
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyRingSwatch() {
+  const ringRadius = KEY_SWATCH_HEIGHT / 2 - FLAGGED_STROKE_WIDTH;
+  return (
+    <KeySwatch>
+      <circle
+        cx={KEY_SWATCH_WIDTH / 2}
+        cy={KEY_LINE_Y}
+        r={ringRadius}
+        fill="none"
+        strokeWidth={FLAGGED_STROKE_WIDTH}
+        className="stroke-foreground"
+      />
+    </KeySwatch>
+  );
+}
+
+const KEY_ENTRIES: ReadonlyArray<{ readonly text: string; readonly swatch: ReactNode }> = [
+  { text: "child to parent", swatch: <KeyTreeSwatch /> },
+  { text: "sibling", swatch: <KeyPeerSwatch /> },
+  { text: "blocks", swatch: <KeyBlocksSwatch /> },
+  {
+    text: "has open children",
+    swatch: <KeyNodeSwatch strokeClass="stroke-warning" strokeWidth={FLAGGED_STROKE_WIDTH} />,
+  },
+  { text: "this ticket", swatch: <KeyRingSwatch /> },
+];
+
+function MapKey() {
+  return (
+    <ul className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-3xs text-muted-foreground">
+      {KEY_ENTRIES.map((entry) => (
+        <li key={entry.text} className="flex items-center gap-1">
+          {entry.swatch}
+          <span>{entry.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function MapView({ graph, onFocusIssue }: MapViewProps) {
+  return (
+    <div>
+      <MapDiagram graph={graph} onFocusIssue={onFocusIssue} />
+      <MapKey />
+    </div>
+  );
+}
+
+function MapDiagram({ graph, onFocusIssue }: MapViewProps) {
   const width = graph.layout.width + VIEW_MARGIN * 2;
   const height = graph.layout.height + VIEW_MARGIN * 2;
   return (

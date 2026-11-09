@@ -104,4 +104,25 @@ describe("MapView", () => {
     });
     expect(onFocusIssue.mock.calls).toEqual([["abc12-parent"], ["ghi56-child"]]);
   });
+
+  it("MapView_Rendered_ShowsTheKeyBelowTheDiagram", async () => {
+    const graph = buildFocusGraph(
+      [issue({ id: "def34-centre", title: "Centre ticket" })],
+      "def34-centre",
+    );
+    await using screen = await render(<MapView graph={graph} onFocusIssue={vi.fn()} />);
+
+    const entries = [...screen.container.querySelectorAll("li")];
+
+    expect(entries.map((entry) => entry.textContent)).toEqual([
+      "child to parent",
+      "sibling",
+      "blocks",
+      "has open children",
+      "this ticket",
+    ]);
+    expect(entries.every((entry) => entry.querySelector('svg[aria-hidden="true"]') !== null)).toBe(
+      true,
+    );
+  });
 });
