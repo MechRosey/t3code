@@ -214,7 +214,7 @@ describe("focus graph zones", () => {
       markers: [],
       connectors: [],
       labels: [],
-      layout: { width: 0, height: 0 },
+      layout: { width: 0, height: 0, titleChars: 12 },
     };
 
     assert.deepEqual(buildFocusGraph([plain("n1")], "missing"), empty);
@@ -417,6 +417,8 @@ describe("focus graph layout", () => {
   }
 
   const COUNTS = [1, 2, 3, 4, 5, 7];
+  const WIDTHS = [420, 640, 900];
+  const CASES = COUNTS.flatMap((count) => WIDTHS.map((width) => [count, width] as const));
 
   const centreOf = (graph: FocusGraph): Box => {
     const { x, y, width, height } = graph.nodes.find((node) => node.id === CENTRE)!;
@@ -441,9 +443,10 @@ describe("focus graph layout", () => {
   });
 
   it("places every zone size without overlap, centred on the centre ticket, marker last", () => {
-    for (const count of COUNTS) {
-      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
       const centre = centreOf(graph);
+      assert.equal(midX(centre), graph.layout.width / 2);
       const boxes = boxesOf(graph);
 
       for (const [position, box] of boxes.entries()) {
@@ -476,6 +479,47 @@ describe("focus graph layout", () => {
           .every((node) => node.x === centre.x && node.y < centre.y),
       );
     }
+  });
+
+  it("lays out as today up to the base width, whatever the width argument, and ignores unusable widths", () => {
+    const issues = neighbourhood(7);
+
+    const base = buildFocusGraph(issues, CENTRE);
+
+    assert.deepEqual(buildFocusGraph(issues, CENTRE, 420), base);
+    for (const unusable of [380, 100, 1, 0, -50, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.deepEqual(buildFocusGraph(issues, CENTRE, unusable), base);
+    }
+    assert.deepEqual(
+      [base.layout.width, base.layout.titleChars, centreOf(base).width],
+      [420, 12, 76],
+    );
+  });
+
+  it("widens nodes and the title budget with the pane up to a cap, never past the pane", () => {
+    const widths = [420, 520, 640, 900, 2000];
+    const graphs = widths.map((width) => buildFocusGraph(neighbourhood(3), CENTRE, width));
+    const nodeWidths = graphs.map((graph) => centreOf(graph).width);
+    const titleChars = graphs.map((graph) => graph.layout.titleChars);
+    const layoutWidths = graphs.map((graph) => graph.layout.width);
+
+    assert.deepEqual(nodeWidths, [76, 96, 120, 144, 144]);
+    assert.deepEqual(titleChars, [12, 15, 20, 24, 24]);
+    assert.deepEqual(layoutWidths, [420, 520, 640, 760, 760]);
+    for (const [position, graph] of graphs.entries()) {
+      assert.ok(graph.nodes.every((node) => node.width === nodeWidths[position]));
+      assert.ok(graph.markers.every((marker) => marker.width === nodeWidths[position]));
+      assert.ok(layoutWidths[position]! <= widths[position]!);
+    }
+  });
+
+  it("keeps the centre ticket's size and the grid fixed at a wide width whether the zones are empty or crowded", () => {
+    const alone = buildFocusGraph([centreWith()], CENTRE, 900);
+    const crowded = buildFocusGraph(neighbourhood(7), CENTRE, 900);
+
+    assert.deepEqual(centreOf(crowded), centreOf(alone));
+    assert.deepEqual(crowded.layout, alone.layout);
+    assert.ok(crowded.markers.every((marker) => marker.width === centreOf(alone).width));
   });
 
   it("splits siblings around the gap above the centre with the marker on the right", () => {
@@ -512,8 +556,8 @@ describe("focus graph layout", () => {
   });
 
   it("runs one trunk per zone to the centre and adds a bus when a zone holds several items", () => {
-    for (const count of COUNTS) {
-      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
       const centre = centreOf(graph);
       const lines = (zone: Zone, role: Connector["role"]) =>
         graph.connectors.filter((line) => line.zone === zone && line.role === role);
@@ -552,8 +596,8 @@ describe("focus graph layout", () => {
   });
 
   it("puts each column label just above the first item of its column", () => {
-    for (const count of COUNTS) {
-      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
+    for (const [count, width] of CASES) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE, width);
 
       assert.deepEqual(
         graph.labels.map((label) => [label.zone, label.text]),
