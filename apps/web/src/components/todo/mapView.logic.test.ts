@@ -123,10 +123,16 @@ describe("focus graph zones", () => {
         depth: 2,
         links: {
           blocks: ["mutual", "blockee", "sib-blockee", "ghost", CENTRE, "blockee"],
-          relates: ["related"],
+          relates: ["related", "ghost"],
         },
       }),
-      childOf(CENTRE, "kid"),
+      issue({
+        id: "kid",
+        title: "kid",
+        parentId: CENTRE,
+        depth: 1,
+        links: { blocks: ["kid", "kid"], relates: [CENTRE] },
+      }),
       issue({
         id: "kid-blocker",
         title: "kid-blocker",
@@ -147,7 +153,7 @@ describe("focus graph zones", () => {
       }),
       childOf(PARENT, "sib-blockee"),
       childOf("kid", "grandkid"),
-      plain("related"),
+      issue({ id: "related", title: "related", links: { blocks: [], relates: [CENTRE] } }),
       plain("far"),
     ];
 
@@ -184,6 +190,7 @@ describe("focus graph zones", () => {
       graph.nodes.filter((node) => node.isFocus).map((node) => node.id),
       [CENTRE],
     );
+    assert.equal(new Set(nodeIds(graph)).size, graph.nodes.length);
     assert.deepEqual(graph.markers, []);
   });
 
@@ -203,21 +210,6 @@ describe("focus graph zones", () => {
 
     assert.deepEqual(nodeIds(rootGraph), [CENTRE]);
     assert.deepEqual(nodeIds(orphanGraph), [CENTRE, "kid"]);
-  });
-
-  it("ignores relates links, missing and self blocks targets and duplicate entries", () => {
-    const issues = [
-      centreWith({
-        links: { blocks: ["gone", CENTRE, "b", "b"], relates: ["r", "gone"] },
-      }),
-      issue({ id: "b", title: "b", links: { blocks: ["b", "b"], relates: [CENTRE] } }),
-      issue({ id: "r", title: "r", links: { blocks: [], relates: [CENTRE] } }),
-    ];
-
-    const graph = buildFocusGraph(issues, CENTRE);
-
-    assert.deepEqual(nodeIds(graph), [CENTRE, "b"]);
-    assert.deepEqual(idsIn(graph, "blocking"), ["b"]);
   });
 
   it("returns an empty graph for an unknown focus ticket", () => {
@@ -243,7 +235,7 @@ describe("focus graph zones", () => {
       childOf(CENTRE, "k1", "doing"),
       childOf(CENTRE, "k2"),
       childOf(CENTRE, "k3", "done"),
-      ...blockersWithStatus(["done", "doing", "backlog", "read", "delegated", "backlog"]),
+      ...blockersWithStatus(["done", "doing", "backlog", "read", "not-a-status", "backlog"]),
       plain("e1", "cancelled"),
       plain("e2", "read"),
     ];
@@ -278,7 +270,7 @@ describe("focus graph zone order and caps", () => {
           ["b-done", "done"],
           ["z-doing", "doing"],
           ["a-cancelled", "cancelled"],
-          ["x-unknown", "delegated"],
+          ["x-unknown", "not-a-status"],
         ].map(([id, status]) => blockerOfCentre(id!, status)),
       ],
       CENTRE,
@@ -366,159 +358,221 @@ describe("focus graph zone order and caps", () => {
 });
 
 describe("focus graph layout", () => {
-  const NODE_WIDTH = 104;
-  const NODE_HEIGHT = 46;
-  const MARKER_HEIGHT = 28;
-  const GRID = { width: 616, height: 297 };
-
-  function rects(graph: FocusGraph): Array<[string, number, number, number, number]> {
-    return graph.nodes.map((node) => [node.id, node.x, node.y, node.width, node.height]);
+  interface Box {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
   }
 
-  it("keeps the same grid and centre position whether the zones are full or empty", () => {
+  type Connector = FocusGraph["connectors"][number];
+  type ZoneBox = Box & { readonly zone: Zone | null };
+
+  const boxesOf = (graph: FocusGraph): Array<ZoneBox> => [...graph.nodes, ...graph.markers];
+
+  const zoneBoxes = (graph: FocusGraph, zone: Zone): Array<Box> =>
+    boxesOf(graph).filter((box) => box.zone === zone);
+
+  const overlaps = (left: Box, right: Box): boolean =>
+    left.x < right.x + right.width &&
+    right.x < left.x + left.width &&
+    left.y < right.y + right.height &&
+    right.y < left.y + left.height;
+
+  const onBoxEdge = (box: Box, x: number, y: number): boolean =>
+    x >= box.x &&
+    x <= box.x + box.width &&
+    y >= box.y &&
+    y <= box.y + box.height &&
+    (x === box.x || x === box.x + box.width || y === box.y || y === box.y + box.height);
+
+  const onLine = (line: Connector, x: number, y: number): boolean =>
+    x >= Math.min(line.x1, line.x2) &&
+    x <= Math.max(line.x1, line.x2) &&
+    y >= Math.min(line.y1, line.y2) &&
+    y <= Math.max(line.y1, line.y2);
+
+  function endpointsLand(graph: FocusGraph): boolean {
+    return graph.connectors.every((line) =>
+      [
+        [line.x1, line.y1],
+        [line.x2, line.y2],
+      ].every(
+        ([x, y]) =>
+          boxesOf(graph).some((box) => onBoxEdge(box, x!, y!)) ||
+          graph.connectors.some((other) => other !== line && onLine(other, x!, y!)),
+      ),
+    );
+  }
+
+  function neighbourhood(count: number): Array<TodoIssue> {
+    return [
+      parentTicket(),
+      centreWith({
+        parentId: PARENT,
+        depth: 1,
+        links: { blocks: openOnes(count, "e"), relates: [] },
+      }),
+      ...openOnes(count, "s").map((id) => childOf(PARENT, id)),
+      ...openOnes(count, "k").map((id) => childOf(CENTRE, id)),
+      ...blockersWithStatus(backlogs(count)),
+      ...openOnes(count, "e").map((id) => plain(id)),
+    ];
+  }
+
+  const COUNTS = [1, 2, 3, 4, 5, 7];
+
+  const centreOf = (graph: FocusGraph): Box => {
+    const { x, y, width, height } = graph.nodes.find((node) => node.id === CENTRE)!;
+    return { x, y, width, height };
+  };
+
+  const midX = (box: Box): number => box.x + box.width / 2;
+  const midY = (box: Box): number => box.y + box.height / 2;
+
+  it("keeps the centre ticket and grid fixed whether the zones are empty or crowded", () => {
     const alone = buildFocusGraph([centreWith()], CENTRE);
     const withParent = buildFocusGraph([parentTicket(), centreWith({ parentId: PARENT })], CENTRE);
+    const crowded = buildFocusGraph(neighbourhood(7), CENTRE);
 
-    assert.deepEqual(rects(alone), [[CENTRE, 256, 164, NODE_WIDTH, NODE_HEIGHT]]);
-    assert.deepEqual(alone.layout, GRID);
     assert.deepEqual(alone.connectors, []);
     assert.deepEqual(alone.labels, []);
     assert.deepEqual(alone.markers, []);
-    assert.deepEqual(rects(withParent), [
-      [CENTRE, 256, 164, NODE_WIDTH, NODE_HEIGHT],
-      [PARENT, 256, 0, NODE_WIDTH, NODE_HEIGHT],
-    ]);
-    assert.deepEqual(withParent.layout, GRID);
+    assert.deepEqual(centreOf(withParent), centreOf(alone));
+    assert.deepEqual(centreOf(crowded), centreOf(alone));
+    assert.deepEqual(withParent.layout, alone.layout);
+    assert.deepEqual(crowded.layout, alone.layout);
   });
 
-  it("places every zone on the fixed grid with one straight connector per zone", () => {
-    const issues = [
-      parentTicket(),
-      centreWith({ parentId: PARENT, depth: 1, links: { blocks: ["e1"], relates: [] } }),
-      childOf(PARENT, "s1"),
-      childOf(PARENT, "s2"),
-      childOf(CENTRE, "k1"),
-      childOf(CENTRE, "k2"),
-      blockerOfCentre("b1"),
-      plain("e1"),
-    ];
+  it("places every zone size without overlap, centred on the centre ticket, marker last", () => {
+    for (const count of COUNTS) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
+      const centre = centreOf(graph);
+      const boxes = boxesOf(graph);
 
-    const graph = buildFocusGraph(issues, CENTRE);
-
-    assert.deepEqual(rects(graph), [
-      [CENTRE, 256, 164, NODE_WIDTH, NODE_HEIGHT],
-      [PARENT, 256, 0, NODE_WIDTH, NODE_HEIGHT],
-      ["s1", 140, 82, NODE_WIDTH, NODE_HEIGHT],
-      ["s2", 372, 82, NODE_WIDTH, NODE_HEIGHT],
-      ["k1", 198, 246, NODE_WIDTH, NODE_HEIGHT],
-      ["k2", 314, 246, NODE_WIDTH, NODE_HEIGHT],
-      ["b1", 0, 164, NODE_WIDTH, NODE_HEIGHT],
-      ["e1", 512, 164, NODE_WIDTH, NODE_HEIGHT],
-    ]);
-    assert.deepEqual(
-      graph.connectors.map((line) => [line.zone, line.kind, line.x1, line.y1, line.x2, line.y2]),
-      [
-        ["parent", "tree", 308, 164, 308, 46],
-        ["siblings", "peer", 244, 105, 372, 105],
-        ["children", "tree", 308, 246, 308, 210],
-        ["blockedBy", "blocks", 104, 187, 256, 187],
-        ["blocking", "blocks", 360, 187, 512, 187],
-      ],
-    );
-    assert.deepEqual(
-      graph.labels.map((label) => [label.zone, label.text, label.x, label.y]),
-      [
-        ["blockedBy", "Blocked by", 52, 71],
-        ["blocking", "Blocking", 564, 71],
-      ],
-    );
-    assert.deepEqual(graph.layout, GRID);
+      for (const [position, box] of boxes.entries()) {
+        for (const other of boxes.slice(position + 1)) assert.equal(overlaps(box, other), false);
+        assert.ok(box.x >= 0 && box.y >= 0);
+        assert.ok(box.x + box.width <= graph.layout.width);
+        assert.ok(box.y + box.height <= graph.layout.height);
+      }
+      for (const zone of ["blockedBy", "blocking"] as const) {
+        const column = zoneBoxes(graph, zone);
+        const top = Math.min(...column.map((box) => box.y));
+        const bottom = Math.max(...column.map((box) => box.y + box.height));
+        assert.equal((top + bottom) / 2, midY(centre));
+        assert.equal(new Set(column.map((box) => box.x)).size, 1);
+      }
+      const children = zoneBoxes(graph, "children");
+      const rowLeft = Math.min(...children.map((box) => box.x));
+      const rowRight = Math.max(...children.map((box) => box.x + box.width));
+      assert.equal((rowLeft + rowRight) / 2, midX(centre));
+      assert.equal(new Set(children.map((box) => box.y)).size, 1);
+      for (const marker of graph.markers) {
+        const vertical = marker.zone === "blockedBy" || marker.zone === "blocking";
+        for (const peer of graph.nodes.filter((node) => node.zone === marker.zone)) {
+          assert.ok(vertical ? marker.y > peer.y : marker.x > peer.x);
+        }
+      }
+      assert.ok(
+        graph.nodes
+          .filter((node) => node.zone === "parent")
+          .every((node) => node.x === centre.x && node.y < centre.y),
+      );
+    }
   });
 
-  it("stacks a column around the centre line and puts its marker in the last slot", () => {
-    const two = buildFocusGraph(
-      [centreWith(), ...blockersWithStatus(["backlog", "backlog"])],
-      CENTRE,
-    );
-    const overflowing = buildFocusGraph([centreWith(), ...blockersWithStatus(backlogs(5))], CENTRE);
+  it("splits siblings around the gap above the centre with the marker on the right", () => {
+    const siblingsOf = (count: number) => {
+      const graph = buildFocusGraph(
+        [
+          parentTicket(),
+          centreWith({ parentId: PARENT }),
+          ...openOnes(count, "s").map((id) => childOf(PARENT, id)),
+        ],
+        CENTRE,
+      );
+      const centre = centreOf(graph);
+      const siblings = boxesOf(graph).filter((box) => box.zone === "siblings");
+      return {
+        graph,
+        left: siblings.filter((box) => box.x + box.width <= centre.x),
+        right: siblings.filter((box) => box.x >= centre.x + centre.width),
+      };
+    };
 
+    const one = siblingsOf(1);
+    const two = siblingsOf(2);
+    const many = siblingsOf(3);
+
+    assert.deepEqual([one.left.length, one.right.length], [0, 1]);
+    assert.deepEqual([two.left.length, two.right.length], [1, 1]);
+    assert.deepEqual([many.left.length, many.right.length], [1, 1]);
     assert.deepEqual(
-      two.nodes.filter((node) => node.zone === "blockedBy").map((node) => [node.x, node.y]),
-      [
-        [0, 135],
-        [0, 193],
-      ],
+      many.graph.markers.map((marker) => marker.hidden),
+      [2],
     );
-    assert.deepEqual(
-      overflowing.nodes.filter((node) => node.zone === "blockedBy").map((node) => [node.x, node.y]),
-      [
-        [0, 86],
-        [0, 144],
-        [0, 202],
-      ],
-    );
-    assert.deepEqual(overflowing.markers, [
-      { zone: "blockedBy", hidden: 2, x: 0, y: 260, width: NODE_WIDTH, height: MARKER_HEIGHT },
-    ]);
+    assert.equal(many.right[0], many.graph.markers[0]);
   });
 
-  it("splits siblings around the gap with the marker on the right and joins them to the parent line", () => {
-    const one = buildFocusGraph(
-      [parentTicket(), centreWith({ parentId: PARENT }), childOf(PARENT, "s1")],
-      CENTRE,
-    );
-    const many = buildFocusGraph(
-      [
-        parentTicket(),
-        centreWith({ parentId: PARENT }),
-        childOf(PARENT, "s1"),
-        childOf(PARENT, "s2"),
-        childOf(PARENT, "s3"),
-      ],
-      CENTRE,
-    );
+  it("runs one trunk per zone to the centre and adds a bus when a zone holds several items", () => {
+    for (const count of COUNTS) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
+      const centre = centreOf(graph);
+      const lines = (zone: Zone, role: Connector["role"]) =>
+        graph.connectors.filter((line) => line.zone === zone && line.role === role);
 
-    assert.deepEqual(
-      one.nodes.filter((node) => node.zone === "siblings").map((node) => [node.id, node.x, node.y]),
-      [["s1", 372, 82]],
-    );
-    assert.deepEqual(
-      one.connectors.filter((line) => line.zone === "siblings").map((line) => [line.x1, line.x2]),
-      [[308, 372]],
-    );
-    assert.deepEqual(
-      many.nodes
-        .filter((node) => node.zone === "siblings")
-        .map((node) => [node.id, node.x, node.y]),
-      [["s1", 140, 82]],
-    );
-    assert.deepEqual(many.markers, [
-      { zone: "siblings", hidden: 2, x: 372, y: 91, width: NODE_WIDTH, height: MARKER_HEIGHT },
-    ]);
-    assert.deepEqual(
-      many.connectors.filter((line) => line.zone === "siblings").map((line) => [line.x1, line.x2]),
-      [[244, 372]],
-    );
+      assert.ok(endpointsLand(graph));
+      for (const zone of ["parent", "siblings", "children", "blockedBy", "blocking"] as const) {
+        const hasBus =
+          ["children", "blockedBy", "blocking"].includes(zone) && zoneBoxes(graph, zone).length > 1;
+        assert.equal(lines(zone, "trunk").length, 1);
+        assert.equal(lines(zone, "bus").length, hasBus ? 1 : 0);
+      }
+      for (const zone of ["blockedBy", "blocking"] as const) {
+        const items = zoneBoxes(graph, zone);
+        const [trunk] = lines(zone, "trunk");
+        const [bus] = lines(zone, "bus");
+        assert.equal(trunk!.y1, midY(centre));
+        assert.equal(trunk!.y2, midY(centre));
+        if (bus === undefined) continue;
+        assert.deepEqual(
+          [bus.x1 === bus.x2, Math.min(bus.y1, bus.y2), Math.max(bus.y1, bus.y2)],
+          [true, midY(items[0]!), midY(items.at(-1)!)],
+        );
+      }
+      const [childBus] = lines("children", "bus");
+      if (childBus === undefined) continue;
+      const row = zoneBoxes(graph, "children");
+      assert.deepEqual(
+        [
+          childBus.y1 === childBus.y2,
+          Math.min(childBus.x1, childBus.x2),
+          Math.max(childBus.x1, childBus.x2),
+        ],
+        [true, midX(row[0]!), midX(row.at(-1)!)],
+      );
+    }
   });
 
-  it("centres the children row and puts its marker in the last slot", () => {
-    const one = buildFocusGraph([centreWith(), childOf(CENTRE, "k1")], CENTRE);
-    const overflowing = buildFocusGraph(
-      [centreWith(), ...openOnes(5, "k").map((id) => childOf(CENTRE, id))],
-      CENTRE,
-    );
+  it("puts each column label just above the first item of its column", () => {
+    for (const count of COUNTS) {
+      const graph = buildFocusGraph(neighbourhood(count), CENTRE);
 
-    assert.deepEqual(
-      one.nodes.filter((node) => node.zone === "children").map((node) => node.x),
-      [256],
-    );
-    assert.deepEqual(
-      overflowing.nodes.filter((node) => node.zone === "children").map((node) => node.x),
-      [140, 256],
-    );
-    assert.deepEqual(overflowing.markers, [
-      { zone: "children", hidden: 3, x: 372, y: 255, width: NODE_WIDTH, height: MARKER_HEIGHT },
-    ]);
+      assert.deepEqual(
+        graph.labels.map((label) => [label.zone, label.text]),
+        [
+          ["blockedBy", "Blocked by"],
+          ["blocking", "Blocking"],
+        ],
+      );
+      for (const label of graph.labels) {
+        const first = zoneBoxes(graph, label.zone)[0]!;
+        assert.equal(label.x, midX(first));
+        assert.ok(label.y < first.y);
+        assert.ok(first.y - label.y <= first.height);
+      }
+    }
   });
 });
 
