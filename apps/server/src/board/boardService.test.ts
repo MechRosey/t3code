@@ -544,6 +544,71 @@ describe("TodoBoard service", () => {
       }),
     );
   });
+
+  it.layer(TestLayer)("sets the sequence", (it) => {
+    it.effect("replaces the file wholesale with short ids and keeps only open tickets", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* board.mutate({ action: "status", cwd, id: "e20d1-status-target", status: "doing" });
+        yield* fs.writeFileString(sequencePath, "zzzzz\r\n55041\r\n");
+
+        const result = yield* board.setSequence({
+          cwd,
+          ids: ["762b5", "6ba55-parser-fidelity", "762b5", "e0ae5", "df3cf", "e20d1"],
+        });
+
+        expect(result.sequence).toEqual([
+          "762b5-comment-target",
+          "6ba55-parser-fidelity",
+          "e20d1-status-target",
+        ]);
+        expectSameBytes(
+          Buffer.from(yield* fs.readFile(sequencePath)),
+          Buffer.from("762b5\n6ba55\ne20d1\n", "utf8"),
+        );
+        expect(yield* fs.exists(`${sequencePath}.tmp`)).toBe(false);
+        expect((yield* board.read({ cwd })).sequence).toEqual(result.sequence);
+      }),
+    );
+
+    it.effect("rejects unknown and ambiguous ids and leaves the file alone", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* fs.writeFileString(sequencePath, "762b5\n");
+
+        const unknown = yield* board
+          .setSequence({ cwd, ids: ["762b5", "zzzzz"] })
+          .pipe(Effect.flip);
+        const ambiguous = yield* board.setSequence({ cwd, ids: ["e"] }).pipe(Effect.flip);
+
+        expect(unknown.failure).toBe("issue_not_found");
+        expect(ambiguous.failure).toBe("ambiguous_issue_id");
+        expect(yield* fs.readFileString(sequencePath)).toBe("762b5\n");
+      }),
+    );
+
+    it.effect("drops an archived id instead of rejecting it", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("after-archive");
+        const board = yield* TodoBoard.TodoBoard;
+
+        const result = yield* board.setSequence({
+          cwd,
+          ids: ["e20d1", "e0ae5-archive-target"],
+        });
+
+        expect(result.sequence).toEqual(["e20d1-status-target"]);
+      }),
+    );
+  });
 });
 
 describe("ensureUnchanged", () => {
