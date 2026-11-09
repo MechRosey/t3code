@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -47,7 +48,9 @@ export const TodoBoardSnapshot = Schema.Struct({
   root: Schema.String,
   repoName: Schema.String,
   issues: Schema.Array(TodoIssue),
-  sequence: Schema.Array(Schema.String),
+  sequence: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed<ReadonlyArray<string>>([])),
+  ),
 });
 export type TodoBoardSnapshot = typeof TodoBoardSnapshot.Type;
 
