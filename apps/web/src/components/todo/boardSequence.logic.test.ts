@@ -4,10 +4,15 @@ import { assert, describe, it } from "vite-plus/test";
 import {
   buildSequenceStrip,
   displayedSequence,
+  failPendingWrite,
+  reconcilePendingWrites,
   removeFromSequence,
   resolveSequenceDrop,
   sequenceChipDragId,
+  settlePendingWrite,
+  startPendingWrite,
   SEQUENCE_STRIP_DROP_ID,
+  type PendingSequenceWrite,
   type SequenceDropOutcome,
 } from "./boardSequence.logic";
 
@@ -265,14 +270,81 @@ describe("resolveSequenceDrop", () => {
   });
 });
 
-describe("displayedSequence", () => {
-  it("displayedSequence_PendingWrite_ShowsItUntilTheSnapshotSequenceChanges", () => {
-    const snapshotSequence = [BACKLOG_PLANNED, READ_PLANNED];
-    const pending = { base: snapshotSequence, ids: [READ_PLANNED, BACKLOG_PLANNED] };
-    const nextSnapshotSequence = [READ_PLANNED, BACKLOG_PLANNED];
+describe("pending sequence writes", () => {
+  const settled = (writes: ReadonlyArray<PendingSequenceWrite>, token: number, ids: string[]) =>
+    settlePendingWrite(writes, token, ids);
 
-    assert.strictEqual(displayedSequence(snapshotSequence, null), snapshotSequence);
-    assert.strictEqual(displayedSequence(snapshotSequence, pending), pending.ids);
-    assert.strictEqual(displayedSequence(nextSnapshotSequence, pending), nextSnapshotSequence);
+  it("pendingWrites_TwoQuickDropsAndAnEarlierFailure_NeverShowAStaleOrder", () => {
+    const base = [BACKLOG_PLANNED];
+    const first = [READ_PLANNED, BACKLOG_PLANNED];
+    const second = [BLOCKED_PLANNED, READ_PLANNED, BACKLOG_PLANNED];
+    let writes: ReadonlyArray<PendingSequenceWrite> = [];
+
+    writes = startPendingWrite(writes, { token: 1, ids: first, base });
+    writes = startPendingWrite(writes, { token: 2, ids: second, base });
+    assert.strictEqual(displayedSequence(base, writes), second);
+
+    writes = settled(writes, 1, [...first]);
+    const afterFirstSnapshot = [...first];
+    writes = reconcilePendingWrites(writes, afterFirstSnapshot);
+    assert.strictEqual(displayedSequence(afterFirstSnapshot, writes), second);
+
+    writes = settled(writes, 2, [...second]);
+    writes = reconcilePendingWrites(writes, afterFirstSnapshot);
+    assert.deepEqual(displayedSequence(afterFirstSnapshot, writes), second);
+
+    const finalSnapshot = [...second];
+    writes = reconcilePendingWrites(writes, finalSnapshot);
+    assert.deepEqual(writes, []);
+    assert.strictEqual(displayedSequence(finalSnapshot, writes), finalSnapshot);
+
+    let failing: ReadonlyArray<PendingSequenceWrite> = [];
+    failing = startPendingWrite(failing, { token: 1, ids: first, base });
+    failing = startPendingWrite(failing, { token: 2, ids: second, base });
+    failing = failPendingWrite(failing, 1);
+    assert.strictEqual(displayedSequence(base, failing), second);
+    failing = failPendingWrite(failing, 2);
+    assert.strictEqual(displayedSequence(base, failing), base);
+  });
+
+  it("pendingWrites_ResultEqualsTheCurrentSnapshot_DoesNotStick", () => {
+    const snapshot = [BACKLOG_PLANNED, READ_PLANNED];
+    let writes = startPendingWrite([], {
+      token: 1,
+      ids: [READ_PLANNED, BACKLOG_PLANNED],
+      base: snapshot,
+    });
+
+    writes = settled(writes, 1, [...snapshot]);
+    writes = reconcilePendingWrites(writes, snapshot);
+
+    assert.deepEqual(writes, []);
+    assert.strictEqual(displayedSequence(snapshot, writes), snapshot);
+  });
+
+  it("pendingWrites_SettledWrite_ShowsTheServerResultUntilADifferentSnapshotArrives", () => {
+    const base = [BACKLOG_PLANNED, READ_PLANNED];
+    const requested = [READ_PLANNED, DONE, BACKLOG_PLANNED];
+    const result = [READ_PLANNED, BACKLOG_PLANNED];
+    let writes = startPendingWrite([], { token: 1, ids: requested, base });
+
+    writes = settled(writes, 1, result);
+    writes = reconcilePendingWrites(writes, base);
+    assert.strictEqual(displayedSequence(base, writes), result);
+
+    const external = [BLOCKED_PLANNED];
+    writes = reconcilePendingWrites(writes, external);
+    assert.deepEqual(writes, []);
+    assert.strictEqual(displayedSequence(external, writes), external);
+  });
+
+  it("pendingWrites_InFlightWriteAndUnrelatedSnapshot_KeepsTheInFlightOrder", () => {
+    const base = [BACKLOG_PLANNED];
+    const requested = [READ_PLANNED, BACKLOG_PLANNED];
+    const writes = startPendingWrite([], { token: 1, ids: requested, base });
+
+    const reconciled = reconcilePendingWrites(writes, [BLOCKED_PLANNED]);
+
+    assert.strictEqual(displayedSequence([BLOCKED_PLANNED], reconciled), requested);
   });
 });
