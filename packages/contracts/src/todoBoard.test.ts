@@ -106,12 +106,12 @@ describe("TodoArchiveReadResult", () => {
         {
           dirName: "e0ae5-archive-target",
           rootIssue: issue,
-          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [issue] },
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [issue], sequence: [] },
         },
         {
           dirName: "e0ae5-archive-target-2",
           rootIssue: null,
-          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [] },
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [], sequence: [] },
         },
       ],
     });
@@ -128,7 +128,11 @@ describe("TodoArchiveReadResult", () => {
       boardRoot: "C:/board/.todo",
       repoName: "board",
       groups: [
-        { dirName: "g", rootIssue: null, snapshot: { root: "r", repoName: "b", issues: [] } },
+        {
+          dirName: "g",
+          rootIssue: null,
+          snapshot: { root: "r", repoName: "b", issues: [], sequence: [] },
+        },
       ],
     };
     expect(() =>

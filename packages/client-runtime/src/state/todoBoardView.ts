@@ -368,7 +368,12 @@ export interface BoardViewModel {
   readonly columns: ReadonlyArray<BoardColumnViewModel>;
 }
 
-export const EMPTY_BOARD_SNAPSHOT: TodoBoardSnapshot = { root: "", repoName: "", issues: [] };
+export const EMPTY_BOARD_SNAPSHOT: TodoBoardSnapshot = {
+  root: "",
+  repoName: "",
+  issues: [],
+  sequence: [],
+};
 
 export function cardHueStyle(issue: TodoIssue): Record<string, string> {
   return issue.rootHue === null ? {} : { "--card-hue": String(issue.rootHue) };

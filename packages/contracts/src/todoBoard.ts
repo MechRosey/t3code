@@ -47,6 +47,7 @@ export const TodoBoardSnapshot = Schema.Struct({
   root: Schema.String,
   repoName: Schema.String,
   issues: Schema.Array(TodoIssue),
+  sequence: Schema.Array(Schema.String),
 });
 export type TodoBoardSnapshot = typeof TodoBoardSnapshot.Type;
 

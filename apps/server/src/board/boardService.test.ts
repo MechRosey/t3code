@@ -218,7 +218,7 @@ describe("TodoBoard service", () => {
           "55041-tag-target",
         ]);
         expect(snapshot.issues.length).toBe(16);
-        expect(yield* fs.readFileString(sequencePath)).toBe(raw);
+        expectSameBytes(Buffer.from(yield* fs.readFile(sequencePath)), Buffer.from(raw, "utf8"));
       }),
     );
 

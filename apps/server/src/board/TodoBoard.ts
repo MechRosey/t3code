@@ -52,6 +52,7 @@ import {
   BoardRuleError,
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
+import { parseSequenceRefs, resolveSequence, SEQUENCE_FILE } from "./sequence.ts";
 import { canonicalStatus } from "./vocabulary.ts";
 
 type TodoBoardFailure = TodoBoardError["failure"];
@@ -300,6 +301,14 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (root: string) {
+    const file = path.join(root, SEQUENCE_FILE);
+    const failed = (cause: unknown) => toError("operation_failed", `Failed to read ${file}`, cause);
+    if (!(yield* fs.exists(file).pipe(Effect.mapError(failed)))) return [];
+    const text = yield* fs.readFileString(file).pipe(Effect.mapError(failed));
+    return parseSequenceRefs(text);
+  });
+
   const readBoardAt = Effect.fn("TodoBoard.readBoardAt")(function* (
     root: string,
     archived = false,
@@ -356,7 +365,8 @@ const make = Effect.gen(function* () {
         },
       });
     }
-    return { root, repoName: repoDisplayName(root), issues };
+    const sequence = archived ? [] : resolveSequence(yield* readSequenceRefs(root), issues);
+    return { root, repoName: repoDisplayName(root), issues, sequence };
   });
 
   const readArchiveAt = Effect.fn("TodoBoard.readArchiveAt")(function* (root: string) {

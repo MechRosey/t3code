@@ -69,7 +69,7 @@ function sections(overrides: Partial<TodoIssue["sections"]> = {}): TodoIssue["se
 }
 
 function snapshot(issues: TodoIssue[]): TodoBoardSnapshot {
-  return { root: "C:/repo/.todo", repoName: "repo", issues };
+  return { root: "C:/repo/.todo", repoName: "repo", issues, sequence: [] };
 }
 
 function columnOf(model: ReturnType<typeof buildBoardViewModel>, id: string): string {
