@@ -2790,7 +2790,7 @@ export function isDesktopPreviewVersion(version: string): boolean {
   return /-pr\./.test(version) || /-preview\.\d{8}\.\d+$/.test(version);
 }
 
-export const FORK_WINDOWS_PAYLOAD_FILE_ALLOWANCE = 5;
+export const FORK_WINDOWS_PAYLOAD_FILE_ALLOWANCE = 9;
 
 export function isDesktopForkVersion(version: string): boolean {
   return /-fork\.\d+$/.test(version);
