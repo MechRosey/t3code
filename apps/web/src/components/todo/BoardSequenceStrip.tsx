@@ -28,18 +28,22 @@ const CHIP_TONE_BY_STATUS: Record<string, string> = {
 
 const chipClassName = (chip: SequenceChip) =>
   cn(
-    "flex shrink-0 items-center gap-0.5 rounded-md border pe-0.5",
+    "flex shrink-0 items-start gap-0.5 rounded-md border pe-0.5",
     CHIP_TONE_BY_STATUS[chip.status] ?? FALLBACK_CHIP_TONE,
     !chip.matches && "opacity-45 hover:opacity-100",
   );
 
-const CHIP_OPEN_CLASS = "flex min-w-0 items-baseline gap-1.5 py-0.5 ps-1.5 pe-1 text-left";
+const CHIP_OPEN_CLASS = "flex min-w-0 flex-col items-start py-1 ps-2 pe-1 text-left";
 
 function SequenceChipLabel({ chip }: { readonly chip: SequenceChip }) {
   return (
     <>
-      <span className="font-mono text-sm font-semibold text-foreground/80">{chip.shortId}</span>
-      <span className="max-w-40 truncate text-xs text-foreground/70">{chip.title}</span>
+      <span className="font-mono text-sm leading-tight font-semibold text-foreground/80">
+        {chip.shortId}
+      </span>
+      <span className="max-w-32 truncate text-xs leading-tight text-foreground/70">
+        {chip.title}
+      </span>
     </>
   );
 }
@@ -101,6 +105,7 @@ const NextSequenceChip = memo(function NextSequenceChip({
       <Button
         size="icon-tiny"
         variant="ghost-muted"
+        className="mt-0.5"
         aria-label={`Remove ${chip.shortId} from the sequence`}
         onClick={() => onRemove(chip.id)}
       >
