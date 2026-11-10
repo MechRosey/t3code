@@ -1,25 +1,21 @@
-export interface MarkerStat {
-  readonly mtimeMs: number;
-  readonly size: number;
-}
+import * as Schema from "effect/Schema";
 
-export class MarkerConflictError extends Error {
-  readonly baseline: MarkerStat;
-  readonly current: MarkerStat;
+const MarkerStatSchema = Schema.Struct({ mtimeMs: Schema.Number, size: Schema.Number });
 
-  constructor(baseline: MarkerStat, current: MarkerStat) {
-    super(
-      `Marker file changed during the write critical section (mtime ${baseline.mtimeMs} -> ${current.mtimeMs}, size ${baseline.size} -> ${current.size}).`,
-    );
-    this.name = "MarkerConflictError";
-    this.baseline = baseline;
-    this.current = current;
+export type MarkerStat = typeof MarkerStatSchema.Type;
+
+export class MarkerConflictError extends Schema.TaggedError<MarkerConflictError>()(
+  "MarkerConflictError",
+  { baseline: MarkerStatSchema, current: MarkerStatSchema },
+) {
+  override get message(): string {
+    return `Marker file changed during the write critical section (mtime ${this.baseline.mtimeMs} -> ${this.current.mtimeMs}, size ${this.baseline.size} -> ${this.current.size}).`;
   }
 }
 
 export const ensureUnchanged = (baseline: MarkerStat, current: MarkerStat): void => {
   if (baseline.mtimeMs !== current.mtimeMs || baseline.size !== current.size) {
-    throw new MarkerConflictError(baseline, current);
+    throw new MarkerConflictError({ baseline, current });
   }
 };
 

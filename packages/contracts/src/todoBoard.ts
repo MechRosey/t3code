@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -47,6 +48,9 @@ export const TodoBoardSnapshot = Schema.Struct({
   root: Schema.String,
   repoName: Schema.String,
   issues: Schema.Array(TodoIssue),
+  sequence: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed<ReadonlyArray<string>>([])),
+  ),
 });
 export type TodoBoardSnapshot = typeof TodoBoardSnapshot.Type;
 
@@ -125,6 +129,17 @@ export const TodoBoardMutateResult = Schema.Struct({
   issue: TodoIssue,
 });
 export type TodoBoardMutateResult = typeof TodoBoardMutateResult.Type;
+
+export const TodoBoardSequenceInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  ids: Schema.Array(TrimmedNonEmptyString),
+});
+export type TodoBoardSequenceInput = typeof TodoBoardSequenceInput.Type;
+
+export const TodoBoardSequenceResult = Schema.Struct({
+  sequence: Schema.Array(Schema.String),
+});
+export type TodoBoardSequenceResult = typeof TodoBoardSequenceResult.Type;
 
 export const TodoBoardRegenerateTarget = Schema.Literals(["board", "index"]);
 export type TodoBoardRegenerateTarget = typeof TodoBoardRegenerateTarget.Type;

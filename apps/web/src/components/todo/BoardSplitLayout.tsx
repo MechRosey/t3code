@@ -26,11 +26,11 @@ export interface BoardSplitDetail {
   readonly render: (splitMode: BoardSplitMode) => ReactNode;
 }
 
-function useObservedWidth() {
+export function useObservedWidth(snap: (width: number) => number = (width) => width) {
   const [width, setWidth] = useState(0);
   const observe = (element: HTMLElement | null) => {
     if (element === null) return;
-    const measure = () => setWidth(element.clientWidth);
+    const measure = () => setWidth(snap(element.clientWidth));
     measure();
     return observeResize(element, measure);
   };

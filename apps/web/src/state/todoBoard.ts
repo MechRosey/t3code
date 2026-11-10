@@ -6,5 +6,6 @@ const todoBoardAtoms = createTodoBoardAtoms(connectionAtomRuntime);
 
 export const todoBoardSubscribe = todoBoardAtoms.subscribe;
 export const todoBoardMutate = todoBoardAtoms.mutate;
+export const todoBoardSequence = todoBoardAtoms.sequence;
 export const todoBoardRegenerate = todoBoardAtoms.regenerate;
 export const todoBoardArchiveRead = todoBoardAtoms.archive;

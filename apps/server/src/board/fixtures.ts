@@ -1,12 +1,14 @@
 import * as NodeURL from "node:url";
 
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
-class FixtureMarkerNotFound extends Data.TaggedError("FixtureMarkerNotFound")<{
-  readonly message: string;
-}> {}
+class FixtureMarkerNotFound extends Schema.TaggedError<FixtureMarkerNotFound>()(
+  "FixtureMarkerNotFound",
+  { message: Schema.String },
+) {}
 
 const fixturesUrl = new URL("__fixtures__/", import.meta.url);
 
@@ -32,4 +34,15 @@ export const findMarkerPath = Effect.fn("findMarkerPath")(function* (board: stri
     });
   }
   return fixturePath(`${board}/${match}`);
+});
+
+export const installBoard = Effect.fn("installBoard")(function* (fixtureBoard: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const target = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-board-" });
+  const boardDir = path.join(target, "project", ".todo");
+  yield* fs.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
+  const cwd = path.join(target, "project", "sub", "deep");
+  yield* fs.makeDirectory(cwd, { recursive: true });
+  return { target, boardDir, cwd };
 });

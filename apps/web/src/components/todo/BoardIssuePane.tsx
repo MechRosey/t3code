@@ -4,7 +4,7 @@ import {
   boardStatusLabel,
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { GitCompareIcon, PlusIcon, XIcon, ZapIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -25,7 +25,7 @@ import { CopyIssueIdButton } from "./BoardCard";
 import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDropActionMode } from "./boardDrop.logic";
 import { BoardMarkdown } from "./BoardMarkdown";
-import { BoardPaneHeader } from "./BoardSplitLayout";
+import { BoardPaneHeader, useObservedWidth } from "./BoardSplitLayout";
 import type { BoardSplitMode } from "./boardSplit.logic";
 import type { BoardDrawerMode } from "./boardUiState";
 import {
@@ -33,9 +33,27 @@ import {
   prepareCommentActor,
   prepareCommentText,
 } from "./commentForm.logic";
-import type { FocusGraph } from "./mapView.logic";
+import { buildFocusGraph, snapAvailableWidth } from "./mapView.logic";
 import { MapView } from "./MapView";
 import { normalizeTagInput, unusedBoardTags } from "./tagForm.logic";
+
+function RelationMap({
+  issues,
+  centreId,
+  onFocusIssue,
+}: {
+  readonly issues: ReadonlyArray<TodoIssue>;
+  readonly centreId: string;
+  readonly onFocusIssue: (issueId: string) => void;
+}) {
+  const { width, observe } = useObservedWidth(snapAvailableWidth);
+  const graph = useMemo(() => buildFocusGraph(issues, centreId, width), [issues, centreId, width]);
+  return (
+    <div ref={observe}>
+      {graph.nodes.length > 0 ? <MapView graph={graph} onFocusIssue={onFocusIssue} /> : null}
+    </div>
+  );
+}
 
 export function BoardIssuePane({
   issue,
@@ -45,7 +63,7 @@ export function BoardIssuePane({
   boardTags,
   dispatchInFlight,
   viewDiff,
-  focusGraph,
+  issues,
   onFocusIssue,
   onDrawerModeChange,
   onStatusChange,
@@ -63,7 +81,7 @@ export function BoardIssuePane({
   readonly boardTags: ReadonlyArray<string>;
   readonly dispatchInFlight: boolean;
   readonly viewDiff: { readonly threadMissing: boolean } | null;
-  readonly focusGraph: FocusGraph | null;
+  readonly issues: ReadonlyArray<TodoIssue> | null;
   readonly onFocusIssue: (issueId: string) => void;
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
   readonly onStatusChange: (issue: TodoIssue, status: string) => void;
@@ -110,8 +128,8 @@ export function BoardIssuePane({
       />
       <ScrollArea scrollFade className="min-h-0 flex-1">
         <div className="flex flex-col gap-4 p-4">
-          {focusGraph !== null && focusGraph.nodes.length > 0 ? (
-            <MapView graph={focusGraph} onFocusIssue={onFocusIssue} />
+          {issues !== null ? (
+            <RelationMap issues={issues} centreId={issue.id} onFocusIssue={onFocusIssue} />
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <Menu>

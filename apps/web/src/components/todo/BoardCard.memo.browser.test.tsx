@@ -57,6 +57,8 @@ function cardModel(id: string): BoardCardViewModel {
     badges: [],
     parent: null,
     blockedBy: [],
+    blocks: [],
+    children: [],
   };
 }
 

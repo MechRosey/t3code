@@ -8,6 +8,7 @@ import type { BoardDrawerMode } from "./boardUiState";
 
 const WIDE_CONTAINER = 1200;
 const NARROW_CONTAINER = 400;
+const BASE_MAP_WIDTH = 430;
 
 function issue(): TodoIssue {
   return {
@@ -38,6 +39,7 @@ function issue(): TodoIssue {
 async function renderPane(options: {
   readonly containerWidth: number;
   readonly drawerMode: BoardDrawerMode;
+  readonly withMap?: boolean;
   readonly onClose: () => void;
   readonly onDrawerModeChange: (mode: BoardDrawerMode) => void;
 }) {
@@ -60,7 +62,7 @@ async function renderPane(options: {
             boardTags={["ui", "bug"]}
             dispatchInFlight={false}
             viewDiff={null}
-            focusGraph={null}
+            issues={options.withMap === true ? [selected] : null}
             onFocusIssue={() => {}}
             onDrawerModeChange={options.onDrawerModeChange}
             onStatusChange={() => {}}
@@ -151,5 +153,30 @@ describe("BoardIssuePane", () => {
     expect(restore).toHaveLength(1);
     await click(restore[0]!);
     expect(onDrawerModeChange).toHaveBeenCalledWith("normal");
+  });
+
+  it("BoardIssuePane_RelationMap_ReflowsToThePaneWidthAndKeepsTheBaseWhenNarrow", async () => {
+    const mapWidth = (container: HTMLElement) =>
+      Number.parseFloat(
+        container.querySelector<SVGSVGElement>('svg[aria-label="Ticket relation map"]')!.style
+          .maxWidth,
+      );
+    await using wide = await renderPane({
+      containerWidth: WIDE_CONTAINER,
+      drawerMode: "full",
+      withMap: true,
+      onClose: () => {},
+      onDrawerModeChange: () => {},
+    });
+    await using narrow = await renderPane({
+      containerWidth: NARROW_CONTAINER,
+      drawerMode: "normal",
+      withMap: true,
+      onClose: () => {},
+      onDrawerModeChange: () => {},
+    });
+
+    expect(mapWidth(wide.container)).toBeGreaterThan(BASE_MAP_WIDTH);
+    expect(mapWidth(narrow.container)).toBe(BASE_MAP_WIDTH);
   });
 });

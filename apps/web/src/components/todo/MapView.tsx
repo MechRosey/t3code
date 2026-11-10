@@ -1,29 +1,36 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { shortBoardId } from "./boardCopy.logic";
 import {
   mapTitleLines,
-  type FocusAnchor,
-  type FocusEdgeViewModel,
+  TEXT_INSET_X,
+  type FocusConnectorViewModel,
   type FocusGraph,
+  type FocusLabelViewModel,
   type FocusNodeViewModel,
+  type FocusOverflowViewModel,
+  type FocusZone,
 } from "./mapView.logic";
 
-const TITLE_MAX_CHARS = 17;
 const NODE_CORNER_RADIUS = 8;
 const FOCUS_RING_GAP = 3;
 const VIEW_MARGIN = 5;
 const FLAGGED_STROKE_WIDTH = 2;
 const DEFAULT_STROKE_WIDTH = 1;
-const CURVE_REACH = 0.5;
+const BUS_STROKE_WIDTH = 1.5;
 const BLOCKED_DASH = "4 3";
-const TEXT_INSET_X = 8;
 const TITLE_FIRST_LINE_Y = 19;
 const TITLE_SECOND_LINE_Y = 30;
 const FOOTER_Y = 41;
 const BADGE_RADIUS = 6;
 const BADGE_INSET = 8;
 const BADGE_GLYPH_DROP = 2.5;
+const KEY_SWATCH_WIDTH = 24;
+const KEY_SWATCH_HEIGHT = 12;
+const KEY_ARROW_LENGTH = 6;
+const KEY_ARROW_HALF_HEIGHT = 3;
+const KEY_CROSS_SIZE = 6;
+const KEY_NODE_CORNER_RADIUS = 3;
 
 const FILL_BY_STATUS: Record<string, string> = {
   backlog: "fill-card",
@@ -46,57 +53,44 @@ const STROKE_BY_STATUS: Record<string, string> = {
 const FALLBACK_FILL = "fill-card";
 const FALLBACK_STROKE = "stroke-muted-foreground/40";
 
-interface Point {
-  readonly x: number;
-  readonly y: number;
-}
-
-const ANCHOR_NORMALS: Record<FocusAnchor, Point> = {
-  top: { x: 0, y: -1 },
-  bottom: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 },
-};
-
 interface MapViewProps {
   readonly graph: FocusGraph;
   readonly onFocusIssue: (issueId: string) => void;
 }
 
-function anchorPoint(node: FocusNodeViewModel, anchor: FocusAnchor) {
-  const centreX = node.x + node.width / 2;
-  const centreY = node.y + node.height / 2;
-  switch (anchor) {
-    case "top":
-      return { x: centreX, y: node.y };
-    case "bottom":
-      return { x: centreX, y: node.y + node.height };
-    case "left":
-      return { x: node.x, y: centreY };
-    case "right":
-      return { x: node.x + node.width, y: centreY };
+const ZONE_NODE_PREFIX: Record<FocusZone, string> = {
+  parent: "Parent",
+  siblings: "Sibling",
+  children: "Child",
+  blockedBy: "Blocked by",
+  blocking: "Blocking",
+};
+
+const ZONE_NOUNS: Record<FocusZone, string> = {
+  parent: "parent",
+  siblings: "siblings",
+  children: "children",
+  blockedBy: "blockers",
+  blocking: "blocked tickets",
+};
+
+function connectorPath(connector: FocusConnectorViewModel): string {
+  return `M ${connector.x1} ${connector.y1} L ${connector.x2} ${connector.y2}`;
+}
+
+function MapConnector({ connector }: { readonly connector: FocusConnectorViewModel }) {
+  const path = connectorPath(connector);
+  if (connector.role === "bus") {
+    return (
+      <path
+        d={path}
+        className={connector.kind === "blocks" ? "stroke-error/80" : "stroke-muted-foreground/50"}
+        strokeWidth={BUS_STROKE_WIDTH}
+        fill="none"
+      />
+    );
   }
-}
-
-function anchorReach(start: Point, end: Point, normal: Point): number {
-  const span = normal.x === 0 ? Math.abs(end.y - start.y) : Math.abs(end.x - start.x);
-  return span * CURVE_REACH;
-}
-
-function edgePath(from: FocusNodeViewModel, to: FocusNodeViewModel, edge: FocusEdgeViewModel) {
-  const start = anchorPoint(from, edge.fromAnchor);
-  const end = anchorPoint(to, edge.toAnchor);
-  const startNormal = ANCHOR_NORMALS[edge.fromAnchor];
-  const endNormal = ANCHOR_NORMALS[edge.toAnchor];
-  const startReach = anchorReach(start, end, startNormal);
-  const endReach = anchorReach(start, end, endNormal);
-  const startControl = `${start.x + startNormal.x * startReach} ${start.y + startNormal.y * startReach}`;
-  const endControl = `${end.x + endNormal.x * endReach} ${end.y + endNormal.y * endReach}`;
-  return `M ${start.x} ${start.y} C ${startControl}, ${endControl}, ${end.x} ${end.y}`;
-}
-
-function MapEdge({ edge, path }: { readonly edge: FocusEdgeViewModel; readonly path: string }) {
-  if (edge.kind === "blocks") {
+  if (connector.kind === "blocks") {
     return (
       <path
         d={path}
@@ -108,15 +102,14 @@ function MapEdge({ edge, path }: { readonly edge: FocusEdgeViewModel; readonly p
       />
     );
   }
-  if (edge.kind === "relates") {
+  if (connector.kind === "peer") {
     return (
       <path
         d={path}
-        className="stroke-muted-foreground/60"
-        strokeWidth={1.5}
+        className="stroke-muted-foreground/40"
+        strokeWidth={DEFAULT_STROKE_WIDTH}
         strokeDasharray="2 4"
         fill="none"
-        markerEnd="url(#bc-map-arrow-muted)"
       />
     );
   }
@@ -136,8 +129,14 @@ function nodeStrokeClass(node: FocusNodeViewModel): string {
   return STROKE_BY_STATUS[node.status] ?? FALLBACK_STROKE;
 }
 
-function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
-  const titleLines = mapTitleLines(node.title, TITLE_MAX_CHARS);
+function MapNodeFace({
+  node,
+  titleChars,
+}: {
+  readonly node: FocusNodeViewModel;
+  readonly titleChars: number;
+}) {
+  const titleLines = mapTitleLines(node.title, titleChars);
   return (
     <>
       <rect
@@ -154,7 +153,7 @@ function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
         strokeDasharray={node.status === "blocked" ? BLOCKED_DASH : undefined}
         className={`${FILL_BY_STATUS[node.status] ?? FALLBACK_FILL} ${nodeStrokeClass(node)}`}
       />
-      {node.isFocus ? (
+      {node.zone === null ? (
         <rect
           x={-FOCUS_RING_GAP}
           y={-FOCUS_RING_GAP}
@@ -222,13 +221,16 @@ function MapNodeFace({ node }: { readonly node: FocusNodeViewModel }) {
 
 function MapNode({
   node,
+  titleChars,
   onFocusIssue,
 }: {
   readonly node: FocusNodeViewModel;
+  readonly titleChars: number;
   readonly onFocusIssue: (issueId: string) => void;
 }) {
   const transform = `translate(${node.x}, ${node.y})`;
-  if (node.isFocus) {
+  const { zone } = node;
+  if (zone === null) {
     return (
       <g
         transform={transform}
@@ -236,7 +238,7 @@ function MapNode({
         aria-current="true"
         aria-label={`${node.title} - ${node.statusLabel} - this ticket`}
       >
-        <MapNodeFace node={node} />
+        <MapNodeFace node={node} titleChars={titleChars} />
       </g>
     );
   }
@@ -250,96 +252,241 @@ function MapNode({
       transform={transform}
       role="button"
       tabIndex={0}
-      aria-label={`${node.title} - ${node.statusLabel}`}
+      aria-label={`${ZONE_NODE_PREFIX[zone]}: ${node.title} - ${node.statusLabel}`}
       className="cursor-pointer outline-none hover:opacity-80 focus-visible:outline-1 focus-visible:outline-primary"
       onClick={() => onFocusIssue(node.id)}
       onKeyDown={handleKeyDown}
     >
-      <MapNodeFace node={node} />
+      <MapNodeFace node={node} titleChars={titleChars} />
     </g>
   );
 }
 
-function MapOverflow({ graph }: { readonly graph: FocusGraph }) {
-  if (graph.overflow === null) return null;
-  const { x, y, width, height } = graph.overflow;
+function MapOverflow({ overflow }: { readonly overflow: FocusOverflowViewModel }) {
   return (
-    <g transform={`translate(${x}, ${y})`} role="img" aria-label={`${graph.hidden} more outside`}>
-      <rect
-        width={width}
-        height={height}
-        rx={NODE_CORNER_RADIUS}
+    <text
+      x={overflow.x}
+      y={overflow.y}
+      textAnchor="middle"
+      role="img"
+      aria-label={`${overflow.hidden} more ${ZONE_NOUNS[overflow.zone]}`}
+      className="fill-muted-foreground text-3xs"
+    >
+      {overflow.text}
+    </text>
+  );
+}
+
+function MapZoneLabel({ label }: { readonly label: FocusLabelViewModel }) {
+  return (
+    <text
+      x={label.x}
+      y={label.y}
+      textAnchor="middle"
+      className="fill-muted-foreground text-3xs font-medium"
+    >
+      {label.text}
+    </text>
+  );
+}
+
+function KeySwatch({ children }: { readonly children: ReactNode }) {
+  return (
+    <svg
+      width={KEY_SWATCH_WIDTH}
+      height={KEY_SWATCH_HEIGHT}
+      viewBox={`0 0 ${KEY_SWATCH_WIDTH} ${KEY_SWATCH_HEIGHT}`}
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      {children}
+    </svg>
+  );
+}
+
+const KEY_LINE_Y = KEY_SWATCH_HEIGHT / 2;
+
+function KeyTreeSwatch() {
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y}`}
+        className="stroke-muted-foreground/50"
+        strokeWidth={BUS_STROKE_WIDTH}
         fill="none"
-        strokeDasharray={BLOCKED_DASH}
-        className="stroke-muted-foreground/40"
       />
-      <text
-        x={width / 2}
-        y={height / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        className="fill-muted-foreground text-3xs"
-      >
-        {`${graph.hidden} more outside`}
-      </text>
-    </g>
+      <path
+        d={`M ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y - KEY_ARROW_HALF_HEIGHT} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH - KEY_ARROW_LENGTH} ${KEY_LINE_Y + KEY_ARROW_HALF_HEIGHT} z`}
+        className="fill-muted-foreground/60"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyPeerSwatch() {
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y}`}
+        className="stroke-muted-foreground/40"
+        strokeWidth={DEFAULT_STROKE_WIDTH}
+        strokeDasharray="2 4"
+        fill="none"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyBlocksSwatch() {
+  const crossStart = KEY_SWATCH_WIDTH - KEY_CROSS_SIZE;
+  return (
+    <KeySwatch>
+      <path
+        d={`M 0 ${KEY_LINE_Y} L ${crossStart} ${KEY_LINE_Y}`}
+        className="stroke-error/80"
+        strokeWidth={BUS_STROKE_WIDTH}
+        strokeDasharray="6 4"
+        fill="none"
+      />
+      <path
+        d={`M ${crossStart} ${KEY_LINE_Y - KEY_CROSS_SIZE / 2} L ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y + KEY_CROSS_SIZE / 2} M ${KEY_SWATCH_WIDTH} ${KEY_LINE_Y - KEY_CROSS_SIZE / 2} L ${crossStart} ${KEY_LINE_Y + KEY_CROSS_SIZE / 2}`}
+        className="stroke-error/80"
+        strokeWidth={FLAGGED_STROKE_WIDTH}
+        fill="none"
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyNodeSwatch({
+  strokeClass,
+  strokeWidth,
+}: {
+  readonly strokeClass: string;
+  readonly strokeWidth: number;
+}) {
+  return (
+    <KeySwatch>
+      <rect
+        x={strokeWidth}
+        y={strokeWidth}
+        width={KEY_SWATCH_WIDTH - strokeWidth * 2}
+        height={KEY_SWATCH_HEIGHT - strokeWidth * 2}
+        rx={KEY_NODE_CORNER_RADIUS}
+        fill="none"
+        strokeWidth={strokeWidth}
+        className={strokeClass}
+      />
+    </KeySwatch>
+  );
+}
+
+function KeyRingSwatch() {
+  const ringRadius = KEY_SWATCH_HEIGHT / 2 - FLAGGED_STROKE_WIDTH;
+  return (
+    <KeySwatch>
+      <circle
+        cx={KEY_SWATCH_WIDTH / 2}
+        cy={KEY_LINE_Y}
+        r={ringRadius}
+        fill="none"
+        strokeWidth={FLAGGED_STROKE_WIDTH}
+        className="stroke-foreground"
+      />
+    </KeySwatch>
+  );
+}
+
+const KEY_ENTRIES: ReadonlyArray<{ readonly text: string; readonly swatch: ReactNode }> = [
+  { text: "child to parent", swatch: <KeyTreeSwatch /> },
+  { text: "sibling", swatch: <KeyPeerSwatch /> },
+  { text: "blocks", swatch: <KeyBlocksSwatch /> },
+  {
+    text: "has open children",
+    swatch: <KeyNodeSwatch strokeClass="stroke-warning" strokeWidth={FLAGGED_STROKE_WIDTH} />,
+  },
+  { text: "this ticket", swatch: <KeyRingSwatch /> },
+];
+
+function MapKey() {
+  return (
+    <ul className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-3xs text-muted-foreground">
+      {KEY_ENTRIES.map((entry) => (
+        <li key={entry.text} className="flex items-center gap-1">
+          {entry.swatch}
+          <span>{entry.text}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
 export function MapView({ graph, onFocusIssue }: MapViewProps) {
-  const nodesById = new Map(graph.nodes.map((node) => [node.id, node] as const));
+  return (
+    <div>
+      <MapDiagram graph={graph} onFocusIssue={onFocusIssue} />
+      <MapKey />
+    </div>
+  );
+}
+
+function MapDiagram({ graph, onFocusIssue }: MapViewProps) {
   const width = graph.layout.width + VIEW_MARGIN * 2;
   const height = graph.layout.height + VIEW_MARGIN * 2;
   return (
-    <div className="overflow-x-auto">
-      <svg
-        viewBox={`${-VIEW_MARGIN} ${-VIEW_MARGIN} ${width} ${height}`}
-        width={width}
-        height={height}
-        className="mx-auto"
-        role="group"
-        aria-label="Ticket relation map"
-      >
-        <defs>
-          <marker
-            id="bc-map-arrow-muted"
-            viewBox="0 0 10 10"
-            refX={9}
-            refY={5}
-            markerWidth={7}
-            markerHeight={7}
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground/60" />
-          </marker>
-          <marker
-            id="bc-map-cross"
-            viewBox="0 0 12 12"
-            refX={6}
-            refY={6}
-            markerWidth={9}
-            markerHeight={9}
-            orient="auto"
-          >
-            <path
-              d="M 2 2 L 10 10 M 10 2 L 2 10"
-              className="stroke-error/80"
-              strokeWidth={2}
-              fill="none"
-            />
-          </marker>
-        </defs>
-        {graph.edges.map((edge) => {
-          const from = nodesById.get(edge.from);
-          const to = nodesById.get(edge.to);
-          if (from === undefined || to === undefined) return null;
-          return <MapEdge key={edge.key} edge={edge} path={edgePath(from, to, edge)} />;
-        })}
-        {graph.nodes.map((node) => (
-          <MapNode key={node.id} node={node} onFocusIssue={onFocusIssue} />
-        ))}
-        <MapOverflow graph={graph} />
-      </svg>
-    </div>
+    <svg
+      viewBox={`${-VIEW_MARGIN} ${-VIEW_MARGIN} ${width} ${height}`}
+      style={{ maxWidth: width }}
+      className="mx-auto block h-auto w-full"
+      role="group"
+      aria-label="Ticket relation map"
+    >
+      <defs>
+        <marker
+          id="bc-map-arrow-muted"
+          viewBox="0 0 10 10"
+          refX={9}
+          refY={5}
+          markerWidth={7}
+          markerHeight={7}
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground/60" />
+        </marker>
+        <marker
+          id="bc-map-cross"
+          viewBox="0 0 12 12"
+          refX={6}
+          refY={6}
+          markerWidth={9}
+          markerHeight={9}
+          orient="auto"
+        >
+          <path
+            d="M 2 2 L 10 10 M 10 2 L 2 10"
+            className="stroke-error/80"
+            strokeWidth={2}
+            fill="none"
+          />
+        </marker>
+      </defs>
+      {graph.connectors.map((connector) => (
+        <MapConnector key={`${connector.zone}-${connector.role}`} connector={connector} />
+      ))}
+      {graph.labels.map((label) => (
+        <MapZoneLabel key={label.zone} label={label} />
+      ))}
+      {graph.nodes.map((node) => (
+        <MapNode
+          key={node.id}
+          node={node}
+          titleChars={graph.layout.titleChars}
+          onFocusIssue={onFocusIssue}
+        />
+      ))}
+      {graph.overflows.map((overflow) => (
+        <MapOverflow key={overflow.zone} overflow={overflow} />
+      ))}
+    </svg>
   );
 }
