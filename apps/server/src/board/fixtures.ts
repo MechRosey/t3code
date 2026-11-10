@@ -1,12 +1,13 @@
 import * as NodeURL from "node:url";
 
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
 
-class FixtureMarkerNotFound extends Data.TaggedError("FixtureMarkerNotFound")<{
-  readonly message: string;
-}> {}
+class FixtureMarkerNotFound extends Schema.TaggedError<FixtureMarkerNotFound>()(
+  "FixtureMarkerNotFound",
+  { message: Schema.String },
+) {}
 
 const fixturesUrl = new URL("__fixtures__/", import.meta.url);
 

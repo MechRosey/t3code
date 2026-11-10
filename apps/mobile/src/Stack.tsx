@@ -584,7 +584,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
       options: {
         ...(Platform.OS === "android"
           ? { presentation: "card" as const, headerShown: false }
-          : SOLID_HEADER_OPTIONS),
+          : pageRoute({ header: "solid" })),
       },
     }),
     AddProjectDestination: createNativeStackScreen({

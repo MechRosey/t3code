@@ -248,7 +248,6 @@ import {
   resolveProjectBoardEntry,
   writeStoredBoardOpenStyle,
 } from "./todo/boardPanelSwitch";
-import { useRightPanelStore } from "../rightPanelStore";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   Combobox,
