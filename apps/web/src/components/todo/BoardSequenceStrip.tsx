@@ -41,7 +41,7 @@ function SequenceChipLabel({ chip }: { readonly chip: SequenceChip }) {
       <span className="font-mono text-sm leading-tight font-semibold text-foreground/80">
         {chip.shortId}
       </span>
-      <span className="max-w-32 truncate text-xs leading-tight text-foreground/70">
+      <span className="line-clamp-2 max-w-21 text-xs leading-tight break-words text-foreground/70">
         {chip.title}
       </span>
     </>
@@ -142,14 +142,14 @@ export const BoardSequenceStrip = memo(function BoardSequenceStrip({
         cardOver && "outline-2 outline-dashed outline-primary -outline-offset-4",
       )}
     >
-      <ul aria-label="Doing" className="flex shrink-0 items-center gap-1.5">
+      <ul aria-label="Doing" className="flex shrink-0 items-stretch gap-1.5">
         {strip.doing.map((chip) => (
           <DoingSequenceChip key={chip.id} chip={chip} onOpen={onOpen} />
         ))}
       </ul>
       <div aria-hidden className="h-6 w-px shrink-0 bg-border" />
       <SortableContext items={nextDragIds} strategy={horizontalListSortingStrategy}>
-        <ul aria-label="Next" className="flex shrink-0 items-center gap-1.5">
+        <ul aria-label="Next" className="flex shrink-0 items-stretch gap-1.5">
           {strip.next.map((chip) => (
             <NextSequenceChip key={chip.id} chip={chip} onOpen={onOpen} onRemove={onRemove} />
           ))}
