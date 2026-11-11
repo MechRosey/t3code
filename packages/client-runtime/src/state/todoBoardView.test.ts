@@ -1,4 +1,4 @@
-import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import type { TodoArchiveGroup, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
@@ -18,6 +18,7 @@ import {
   buildBoardViewModel,
   cardHueStyle,
   EMPTY_BOARD_SNAPSHOT,
+  filterArchiveGroups,
   filterIssuesByTag,
   isBoardFilterActive,
   isQuickFilterActive,
@@ -68,7 +69,7 @@ function sections(overrides: Partial<TodoIssue["sections"]> = {}): TodoIssue["se
 }
 
 function snapshot(issues: TodoIssue[]): TodoBoardSnapshot {
-  return { root: "C:/repo/.todo", repoName: "repo", issues };
+  return { root: "C:/repo/.todo", repoName: "repo", issues, sequence: [] };
 }
 
 function columnOf(model: ReturnType<typeof buildBoardViewModel>, id: string): string {
@@ -812,9 +813,78 @@ describe("card lineage presentation", () => {
     const cards = new Map(
       model.columns.flatMap((column) => column.cards).map((card) => [card.issue.id, card]),
     );
-    assert.deepEqual(cards.get("child")!.parent, { id: "root", title: "the root" });
+    assert.deepEqual(cards.get("child")!.parent, { id: "root", title: "the root", closed: false });
     assert.equal(cards.get("root")!.parent, null);
     assert.deepEqual(cards.get("root")!.blockedBy, []);
+  });
+
+  it("derives parent, children, blockers and blockees with closed flags from the full snapshot", () => {
+    const parent = issue({ id: "parent", title: "the parent", status: "done" });
+    const card = issue({
+      id: "card",
+      title: "the card",
+      parentId: "parent",
+      depth: 1,
+      links: { blocks: ["open-target", "done-target", "gone", "gone", "open-target"], relates: [] },
+    });
+    const openChild = issue({ id: "kid-a", title: "open kid", parentId: "card", depth: 2 });
+    const doneChild = issue({
+      id: "kid-b",
+      title: "done kid",
+      parentId: "card",
+      depth: 2,
+      status: "done",
+    });
+    const openBlocker = issue({
+      id: "blocker-a",
+      title: "open blocker",
+      status: "doing",
+      links: { blocks: ["card", "card"], relates: [] },
+    });
+    const cancelledBlocker = issue({
+      id: "blocker-b",
+      title: "cancelled blocker",
+      status: "cancelled",
+      links: { blocks: ["card"], relates: [] },
+    });
+    const openTarget = issue({ id: "open-target", title: "open target" });
+    const doneTarget = issue({ id: "done-target", title: "done target", status: "cancelled" });
+    const orphan = issue({ id: "orphan", title: "orphan", parentId: "missing", depth: 1 });
+    const model = buildBoardViewModel(
+      snapshot([
+        parent,
+        card,
+        openChild,
+        doneChild,
+        openBlocker,
+        cancelledBlocker,
+        openTarget,
+        doneTarget,
+        orphan,
+      ]),
+      DEFAULT_BOARD_UI_STATE,
+    );
+    const cards = new Map(
+      model.columns.flatMap((column) => column.cards).map((entry) => [entry.issue.id, entry]),
+    );
+    const resolved = cards.get("card")!;
+    assert.deepEqual(resolved.parent, { id: "parent", title: "the parent", closed: true });
+    assert.deepEqual(resolved.children, [
+      { id: "kid-a", title: "open kid", closed: false },
+      { id: "kid-b", title: "done kid", closed: true },
+    ]);
+    assert.deepEqual(resolved.blockedBy, [
+      { id: "blocker-a", title: "open blocker", closed: false },
+      { id: "blocker-b", title: "cancelled blocker", closed: true },
+    ]);
+    assert.deepEqual(resolved.blocks, [
+      { id: "open-target", title: "open target", closed: false },
+      { id: "done-target", title: "done target", closed: true },
+      { id: "gone", title: "gone", closed: false },
+    ]);
+    assert.equal(cards.get("orphan")!.parent, null);
+    assert.deepEqual(cards.get("kid-a")!.children, []);
+    assert.deepEqual(cards.get("kid-a")!.blocks, []);
   });
 
   it("resolves blocked-by edges to ids and titles on the card", () => {
@@ -829,7 +899,9 @@ describe("card lineage presentation", () => {
     const cards = new Map(
       model.columns.flatMap((column) => column.cards).map((card) => [card.issue.id, card]),
     );
-    assert.deepEqual(cards.get("target")!.blockedBy, [{ id: "blocker", title: "first do this" }]);
+    assert.deepEqual(cards.get("target")!.blockedBy, [
+      { id: "blocker", title: "first do this", closed: false },
+    ]);
   });
 });
 
@@ -1229,7 +1301,7 @@ describe("board view-model golden", () => {
     const childCard = doing.cards[0]!;
     assert.equal(childCard.glyph, "▶");
     assert.equal(childCard.badge, null);
-    assert.deepEqual(childCard.parent, { id: "root", title: "epic one" });
+    assert.deepEqual(childCard.parent, { id: "root", title: "epic one", closed: false });
     const rootCard = doing.cards[1]!;
     assert.equal(rootCard.badge, "human");
     assert.equal(rootCard.isRoot, true);
@@ -1241,7 +1313,7 @@ describe("board view-model golden", () => {
     const blockedCard = model.columns
       .find((column) => column.status === "blocked")!
       .cards.find((card) => card.issue.id === "blocked")!;
-    assert.deepEqual(blockedCard.blockedBy, [{ id: "blocker", title: "the cause" }]);
+    assert.deepEqual(blockedCard.blockedBy, [{ id: "blocker", title: "the cause", closed: false }]);
     assert.equal(blockedCard.tinted, false);
   });
 });
@@ -1262,5 +1334,77 @@ describe("empty board scaffold", () => {
     assert.deepEqual(model.commonTags, []);
     assert.equal(model.root, "");
     assert.equal(model.repoName, "");
+  });
+});
+
+describe("archive group filtering", () => {
+  function group(dirName: string, issues: TodoIssue[]): TodoArchiveGroup {
+    const rootIssue = issues.find((candidate) => candidate.parentId === null) ?? null;
+    return { dirName, rootIssue, snapshot: snapshot(issues) };
+  }
+
+  const none = { tag: null, tagSpec: "", query: "", epic: "", sort: "updated-desc" } as const;
+  const groups = [
+    group("a", [
+      issue({ id: "aaaaa-root", title: "a root", updated: "2026-09-01", tags: ["bug"] }),
+      issue({
+        id: "aaaab-kid",
+        title: "a kid",
+        updated: "2026-09-05",
+        parentId: "aaaaa-root",
+        tags: ["TreadOnly"],
+      }),
+    ]),
+    group("b", [issue({ id: "bbbbb-root", title: "b root", updated: "2026-09-03", tags: ["ui"] })]),
+    group("c", [
+      issue({ id: "ccccc-root", title: "c root", updated: "2026-09-09", tags: ["TreadOnly"] }),
+    ]),
+  ];
+  const idsOf = (filtered: ReadonlyArray<TodoArchiveGroup>) =>
+    filtered.map((entry) => [entry.dirName, entry.snapshot.issues.map((row) => row.id)]);
+
+  it("narrows and sorts archived groups like the board", () => {
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tagSpec: "bug" })), [
+      ["a", ["aaaaa-root"]],
+    ]);
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, epic: "ui" })), [
+      ["b", ["bbbbb-root"]],
+    ]);
+
+    const orphan: TodoArchiveGroup = {
+      dirName: "z",
+      rootIssue: null,
+      snapshot: snapshot([
+        issue({ id: "zzzzz-kid", title: "orphan", parentId: "gone", tags: ["TreadOnly"] }),
+      ]),
+    };
+    assert.deepEqual(
+      filterArchiveGroups([orphan, ...groups], { ...none, tagSpec: "treadonly" }).map(
+        (entry) => entry.dirName,
+      ),
+      ["c", "a", "z"],
+    );
+
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tagSpec: "treadonly" })), [
+      ["c", ["ccccc-root"]],
+      ["a", ["aaaab-kid", "aaaaa-root"]],
+    ]);
+
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, tag: "ui" })), [
+      ["b", ["bbbbb-root"]],
+    ]);
+    assert.deepEqual(idsOf(filterArchiveGroups(groups, { ...none, query: "ccccc" })), [
+      ["c", ["ccccc-root"]],
+    ]);
+    assert.deepEqual(filterArchiveGroups(groups, { ...none, query: "nomatch" }), []);
+
+    assert.deepEqual(
+      filterArchiveGroups(groups, { ...none, sort: "id-asc" }).map((entry) => entry.dirName),
+      ["a", "b", "c"],
+    );
+    assert.deepEqual(
+      filterArchiveGroups(groups, none).map((entry) => entry.dirName),
+      ["c", "b", "a"],
+    );
   });
 });

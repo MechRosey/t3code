@@ -581,11 +581,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
     Board: createNativeStackScreen({
       screen: BoardRouteScreen,
       linking: "board",
-      options: {
-        ...(Platform.OS === "android"
-          ? { presentation: "card" as const, headerShown: false }
-          : pageRoute({ header: "solid" })),
-      },
+      options: pageRoute({ header: "solid" }),
     }),
     AddProjectDestination: createNativeStackScreen({
       linking: "new/add-project/destination",

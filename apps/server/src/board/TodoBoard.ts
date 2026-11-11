@@ -18,6 +18,8 @@ import * as Stream from "effect/Stream";
 import {
   type TodoBoardMutateInput,
   type TodoBoardRegenerateTarget,
+  type TodoBoardSequenceInput,
+  type TodoBoardSequenceResult,
   type TodoBoardSnapshot,
   type TodoIssue,
   TodoBoardError,
@@ -37,6 +39,7 @@ import {
   findIssueDirName,
   isArchivedPath,
   isIssueMarkerFile,
+  type IssueDirLookup,
   MarkerConflictError,
   repoDisplayName,
   resolveLinkId,
@@ -52,6 +55,15 @@ import {
   BoardRuleError,
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
+import {
+  leavesSequence,
+  parseSequenceRefs,
+  removeSequenceRef,
+  resolveSequence,
+  SEQUENCE_FILE,
+  SEQUENCE_TEMP_FILE,
+  serializeSequence,
+} from "./sequence.ts";
 import { canonicalStatus } from "./vocabulary.ts";
 
 type TodoBoardFailure = TodoBoardError["failure"];
@@ -89,6 +101,9 @@ export class TodoBoard extends Context.Service<
     readonly mutate: (
       input: TodoBoardMutateInput,
     ) => Effect.Effect<{ readonly issue: TodoIssue }, TodoBoardError>;
+    readonly setSequence: (
+      input: TodoBoardSequenceInput,
+    ) => Effect.Effect<TodoBoardSequenceResult, TodoBoardError>;
     readonly regenerate: (input: {
       readonly cwd: string;
       readonly target: TodoBoardRegenerateTarget;
@@ -116,6 +131,14 @@ const toError = (failure: TodoBoardFailure, message: string, cause?: unknown): T
 
 const fromRuleError = (error: BoardRuleError): TodoBoardError =>
   toError(error.failure, error.message);
+
+const lookupFailure = (
+  lookup: Exclude<IssueDirLookup, { tag: "found" }>,
+  id: string,
+): TodoBoardError =>
+  lookup.tag === "ambiguous"
+    ? toError("ambiguous_issue_id", `Ambiguous id '${id}' matches: ${lookup.matches.join(", ")}`)
+    : toError("issue_not_found", `Issue not found: ${id}`);
 
 const normalizeSlashes = (value: string): string => value.replace(/\\/g, "/");
 
@@ -303,6 +326,17 @@ const make = Effect.gen(function* () {
     }
   });
 
+  const readSequenceText = Effect.fn("TodoBoard.readSequenceText")(function* (root: string) {
+    const file = path.join(root, SEQUENCE_FILE);
+    const failed = (cause: unknown) => toError("operation_failed", `Failed to read ${file}`, cause);
+    if (!(yield* fs.exists(file).pipe(Effect.mapError(failed)))) return "";
+    return yield* fs.readFileString(file).pipe(Effect.mapError(failed));
+  });
+
+  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (root: string) {
+    return parseSequenceRefs(yield* readSequenceText(root));
+  });
+
   const readBoardAt = Effect.fn("TodoBoard.readBoardAt")(function* (
     root: string,
     archived = false,
@@ -359,7 +393,13 @@ const make = Effect.gen(function* () {
         },
       });
     }
-    return { root, repoName: repoDisplayName(root), issues };
+    const sequence = archived
+      ? []
+      : resolveSequence(
+          yield* readSequenceRefs(root).pipe(Effect.orElseSucceed(() => [] as Array<string>)),
+          issues,
+        );
+    return { root, repoName: repoDisplayName(root), issues, sequence };
   });
 
   const readArchiveAt = Effect.fn("TodoBoard.readArchiveAt")(function* (root: string) {
@@ -399,17 +439,7 @@ const make = Effect.gen(function* () {
       dirs.map((dir) => dir.name),
       id,
     );
-    if (lookup.tag === "ambiguous") {
-      return Effect.fail(
-        toError(
-          "ambiguous_issue_id",
-          `Ambiguous id '${id}' matches: ${lookup.matches?.join(", ")}`,
-        ),
-      );
-    }
-    if (lookup.tag !== "found") {
-      return Effect.fail(toError("issue_not_found", `Issue not found: ${id}`));
-    }
+    if (lookup.tag !== "found") return Effect.fail(lookupFailure(lookup, id));
     const target = dirs.find((dir) => dir.name === lookup.name);
     return target
       ? Effect.succeed(target)
@@ -426,6 +456,21 @@ const make = Effect.gen(function* () {
       return yield* toError("issue_not_found", `Issue not found after mutation: ${id}`);
     }
     return issue;
+  });
+
+  const removeFromSequence = Effect.fn("TodoBoard.removeFromSequence")(function* (
+    root: string,
+    dirs: ReadonlyArray<IssueDir>,
+    target: IssueDir,
+  ) {
+    const text = yield* readSequenceText(root);
+    const pruned = removeSequenceRef(
+      text,
+      dirs.map((dir) => dir.name),
+      target.name,
+    );
+    if (pruned === text) return;
+    yield* writeSequenceFile(root, pruned);
   });
 
   const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (
@@ -454,6 +499,16 @@ const make = Effect.gen(function* () {
         const parsed = parseIssue(text, target.name);
         const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
         yield* writeMarker(root, target, next, stat);
+        if (leavesSequence(canonicalStatus(parsed.fm.status), next.fm.status)) {
+          yield* removeFromSequence(root, dirs, target).pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning("Failed to prune the sequence after a status change.", {
+                issueId: target.name,
+                cause,
+              }),
+            ),
+          );
+        }
         return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
       }
       case "comment": {
@@ -571,6 +626,62 @@ const make = Effect.gen(function* () {
         };
       }
     }
+  });
+
+  const archivedIssueNames = Effect.fn("TodoBoard.archivedIssueNames")(function* (root: string) {
+    const archiveRoot = path.join(root, "archive");
+    const groupNames = yield* fs
+      .readDirectory(archiveRoot)
+      .pipe(Effect.orElseSucceed(() => [] as Array<string>));
+    const names: Array<string> = [];
+    for (const groupName of groupNames) {
+      const groupDir = path.join(archiveRoot, groupName);
+      if (!(yield* existsDirectory(groupDir))) continue;
+      const dirs = yield* listIssueDirs(groupDir, { looseRootMarkers: true });
+      names.push(...dirs.map((dir) => dir.name));
+    }
+    return names;
+  });
+
+  const assertSequenceRefsKnown = Effect.fn("TodoBoard.assertSequenceRefsKnown")(function* (
+    root: string,
+    refs: ReadonlyArray<string>,
+    ids: ReadonlyArray<string>,
+  ) {
+    let archivedNames: ReadonlyArray<string> | undefined;
+    for (const ref of refs) {
+      const lookup = findIssueDirName(ids, ref);
+      if (lookup.tag === "found") continue;
+      if (lookup.tag === "notFound") {
+        archivedNames ??= yield* archivedIssueNames(root);
+        if (findIssueDirName(archivedNames, ref).tag !== "notFound") continue;
+      }
+      return yield* lookupFailure(lookup, ref);
+    }
+  });
+
+  const writeSequenceFile = Effect.fn("TodoBoard.writeSequenceFile")(function* (
+    root: string,
+    content: string,
+  ) {
+    const file = path.join(root, SEQUENCE_FILE);
+    const temp = path.join(root, SEQUENCE_TEMP_FILE);
+    const failed = (cause: unknown) =>
+      toError("operation_failed", `Failed to write ${file}`, cause);
+    yield* fs.writeFileString(temp, content).pipe(Effect.mapError(failed));
+    yield* fs.rename(temp, file).pipe(Effect.mapError(failed));
+  });
+
+  const setSequenceAt = Effect.fn("TodoBoard.setSequenceAt")(function* (
+    root: string,
+    refs: ReadonlyArray<string>,
+  ) {
+    const { issues } = yield* readBoardAt(root);
+    const ids = issues.map((issue) => issue.id);
+    yield* assertSequenceRefsKnown(root, refs, ids);
+    const sequence = resolveSequence(refs, issues);
+    yield* writeSequenceFile(root, serializeSequence(sequence, ids));
+    return { sequence };
   });
 
   const resolveSkillScript: Effect.Effect<string, TodoBoardError> = Effect.gen(function* () {
@@ -691,6 +802,10 @@ const make = Effect.gen(function* () {
     mutate: Effect.fn("TodoBoard.mutate")(function* (input: TodoBoardMutateInput) {
       const root = yield* resolveRoot(input.cwd);
       return yield* withLock(root, mutateAt(root, input));
+    }),
+    setSequence: Effect.fn("TodoBoard.setSequence")(function* (input: TodoBoardSequenceInput) {
+      const root = yield* resolveRoot(input.cwd);
+      return yield* withLock(root, setSequenceAt(root, input.ids));
     }),
     regenerate: Effect.fn("TodoBoard.regenerate")(function* (input: {
       readonly cwd: string;

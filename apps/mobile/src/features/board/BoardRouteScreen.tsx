@@ -11,17 +11,16 @@ import {
 } from "@t3tools/client-runtime/state/todo-board-view";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/ui/AppText";
-import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader.android";
+import { AppBar } from "../../components/ui/AppBar";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { cn } from "../../lib/cn";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
-import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import { todoBoard } from "../../state/todoBoard";
 import { classifyTodoBoardFailure } from "@t3tools/client-runtime/state/todo-board-status";
@@ -154,22 +153,7 @@ export function BoardRouteScreen(props: BoardRouteScreenProps) {
 
   return (
     <View className="flex-1 bg-screen">
-      <NativeStackScreenOptions
-        options={{
-          title,
-          ...(Platform.OS === "ios" && headerSubtitle !== null
-            ? { unstable_headerSubtitle: headerSubtitle }
-            : {}),
-        }}
-      />
-      {Platform.OS === "android" ? (
-        <AndroidScreenHeader
-          title={title}
-          subtitle={headerSubtitle}
-          hideBottomBorder
-          onBack={handleBack}
-        />
-      ) : null}
+      <AppBar title={title} subtitle={headerSubtitle} hideBottomBorder onBack={handleBack} />
       {body}
     </View>
   );

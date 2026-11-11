@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -14,7 +15,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as TodoBoard from "./TodoBoard.ts";
 import { TodoBoardReadResult, type TodoBoardSnapshot } from "@t3tools/contracts";
 import { ensureUnchanged } from "./issues.ts";
-import { fixturesRoot, readFixture } from "./fixtures.ts";
+import { installBoard, readFixture } from "./fixtures.ts";
 
 const TestLayer = TodoBoard.layer.pipe(Layer.provideMerge(NodeServices.layer));
 
@@ -45,17 +46,30 @@ const conflictLayer = Layer.effect(
 
 const conflictTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(conflictLayer));
 
-const installBoard = (fixtureBoard: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const target = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-board-" });
-    const boardDir = path.join(target, "project", ".todo");
-    yield* fs.copy(path.join(fixturesRoot, fixtureBoard), boardDir);
-    const cwd = path.join(target, "project", "sub", "deep");
-    yield* fs.makeDirectory(cwd, { recursive: true });
-    return { target, boardDir, cwd };
-  });
+const sequenceRenameTrap: { failing: boolean } = { failing: false };
+
+const sequenceRenameLayer = Layer.effect(
+  FileSystem.FileSystem,
+  Effect.map(FileSystem.FileSystem, (inner) =>
+    FileSystem.make({
+      ...inner,
+      rename: (from, to) =>
+        sequenceRenameTrap.failing && to.endsWith("SEQUENCE.md")
+          ? Effect.fail(
+              PlatformError.systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "rename",
+                pathOrDescriptor: to,
+                description: "EPERM",
+              }),
+            )
+          : inner.rename(from, to),
+    }),
+  ),
+).pipe(Layer.provideMerge(NodeServices.layer));
+
+const sequenceRenameTestLayer = TodoBoard.layer.pipe(Layer.provideMerge(sequenceRenameLayer));
 
 const TodoPointerContent = Schema.Struct({
   central: Schema.String,
@@ -182,6 +196,61 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("snapshots the planned sequence in file order, keeping only open tickets", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const absent = yield* board.read({ cwd });
+        expect(absent.sequence).toEqual([]);
+        expect(yield* fs.exists(sequencePath)).toBe(false);
+
+        yield* board.mutate({ action: "status", cwd, id: "e20d1-status-target", status: "doing" });
+        const lines = [
+          "﻿762b5",
+          "",
+          "6ba55",
+          "762b5",
+          "e20d1-status-target",
+          "e",
+          "e0ae5",
+          "df3cf-archive-child",
+          "zzzzz",
+          "55041",
+        ];
+        const raw = `${lines.join("\r\n")}\r\n`;
+        yield* fs.writeFileString(sequencePath, raw);
+
+        const snapshot = yield* board.read({ cwd });
+
+        expect(snapshot.sequence).toEqual([
+          "762b5-comment-target",
+          "6ba55-parser-fidelity",
+          "e20d1-status-target",
+          "55041-tag-target",
+        ]);
+        expect(snapshot.issues.length).toBe(16);
+        expectSameBytes(Buffer.from(yield* fs.readFile(sequencePath)), Buffer.from(raw, "utf8"));
+      }),
+    );
+
+    it.effect("treats an unreadable SEQUENCE.md as an empty sequence", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        yield* fs.makeDirectory(path.join(boardDir, "SEQUENCE.md"));
+
+        const snapshot = yield* board.read({ cwd });
+
+        expect(snapshot.sequence).toEqual([]);
+        expect(snapshot.issues.length).toBe(16);
+      }),
+    );
+
     it.effect("excludes archived subtrees from the read snapshot", () =>
       Effect.gen(function* () {
         const { cwd } = yield* installBoard("after-archive");
@@ -221,6 +290,7 @@ describe("TodoBoard service", () => {
           "archive/e0ae5-archive-target/df3cf-archive-child/df3cf-archive-child.md",
         );
         expect(group?.snapshot.issues.length).toBe(2);
+        expect(group?.snapshot.sequence).toEqual([]);
       }),
     );
 
@@ -503,6 +573,165 @@ describe("TodoBoard service", () => {
       }),
     );
   });
+
+  it.layer(TestLayer)("sets the sequence", (it) => {
+    it.effect("replaces the file wholesale with short ids and keeps only open tickets", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* board.mutate({ action: "status", cwd, id: "e20d1-status-target", status: "doing" });
+        yield* fs.writeFileString(sequencePath, "zzzzz\r\n55041\r\n");
+
+        const result = yield* board.setSequence({
+          cwd,
+          ids: ["762b5", "6ba55-parser-fidelity", "762b5", "e0ae5", "df3cf", "e20d1"],
+        });
+
+        expect(result.sequence).toEqual([
+          "762b5-comment-target",
+          "6ba55-parser-fidelity",
+          "e20d1-status-target",
+        ]);
+        expectSameBytes(
+          Buffer.from(yield* fs.readFile(sequencePath)),
+          Buffer.from("762b5\n6ba55\ne20d1\n", "utf8"),
+        );
+        expect(yield* fs.exists(`${sequencePath}.tmp`)).toBe(false);
+        expect((yield* board.read({ cwd })).sequence).toEqual(result.sequence);
+      }),
+    );
+
+    it.effect("rejects unknown and ambiguous ids and leaves the file alone", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* fs.writeFileString(sequencePath, "762b5\n");
+
+        const unknown = yield* board
+          .setSequence({ cwd, ids: ["762b5", "zzzzz"] })
+          .pipe(Effect.flip);
+        const ambiguous = yield* board.setSequence({ cwd, ids: ["e"] }).pipe(Effect.flip);
+
+        expect(unknown.failure).toBe("issue_not_found");
+        expect(ambiguous.failure).toBe("ambiguous_issue_id");
+        expect(yield* fs.readFileString(sequencePath)).toBe("762b5\n");
+      }),
+    );
+
+    it.effect("prunes on done, cancelled and doing-to-backlog, and keeps on doing-to-read", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const setStatus = (id: string, status: string) =>
+          board.mutate({ action: "status", cwd, id, status });
+        yield* board.setSequence({
+          cwd,
+          ids: ["762b5", "e20d1", "55041", "4b42b", "67e0c", "890fa"],
+        });
+
+        yield* setStatus("e20d1-status-target", "doing");
+        yield* setStatus("e20d1-status-target", "read");
+        yield* setStatus("4b42b-epic-carrier", "read");
+        expect(yield* fs.readFileString(sequencePath)).toBe(
+          "762b5\ne20d1\n55041\n4b42b\n67e0c\n890fa\n",
+        );
+
+        yield* setStatus("67e0c-link-target", "doing");
+        yield* setStatus("67e0c-link-target", "backlog");
+        yield* setStatus("762b5-comment-target", "done");
+        yield* setStatus("55041-tag-target", "cancelled");
+
+        expect(yield* fs.readFileString(sequencePath)).toBe("e20d1\n4b42b\n890fa\n");
+      }),
+    );
+
+    it.effect("prune keeps every line it cannot resolve verbatim", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        yield* fs.writeFileString(
+          sequencePath,
+          "<<<<<<< HEAD\r\n762b5\r\n=======\r\ne20d1-archived-elsewhere\r\n55041\r\n>>>>>>> branch\r\n",
+        );
+
+        yield* board.mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" });
+
+        expect(yield* fs.readFileString(sequencePath)).toBe(
+          "<<<<<<< HEAD\r\n=======\r\ne20d1-archived-elsewhere\r\n55041\r\n>>>>>>> branch\r\n",
+        );
+      }),
+    );
+
+    it.effect("never creates the file and never rewrites it when the ticket is absent", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+
+        yield* board.mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" });
+        expect(yield* fs.exists(sequencePath)).toBe(false);
+
+        yield* fs.writeFileString(sequencePath, "55041\r\n");
+        yield* board.mutate({
+          action: "status",
+          cwd,
+          id: "890fa-link-destination",
+          status: "done",
+        });
+        expect(yield* fs.readFileString(sequencePath)).toBe("55041\r\n");
+      }),
+    );
+
+    it.effect("drops an archived id instead of rejecting it", () =>
+      Effect.gen(function* () {
+        const { cwd } = yield* installBoard("after-archive");
+        const board = yield* TodoBoard.TodoBoard;
+
+        const result = yield* board.setSequence({
+          cwd,
+          ids: ["e20d1", "e0ae5-archive-target"],
+        });
+
+        expect(result.sequence).toEqual(["e20d1-status-target"]);
+      }),
+    );
+  });
+});
+
+describe("sequence prune failure", () => {
+  it.effect("still completes the status change when the prune cannot rewrite SEQUENCE.md", () =>
+    Effect.gen(function* () {
+      const { boardDir, cwd } = yield* installBoard("board-before");
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const board = yield* TodoBoard.TodoBoard;
+      const sequencePath = path.join(boardDir, "SEQUENCE.md");
+      yield* fs.writeFileString(sequencePath, "762b5\n55041\n");
+      sequenceRenameTrap.failing = true;
+
+      const result = yield* board
+        .mutate({ action: "status", cwd, id: "762b5-comment-target", status: "done" })
+        .pipe(Effect.ensuring(Effect.sync(() => (sequenceRenameTrap.failing = false))));
+
+      expect(result.issue.status).toBe("done");
+      expect(yield* fs.readFileString(sequencePath)).toBe("762b5\n55041\n");
+      expect((yield* board.read({ cwd })).sequence).toEqual(["55041-tag-target"]);
+    }).pipe(Effect.provide(sequenceRenameTestLayer)),
+  );
 });
 
 describe("ensureUnchanged", () => {
@@ -564,6 +793,12 @@ describe("board watching", () => {
         const second = yield* Queue.take(seen);
         const changed = second.issues.find((issue) => issue.id === "762b5-comment-target");
         expect(changed?.body).toContain("watcher probe edit");
+        expect(second.sequence).toEqual([]);
+
+        yield* fs.writeFileString(path.join(boardDir, "SEQUENCE.md"), "762b5\n");
+
+        const third = yield* Queue.take(seen);
+        expect(third.sequence).toEqual(["762b5-comment-target"]);
       }).pipe(Effect.timeout("30 seconds"), Effect.scoped, Effect.provide(TestLayer)),
   );
 });

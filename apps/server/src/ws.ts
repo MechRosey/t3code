@@ -3045,6 +3045,7 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.todoBoardRead]: (input) => todoBoard.read(input),
         [WS_METHODS.todoBoardMutate]: (input) => todoBoard.mutate(input),
+        [WS_METHODS.todoBoardSequence]: (input) => todoBoard.setSequence(input),
         [WS_METHODS.todoBoardRegenerate]: (input) => todoBoard.regenerate(input),
         [WS_METHODS.todoBoardSubscribe]: (input) => todoBoard.stream(input),
         [WS_METHODS.todoArchiveRead]: (input) => todoBoard.readArchive(input),

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 /** Settings shows only on the highlighted row; the pin keeps the far-right column. */
 export function ProjectRowActions(props: {
   readonly settings?: ReactNode;
+  readonly board?: ReactNode;
   readonly pin?: ReactNode;
 }) {
   return (
@@ -12,6 +13,7 @@ export function ProjectRowActions(props: {
           {props.settings}
         </span>
       ) : null}
+      {props.board}
       {props.pin ?? <span className="size-7 sm:size-6" />}
     </span>
   );

@@ -66,10 +66,10 @@ export function buildHomeListFilterMenuItems(props: {
 
     if (props.onOpenProjectBoard !== undefined) {
       items.push({
-        id: "project-board",
+        id: "board",
         title: "Board",
         items: props.projects.map((project) => ({
-          id: `project-board:${project.key}`,
+          id: `board:${project.key}`,
           title: project.label,
           subtitle: "Open the project board",
           onPress: () => props.onOpenProjectBoard?.(project.key),

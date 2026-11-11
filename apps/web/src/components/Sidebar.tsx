@@ -3193,9 +3193,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 machineByEnvironmentId={environmentMachineById}
                               />
                             ) : null}
-                            {project ? <SidebarProjectBoardButton project={project} /> : null}
                             {project ? (
                               <ProjectRowActions
+                                board={<SidebarProjectBoardButton project={project} />}
                                 pin={
                                   canPinProject(project) ? (
                                     <ProjectPinButton

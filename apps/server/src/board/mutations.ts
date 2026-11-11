@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+
 import type { BoardIssue } from "./frontmatter.ts";
 import {
   BOARD_STATUSES,

@@ -3,7 +3,9 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import type { TodoIssue } from "@t3tools/contracts";
 import {
+  capToSlots,
   cardHueStyle,
+  type BoardCardRelation,
   type BoardCardViewModel,
   type BoardViewModel,
 } from "@t3tools/client-runtime/state/todo-board-view";
@@ -17,8 +19,10 @@ import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDispatchProgress } from "./boardDrop.logic";
+import { boardCardDragId, boardCardIssueId } from "./boardSequence.logic";
 
-const BOARD_CARD_BLOCKER_CAP = 4;
+const BOARD_CARD_RELATION_SLOTS = 4;
+const BOARD_CARD_RELATION_GLYPH = "\u276f";
 
 const BOARD_DRAG_ACTIVATION_DISTANCE = 6;
 
@@ -46,6 +50,81 @@ function TooltipSpan({
       <TooltipTrigger render={<span className={className} />}>{children}</TooltipTrigger>
       <TooltipPopup>{tooltip}</TooltipPopup>
     </Tooltip>
+  );
+}
+
+function RelationId({
+  relation,
+  tooltipPrefix,
+  glyph,
+}: {
+  readonly relation: BoardCardRelation;
+  readonly tooltipPrefix: string;
+  readonly glyph?: "before" | "after";
+}) {
+  return (
+    <TooltipSpan
+      className={cn(
+        "max-w-full truncate text-3xs leading-4 text-muted-foreground/70",
+        relation.closed && "line-through",
+      )}
+      tooltip={`${tooltipPrefix} ${shortBoardId(relation.id)}${relation.closed ? " (closed)" : ""} ${relation.title}`}
+    >
+      {glyph === "before" ? `${BOARD_CARD_RELATION_GLYPH} ` : null}
+      {shortBoardId(relation.id)}
+      {glyph === "after" ? ` ${BOARD_CARD_RELATION_GLYPH}` : null}
+    </TooltipSpan>
+  );
+}
+
+function RelationOverflow({ hidden }: { readonly hidden: number }) {
+  return hidden > 0 ? (
+    <span className="text-3xs leading-4 text-muted-foreground/70">+{hidden}</span>
+  ) : null;
+}
+
+function RelationColumn({
+  relations,
+  side,
+  tooltipPrefix,
+}: {
+  readonly relations: ReadonlyArray<BoardCardRelation>;
+  readonly side: "left" | "right";
+  readonly tooltipPrefix: string;
+}) {
+  const { shown, hidden } = capToSlots(relations, BOARD_CARD_RELATION_SLOTS);
+  return (
+    <div
+      className={cn("flex min-w-0 flex-col gap-0.5", side === "left" ? "items-end" : "items-start")}
+    >
+      {shown.map((relation) => (
+        <RelationId
+          key={relation.id}
+          relation={relation}
+          tooltipPrefix={tooltipPrefix}
+          glyph={side === "left" ? "after" : "before"}
+        />
+      ))}
+      <RelationOverflow hidden={hidden} />
+    </div>
+  );
+}
+
+function RelationRow({
+  relations,
+  tooltipPrefix,
+}: {
+  readonly relations: ReadonlyArray<BoardCardRelation>;
+  readonly tooltipPrefix: string;
+}) {
+  const { shown, hidden } = capToSlots(relations, BOARD_CARD_RELATION_SLOTS);
+  return (
+    <div className="flex min-w-0 flex-wrap justify-center gap-x-1">
+      {shown.map((relation) => (
+        <RelationId key={relation.id} relation={relation} tooltipPrefix={tooltipPrefix} />
+      ))}
+      <RelationOverflow hidden={hidden} />
+    </div>
   );
 }
 
@@ -111,34 +190,21 @@ export const BoardCard = memo(function BoardCard({
       <span className="block text-xs font-medium break-words text-foreground/90">
         {card.issue.title}
       </span>
-      {card.parent !== null ? (
-        <div className="mt-1 flex min-w-0">
-          <TooltipSpan
-            tooltip={card.parent.title}
-            className="truncate text-3xs leading-4 text-muted-foreground/70"
-          >
-            {shortBoardId(card.parent.id)}
-          </TooltipSpan>
-        </div>
-      ) : null}
-      {card.blockedBy.length > 0 ? (
-        <div className="mt-1 flex min-w-0 flex-col gap-0.5">
-          {card.blockedBy.slice(0, BOARD_CARD_BLOCKER_CAP).map((blocker) => (
-            <TooltipSpan
-              key={blocker.id}
-              className="min-w-0 truncate text-3xs leading-4 text-error/90"
-              tooltip={`Blocked by ${shortBoardId(blocker.id)} ${blocker.title}`}
-            >
-              {"\u276f"} {shortBoardId(blocker.id)}
-            </TooltipSpan>
-          ))}
-          {card.blockedBy.length > BOARD_CARD_BLOCKER_CAP ? (
-            <span className="text-3xs leading-4 text-error/90">
-              +{card.blockedBy.length - BOARD_CARD_BLOCKER_CAP}
-            </span>
+      <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-start gap-x-1.5">
+        <RelationColumn relations={card.blockedBy} side="left" tooltipPrefix="Blocked by" />
+        <div className="flex min-w-0 flex-col items-center">
+          {card.parent !== null ? (
+            <RelationId relation={card.parent} tooltipPrefix="Parent" />
           ) : null}
+          <span className="font-mono text-xs leading-4 font-bold text-foreground/70">
+            {shortBoardId(card.issue.id)}
+          </span>
         </div>
-      ) : null}
+        <RelationColumn relations={card.blocks} side="right" tooltipPrefix="Blocks" />
+        <div className="col-span-3">
+          <RelationRow relations={card.children} tooltipPrefix="Child" />
+        </div>
+      </div>
       {progress !== null ? (
         <div className="mt-1 flex items-center gap-1 text-3xs leading-4 text-primary">
           <Spinner className="size-3" />
@@ -146,9 +212,6 @@ export const BoardCard = memo(function BoardCard({
         </div>
       ) : null}
       <div className="mt-1.5 flex items-center gap-1">
-        <span className="shrink-0 font-mono text-xs leading-4 font-bold text-foreground/70">
-          {shortBoardId(card.issue.id)}
-        </span>
         {card.issue.tags.length > 0 ? (
           <div className="flex min-w-0 flex-wrap gap-1">
             {card.issue.tags.map((tag) => (
@@ -213,7 +276,7 @@ export const BoardDraggableCard = memo(function BoardDraggableCard({
   readonly selected: boolean;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `card:${card.issue.id}`,
+    id: boardCardDragId(card.issue.id),
   });
   return (
     <div
@@ -243,7 +306,8 @@ export function BoardDragPreview({
 }) {
   const { active } = useDndContext();
   if (active === null) return null;
-  const issueId = String(active.id).slice("card:".length);
+  const issueId = boardCardIssueId(String(active.id));
+  if (issueId === null) return null;
   const card = model.columns
     .flatMap((column) => column.cards)
     .find((columnCard) => columnCard.issue.id === issueId);

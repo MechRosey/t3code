@@ -7,10 +7,14 @@ import {
   TodoBoardMutateInput,
   TodoBoardRegenerateInput,
   TodoBoardRegenerateResult,
+  TodoBoardSequenceInput,
+  TodoBoardSnapshot,
   TodoIssue,
 } from "./todoBoard.ts";
 
+const decodeSnapshot = Schema.decodeUnknownSync(TodoBoardSnapshot);
 const decodeMutate = Schema.decodeUnknownSync(TodoBoardMutateInput);
+const decodeSequence = Schema.decodeUnknownSync(TodoBoardSequenceInput);
 const decodeIssue = Schema.decodeUnknownSync(TodoIssue);
 const decodeRegenerate = Schema.decodeUnknownSync(TodoBoardRegenerateInput);
 const decodeRegenerateResult = Schema.decodeUnknownSync(TodoBoardRegenerateResult);
@@ -106,12 +110,12 @@ describe("TodoArchiveReadResult", () => {
         {
           dirName: "e0ae5-archive-target",
           rootIssue: issue,
-          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [issue] },
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [issue], sequence: [] },
         },
         {
           dirName: "e0ae5-archive-target-2",
           rootIssue: null,
-          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [] },
+          snapshot: { root: "C:/board/.todo", repoName: "board", issues: [], sequence: [] },
         },
       ],
     });
@@ -128,7 +132,11 @@ describe("TodoArchiveReadResult", () => {
       boardRoot: "C:/board/.todo",
       repoName: "board",
       groups: [
-        { dirName: "g", rootIssue: null, snapshot: { root: "r", repoName: "b", issues: [] } },
+        {
+          dirName: "g",
+          rootIssue: null,
+          snapshot: { root: "r", repoName: "b", issues: [], sequence: [] },
+        },
       ],
     };
     expect(() =>
@@ -177,6 +185,26 @@ describe("TodoBoardRegenerateResult", () => {
 
   it("rejects non-string artifacts", () => {
     expect(() => decodeRegenerateResult({ artifacts: [1] })).toThrow();
+  });
+});
+
+describe("TodoBoardSnapshot", () => {
+  it("decodes a snapshot from an older server without a sequence key as an empty sequence", () => {
+    const older = { root: "C:/board/.todo", repoName: "board", issues: [] };
+
+    expect(decodeSnapshot(older).sequence).toEqual([]);
+    expect(decodeSnapshot({ ...older, sequence: ["abc12-x"] }).sequence).toEqual(["abc12-x"]);
+  });
+});
+
+describe("TodoBoardSequenceInput", () => {
+  it("accepts an ordered id list and rejects a blank id", () => {
+    expect(decodeSequence({ cwd: "C:/proj", ids: ["abc12", "def34-x"] }).ids).toEqual([
+      "abc12",
+      "def34-x",
+    ]);
+    expect(decodeSequence({ cwd: "C:/proj", ids: [] }).ids).toEqual([]);
+    expect(() => decodeSequence({ cwd: "C:/proj", ids: [" "] })).toThrow();
   });
 });
 

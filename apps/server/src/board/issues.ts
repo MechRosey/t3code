@@ -1,14 +1,8 @@
 import * as Schema from "effect/Schema";
 
-export interface MarkerStat {
-  readonly mtimeMs: number;
-  readonly size: number;
-}
+const MarkerStatSchema = Schema.Struct({ mtimeMs: Schema.Number, size: Schema.Number });
 
-const MarkerStatSchema = Schema.Struct({
-  mtimeMs: Schema.Number,
-  size: Schema.Number,
-});
+export type MarkerStat = typeof MarkerStatSchema.Type;
 
 export class MarkerConflictError extends Schema.TaggedError<MarkerConflictError>()(
   "MarkerConflictError",

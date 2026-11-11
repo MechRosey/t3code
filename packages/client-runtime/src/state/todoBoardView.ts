@@ -1,4 +1,4 @@
-import type { TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import type { TodoArchiveGroup, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
 
 export const BOARD_STATUS_ORDER = [
   "backlog",
@@ -30,13 +30,24 @@ const BOARD_COLUMN_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const DELEGATED_CLOSED_CHILD_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
+const CLOSED_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
+
+export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.has(status);
+
+export function capToSlots<T>(
+  items: ReadonlyArray<T>,
+  slots: number,
+): { readonly shown: ReadonlyArray<T>; readonly hidden: number } {
+  if (items.length <= slots) return { shown: items, hidden: 0 };
+  const visible = slots - 1;
+  return { shown: items.slice(0, visible), hidden: items.length - visible };
+}
 
 function isDelegatedIssue(issue: TodoIssue, childrenByParent: Map<string, Array<TodoIssue>>) {
   if (issue.status !== "done") return false;
   const children = childrenByParent.get(issue.id);
   if (children === undefined) return false;
-  return children.some((child) => !DELEGATED_CLOSED_CHILD_STATUSES.has(child.status));
+  return children.some((child) => !isClosedStatus(child.status));
 }
 
 const BOARD_STATUS_LABELS: Record<BoardStatus, string> = {
@@ -320,6 +331,12 @@ export function buildBlockedByIndex(issues: ReadonlyArray<TodoIssue>): Map<strin
   return blockedBy;
 }
 
+export interface BoardCardRelation {
+  readonly id: string;
+  readonly title: string;
+  readonly closed: boolean;
+}
+
 export interface BoardCardViewModel {
   readonly issue: TodoIssue;
   readonly isRoot: boolean;
@@ -330,8 +347,10 @@ export interface BoardCardViewModel {
   readonly colourClass: string;
   readonly badge: BoardQuestionBadge;
   readonly badges: ReadonlyArray<BoardSectionBadge>;
-  readonly parent: { readonly id: string; readonly title: string } | null;
-  readonly blockedBy: ReadonlyArray<{ readonly id: string; readonly title: string }>;
+  readonly parent: BoardCardRelation | null;
+  readonly blockedBy: ReadonlyArray<BoardCardRelation>;
+  readonly blocks: ReadonlyArray<BoardCardRelation>;
+  readonly children: ReadonlyArray<BoardCardRelation>;
 }
 
 export interface BoardColumnViewModel {
@@ -349,16 +368,31 @@ export interface BoardViewModel {
   readonly columns: ReadonlyArray<BoardColumnViewModel>;
 }
 
-export const EMPTY_BOARD_SNAPSHOT: TodoBoardSnapshot = { root: "", repoName: "", issues: [] };
+export const EMPTY_BOARD_SNAPSHOT: TodoBoardSnapshot = {
+  root: "",
+  repoName: "",
+  issues: [],
+  sequence: [],
+};
 
 export function cardHueStyle(issue: TodoIssue): Record<string, string> {
   return issue.rootHue === null ? {} : { "--card-hue": String(issue.rootHue) };
+}
+
+function toRelation(related: TodoIssue): BoardCardRelation {
+  return { id: related.id, title: related.title, closed: isClosedStatus(related.status) };
+}
+
+function toBlockedRelation(id: string, issuesById: Map<string, TodoIssue>): BoardCardRelation {
+  const target = issuesById.get(id);
+  return target === undefined ? { id, title: id, closed: false } : toRelation(target);
 }
 
 function toCard(
   issue: TodoIssue,
   issuesById: Map<string, TodoIssue>,
   blockedByIndex: Map<string, Array<string>>,
+  childrenByParent: Map<string, Array<TodoIssue>>,
 ): BoardCardViewModel {
   const blockerIds = blockedByIndex.get(issue.id) ?? [];
   const parent = issue.parentId === null ? null : (issuesById.get(issue.parentId) ?? null);
@@ -372,11 +406,13 @@ function toCard(
     colourClass: boardStatusColourClass(issue.status),
     badge: boardQuestionBadge(issue),
     badges: boardSectionBadges(issue),
-    parent: parent === null ? null : { id: parent.id, title: parent.title },
+    parent: parent === null ? null : toRelation(parent),
     blockedBy: blockerIds.flatMap((id) => {
       const blocker = issuesById.get(id);
-      return blocker === undefined ? [] : [{ id: blocker.id, title: blocker.title }];
+      return blocker === undefined ? [] : [toRelation(blocker)];
     }),
+    blocks: [...new Set(issue.links.blocks)].map((id) => toBlockedRelation(id, issuesById)),
+    children: (childrenByParent.get(issue.id) ?? []).map(toRelation),
   };
 }
 
@@ -387,26 +423,66 @@ export interface BoardFilterUiState {
   readonly epic?: string;
 }
 
+type BoardFilterAndSort = {
+  readonly tag: string | null;
+  readonly sort: BoardSortOrder;
+} & BoardFilterUiState;
+
+export function boardFilterMatcher(uiState: BoardFilterUiState): (issue: TodoIssue) => boolean {
+  const tag = uiState.tag ?? null;
+  const epic = uiState.epic ?? "";
+  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
+  const query = uiState.query ?? "";
+  return (issue) =>
+    (tag === null || issue.tags.includes(tag)) &&
+    matchesEpicFilter(issue.tags, epic) &&
+    matchesTagSpec(issue.tags, specTerms) &&
+    matchesIssueFreeText(issue, query);
+}
+
+function filterAndSortIssues(
+  issues: ReadonlyArray<TodoIssue>,
+  uiState: BoardFilterAndSort,
+): Array<TodoIssue> {
+  const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
+  const matched = issues.filter(boardFilterMatcher(uiState));
+  return sortBoardIssues(expandTagFilterAncestors(matched, issuesById), uiState.sort);
+}
+
+export function filterArchiveGroups(
+  groups: ReadonlyArray<TodoArchiveGroup>,
+  uiState: BoardFilterAndSort,
+): Array<TodoArchiveGroup> {
+  const shown = groups.flatMap((group) => {
+    const issues = filterAndSortIssues(group.snapshot.issues, uiState);
+    return issues.length === 0 ? [] : [{ ...group, snapshot: { ...group.snapshot, issues } }];
+  });
+  const rootRank = new Map(
+    sortBoardIssues(
+      shown.flatMap((group) => (group.rootIssue === null ? [] : [group.rootIssue])),
+      uiState.sort,
+    ).map((root, rank) => [root.id, rank] as const),
+  );
+  const rankOf = (group: TodoArchiveGroup) =>
+    group.rootIssue === null ? null : (rootRank.get(group.rootIssue.id) ?? null);
+  return shown.sort((left, right) => {
+    const leftRank = rankOf(left);
+    const rightRank = rankOf(right);
+    if (leftRank === null || rightRank === null) {
+      return Number(leftRank === null) - Number(rightRank === null);
+    }
+    return leftRank - rightRank;
+  });
+}
+
 export function buildBoardViewModel(
   snapshot: TodoBoardSnapshot,
-  uiState: { readonly tag: string | null; readonly sort: BoardSortOrder } & BoardFilterUiState,
+  uiState: BoardFilterAndSort,
 ): BoardViewModel {
   const issuesById = new Map(snapshot.issues.map((issue) => [issue.id, issue] as const));
   const blockedByIndex = buildBlockedByIndex(snapshot.issues);
   const childrenByParent = buildChildIssuesIndex(snapshot.issues);
-  const specTerms = parseTagSpec(uiState.tagSpec ?? "");
-  const visible = sortBoardIssues(
-    expandTagFilterAncestors(
-      filterIssuesByTag(snapshot.issues, uiState.tag).filter(
-        (issue) =>
-          matchesEpicFilter(issue.tags, uiState.epic ?? "") &&
-          matchesTagSpec(issue.tags, specTerms) &&
-          matchesIssueFreeText(issue, uiState.query ?? ""),
-      ),
-      issuesById,
-    ),
-    uiState.sort,
-  );
+  const visible = filterAndSortIssues(snapshot.issues, uiState);
   const grouped = new Map<string, Array<TodoIssue>>();
   for (const issue of visible) {
     const column = isDelegatedIssue(issue, childrenByParent) ? "delegated" : issue.status;
@@ -430,14 +506,12 @@ export function buildBoardViewModel(
     columns: [...known, ...extra].map((status) => ({
       status,
       label: BOARD_COLUMN_LABELS[status] ?? status,
-      cards: (grouped.get(status) ?? []).map((issue) => toCard(issue, issuesById, blockedByIndex)),
+      cards: (grouped.get(status) ?? []).map((issue) =>
+        toCard(issue, issuesById, blockedByIndex, childrenByParent),
+      ),
     })),
   };
 }
-
-const ARCHIVE_CLOSED_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
-
-const isArchiveClosedStatus = (status: string): boolean => ARCHIVE_CLOSED_STATUSES.includes(status);
 
 function buildChildIssuesIndex(issues: ReadonlyArray<TodoIssue>): Map<string, Array<TodoIssue>> {
   const childrenByParent = new Map<string, Array<TodoIssue>>();
@@ -471,7 +545,7 @@ function subtreeOf(
 export function boardArchiveEligibleSubtrees(issues: ReadonlyArray<TodoIssue>): Array<TodoIssue> {
   const childrenByParent = buildChildIssuesIndex(issues);
   return issues.filter((issue) =>
-    subtreeOf(issue, childrenByParent).every((member) => isArchiveClosedStatus(member.status)),
+    subtreeOf(issue, childrenByParent).every((member) => isClosedStatus(member.status)),
   );
 }
 

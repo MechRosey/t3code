@@ -421,6 +421,8 @@ import {
   TodoBoardReadResult,
   TodoBoardRegenerateInput,
   TodoBoardRegenerateResult,
+  TodoBoardSequenceInput,
+  TodoBoardSequenceResult,
   TodoBoardSubscribeInput,
 } from "./todoBoard.ts";
 
@@ -449,6 +451,7 @@ export const WS_METHODS = {
 
   todoBoardRead: "todo.read",
   todoBoardMutate: "todo.mutate",
+  todoBoardSequence: "todo.sequence",
   todoBoardRegenerate: "todo.regenerate",
   todoBoardSubscribe: "todo.subscribe",
   todoArchiveRead: "todo.archiveRead",
@@ -1398,6 +1401,12 @@ const WsTodoBoardMutateRpc = Rpc.make(WS_METHODS.todoBoardMutate, {
   error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
 });
 
+const WsTodoBoardSequenceRpc = Rpc.make(WS_METHODS.todoBoardSequence, {
+  payload: TodoBoardSequenceInput,
+  success: TodoBoardSequenceResult,
+  error: Schema.Union([TodoBoardError, EnvironmentAuthorizationError]),
+});
+
 const WsTodoBoardRegenerateRpc = Rpc.make(WS_METHODS.todoBoardRegenerate, {
   payload: TodoBoardRegenerateInput,
   success: TodoBoardRegenerateResult,
@@ -2243,6 +2252,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsMutateRpc,
   WsTodoBoardReadRpc,
   WsTodoBoardMutateRpc,
+  WsTodoBoardSequenceRpc,
   WsTodoBoardRegenerateRpc,
   WsTodoBoardSubscribeRpc,
   WsTodoArchiveReadRpc,
