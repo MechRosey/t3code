@@ -16,7 +16,7 @@ type ConnectorKind = "tree" | "blocks" | "peer";
 
 type ConnectorRole = "trunk" | "bus";
 
-export const BASE_AVAILABLE_WIDTH = 420;
+const BASE_AVAILABLE_WIDTH = 420;
 export const TEXT_INSET_X = 6;
 const AVAILABLE_WIDTH_STEP = 8;
 const MIN_NODE_WIDTH = 76;
