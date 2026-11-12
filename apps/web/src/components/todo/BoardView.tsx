@@ -946,6 +946,7 @@ export function BoardView({
       activeId: String(active.id),
       overId: String(over.id),
       sequence: boardSequence.sequence,
+      writable: boardSequence.writable,
       issuesById,
       draggedRect: active.rect.current.translated,
       overRect: over.rect,

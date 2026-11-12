@@ -115,9 +115,9 @@ function SequenceChipItem({
   readonly onRemove: (issueId: string) => void;
 }) {
   const dragId = sequenceChipDragId(chip.id);
-  const { setNodeRef: setDropNodeRef } = useDroppable({ id: dragId });
+  const { setNodeRef: setDropNodeRef } = useDroppable({ id: dragId, disabled: readOnly });
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } =
-    useDraggable({ id: dragId });
+    useDraggable({ id: dragId, disabled: readOnly });
   return (
     <li
       ref={setDropNodeRef}
@@ -138,7 +138,10 @@ function SequenceChipItem({
           {...attributes}
           {...listeners}
           onClick={() => onOpen(chip.id)}
-          className={cn(CHIP_OPEN_CLASS, isDragging ? "cursor-grabbing" : "cursor-grab")}
+          className={cn(
+            CHIP_OPEN_CLASS,
+            !readOnly && (isDragging ? "cursor-grabbing" : "cursor-grab"),
+          )}
         >
           <SequenceChipLabel chip={chip} />
         </button>
@@ -215,7 +218,7 @@ export const BoardSequenceStrip = memo(function BoardSequenceStrip({
   readonly onOpen: (issueId: string) => void;
   readonly onRemove: (issueId: string) => void;
 }) {
-  const { setNodeRef } = useDroppable({ id: SEQUENCE_STRIP_DROP_ID });
+  const { setNodeRef } = useDroppable({ id: SEQUENCE_STRIP_DROP_ID, disabled: readOnly });
   const cardOver = useCardOverSequence();
   return (
     <section

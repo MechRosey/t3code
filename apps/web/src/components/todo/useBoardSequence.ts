@@ -10,6 +10,7 @@ import {
   displayedSequence,
   failPendingWrite,
   pendingWritesFor,
+  pendingWritesForActive,
   reconcilePendingWrites,
   settlePendingWrite,
   startPendingWrite,
@@ -30,7 +31,7 @@ export function useBoardSequence(
   const lastToken = useRef(0);
   const active = activeSequence(source, epicFilter);
   const { epic } = active;
-  const writes = pendingWritesFor(writesByEpic, epic);
+  const writes = pendingWritesForActive(writesByEpic, active);
   const live = reconcilePendingWrites(writes, active.ids);
   if (live !== writes) setWritesByEpic(withPendingWrites(writesByEpic, epic, live));
   const updateWrites = (

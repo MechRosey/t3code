@@ -9,8 +9,8 @@ const SEQUENCE_CHIP_DRAG_PREFIX = "seq:";
 const BOARD_CARD_DRAG_PREFIX = "card:";
 const OUTSIDE_SEQUENCE_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 const NO_EPIC_KEY = "";
-export const JOIN_ZONE_START_FRACTION = 1 / 3;
-export const JOIN_ZONE_END_FRACTION = 2 / 3;
+const JOIN_ZONE_START_FRACTION = 1 / 3;
+const JOIN_ZONE_END_FRACTION = 2 / 3;
 
 export interface SequenceChip {
   readonly id: string;
@@ -193,6 +193,7 @@ interface SequenceDropInput {
   readonly activeId: string;
   readonly overId: string;
   readonly sequence: ReadonlyArray<string>;
+  readonly writable: boolean;
   readonly issuesById: ReadonlyMap<string, TodoIssue>;
   readonly draggedRect: DropRect | null;
   readonly overRect: DropRect | null;
@@ -212,11 +213,12 @@ export function resolveSequenceDrop({
   activeId,
   overId,
   sequence,
+  writable,
   issuesById,
   draggedRect,
   overRect,
 }: SequenceDropInput): SequenceDropOutcome {
-  if (!isSequenceDropId(overId)) {
+  if (!writable || !isSequenceDropId(overId)) {
     return isSequenceChipDragId(activeId) ? NO_SEQUENCE_CHANGE : BOARD_DROP;
   }
   const id = draggedSequenceId(activeId, issuesById);
@@ -317,6 +319,12 @@ export const pendingWritesFor = (
   byEpic: PendingWritesByEpic,
   epic: string | null,
 ): ReadonlyArray<PendingSequenceWrite> => byEpic[epic ?? NO_EPIC_KEY] ?? NO_PENDING_WRITES;
+
+export const pendingWritesForActive = (
+  byEpic: PendingWritesByEpic,
+  active: ActiveSequence,
+): ReadonlyArray<PendingSequenceWrite> =>
+  active.writable ? pendingWritesFor(byEpic, active.epic) : NO_PENDING_WRITES;
 
 export const withPendingWrites = (
   byEpic: PendingWritesByEpic,
