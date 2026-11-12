@@ -754,6 +754,45 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("prunes each sequence file independently when another file cannot be used", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const epicSequencePath = path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md");
+        const unrelatedMarkerPath = path.join(
+          boardDir,
+          "4fbef-link-remove-target",
+          "4fbef-link-remove-target.md",
+        );
+        const setStatus = (id: string, status: string) =>
+          board.mutate({ action: "status", cwd, id, status });
+
+        yield* fs.makeDirectory(sequencePath);
+        yield* fs.writeFileString(epicSequencePath, "762b5\n55041\n");
+        yield* setStatus("762b5-comment-target", "done");
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("55041\n");
+
+        yield* fs.remove(sequencePath, { recursive: true });
+        yield* fs.remove(epicSequencePath);
+        yield* fs.makeDirectory(epicSequencePath);
+        yield* fs.writeFileString(sequencePath, "55041\n67e0c\n");
+        yield* setStatus("55041-tag-target", "cancelled");
+        expect(yield* fs.readFileString(sequencePath)).toBe("67e0c\n");
+
+        yield* fs.remove(epicSequencePath, { recursive: true });
+        yield* fs.writeFileString(epicSequencePath, "67e0c\n890fa\n");
+        yield* fs.writeFileString(sequencePath, "67e0c\n890fa\n");
+        yield* fs.remove(unrelatedMarkerPath);
+        yield* fs.makeDirectory(unrelatedMarkerPath);
+        yield* Effect.exit(setStatus("67e0c-link-target", "done"));
+        expect(yield* fs.readFileString(sequencePath)).toBe("890fa\n");
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("890fa\n");
+      }),
+    );
+
     it.effect("prune keeps every line it cannot resolve verbatim", () =>
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
