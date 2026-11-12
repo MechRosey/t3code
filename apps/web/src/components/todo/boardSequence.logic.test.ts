@@ -2,11 +2,13 @@ import type { TodoIssue } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 
 import {
+  activeSequence,
   boardCardDragId,
   boardCardIssueId,
   buildSequenceStrip,
   displayedSequence,
   failPendingWrite,
+  pendingWritesFor,
   reconcilePendingWrites,
   removeFromSequence,
   resolveBoardDragEnd,
@@ -14,9 +16,11 @@ import {
   sequenceChipDragId,
   settlePendingWrite,
   startPendingWrite,
+  withPendingWrites,
   SEQUENCE_STRIP_DROP_ID,
   type BoardDragOutcome,
   type PendingSequenceWrite,
+  type PendingWritesByEpic,
   type SequenceDropOutcome,
 } from "./boardSequence.logic";
 
@@ -83,7 +87,7 @@ const matchesUiTag = (candidate: TodoIssue) => candidate.tags.includes(UI_TAG);
 const chipIds = (chips: ReadonlyArray<{ readonly id: string }>) => chips.map((chip) => chip.id);
 
 describe("buildSequenceStrip", () => {
-  it("buildSequenceStrip_MixedBoard_DoingByMostRecentUpdateAndNextInFileOrderOfOpenTickets", () => {
+  it("buildSequenceStrip_MixedBoard_ListsOpenTicketsInFileOrderIncludingDoingAndNoDoingSide", () => {
     const sequence = [
       BACKLOG_PLANNED,
       DOING_OLD,
@@ -97,15 +101,21 @@ describe("buildSequenceStrip", () => {
 
     const strip = buildSequenceStrip(ISSUES, sequence, matchesEverything);
 
-    assert.deepEqual(chipIds(strip.doing), [DOING_NEW, DOING_OLD]);
-    assert.deepEqual(chipIds(strip.next), [BACKLOG_PLANNED, READ_PLANNED, BLOCKED_PLANNED]);
-    assert.deepEqual(strip.next[1], {
+    assert.deepEqual(Object.keys(strip), ["next"]);
+    assert.deepEqual(chipIds(strip.next), [
+      BACKLOG_PLANNED,
+      DOING_OLD,
+      READ_PLANNED,
+      BLOCKED_PLANNED,
+    ]);
+    assert.deepEqual(strip.next[2], {
       id: READ_PLANNED,
       shortId: "c0001",
       title: `Title of ${READ_PLANNED}`,
       status: "read",
       matches: true,
     });
+    assert.strictEqual(strip.next[1]?.status, "doing");
   });
 
   it("buildSequenceStrip_FilterActive_KeepsEveryChipAndOnlyFlagsTheMatches", () => {
@@ -114,12 +124,7 @@ describe("buildSequenceStrip", () => {
     const unfiltered = buildSequenceStrip(ISSUES, sequence, matchesEverything);
     const filtered = buildSequenceStrip(ISSUES, sequence, matchesUiTag);
 
-    assert.deepEqual(chipIds(filtered.doing), chipIds(unfiltered.doing));
     assert.deepEqual(chipIds(filtered.next), chipIds(unfiltered.next));
-    assert.deepEqual(
-      filtered.doing.map((chip) => chip.matches),
-      [true, false],
-    );
     assert.deepEqual(
       filtered.next.map((chip) => chip.matches),
       [false, true, false],
@@ -187,10 +192,10 @@ describe("resolveSequenceDrop", () => {
         expected: send(null),
       },
       {
-        name: "doing card is ignored",
+        name: "doing card on the strip appends",
         activeId: card(DOING_NEW),
         overId: SEQUENCE_STRIP_DROP_ID,
-        expected: send(null),
+        expected: send([...sequence, DOING_NEW]),
       },
       {
         name: "done card is ignored",
@@ -211,16 +216,16 @@ describe("resolveSequenceDrop", () => {
         expected: send(null),
       },
       {
-        name: "chip moved left takes the target slot and doing ids keep theirs",
+        name: "chip moved left takes the target slot",
         activeId: chip(BLOCKED_PLANNED),
         overId: chip(BACKLOG_PLANNED),
-        expected: send([BLOCKED_PLANNED, DOING_OLD, BACKLOG_PLANNED, READ_PLANNED]),
+        expected: send([BLOCKED_PLANNED, BACKLOG_PLANNED, DOING_OLD, READ_PLANNED]),
       },
       {
         name: "chip moved right takes the target slot",
         activeId: chip(BACKLOG_PLANNED),
         overId: chip(BLOCKED_PLANNED),
-        expected: send([READ_PLANNED, DOING_OLD, BLOCKED_PLANNED, BACKLOG_PLANNED]),
+        expected: send([DOING_OLD, READ_PLANNED, BLOCKED_PLANNED, BACKLOG_PLANNED]),
       },
       {
         name: "chip on the strip moves to the end",
@@ -383,6 +388,100 @@ describe("pending sequence writes", () => {
   });
 });
 
+describe("pending writes by epic", () => {
+  it("pendingWritesByEpic_WritesInDifferentEpics_StayInTheirOwnSequence", () => {
+    const epic = "Foundation";
+    const noEpicBase = [BACKLOG_PLANNED];
+    const epicBase = [READ_PLANNED];
+    let byEpic: PendingWritesByEpic = {};
+    byEpic = withPendingWrites(
+      byEpic,
+      null,
+      startPendingWrite(pendingWritesFor(byEpic, null), {
+        token: 1,
+        ids: [BLOCKED_PLANNED, BACKLOG_PLANNED],
+        base: noEpicBase,
+      }),
+    );
+    byEpic = withPendingWrites(
+      byEpic,
+      epic,
+      startPendingWrite(pendingWritesFor(byEpic, epic), {
+        token: 2,
+        ids: [BACKLOG_PLANNED, READ_PLANNED],
+        base: epicBase,
+      }),
+    );
+
+    assert.deepEqual(displayedSequence(noEpicBase, pendingWritesFor(byEpic, null)), [
+      BLOCKED_PLANNED,
+      BACKLOG_PLANNED,
+    ]);
+    assert.deepEqual(displayedSequence(epicBase, pendingWritesFor(byEpic, epic)), [
+      BACKLOG_PLANNED,
+      READ_PLANNED,
+    ]);
+    assert.deepEqual(pendingWritesFor(byEpic, "Other"), []);
+
+    const settled = settlePendingWrite(pendingWritesFor(byEpic, epic), 2, [
+      BACKLOG_PLANNED,
+      READ_PLANNED,
+    ]);
+    const caughtUp = reconcilePendingWrites(settled, [BACKLOG_PLANNED, READ_PLANNED]);
+    byEpic = withPendingWrites(byEpic, epic, caughtUp);
+
+    assert.deepEqual(pendingWritesFor(byEpic, epic), []);
+    assert.strictEqual(pendingWritesFor(byEpic, null).length, 1);
+  });
+});
+
+describe("activeSequence", () => {
+  const FOUNDATION = "Foundation";
+  const snapshot = {
+    sequence: [BACKLOG_PLANNED],
+    epicSequences: { [FOUNDATION]: [READ_PLANNED], Other: [] },
+  };
+
+  it("activeSequence_EpicFilterAndServerSupport_PicksTheMatchingSequenceAndWritability", () => {
+    assert.deepEqual(activeSequence(snapshot, ""), {
+      epic: null,
+      ids: [BACKLOG_PLANNED],
+      writable: true,
+    });
+    assert.deepEqual(activeSequence(snapshot, FOUNDATION), {
+      epic: FOUNDATION,
+      ids: [READ_PLANNED],
+      writable: true,
+    });
+    assert.deepEqual(activeSequence(snapshot, "foundation"), {
+      epic: FOUNDATION,
+      ids: [READ_PLANNED],
+      writable: true,
+    });
+    assert.deepEqual(activeSequence(snapshot, "Other"), {
+      epic: "Other",
+      ids: [],
+      writable: true,
+    });
+    assert.deepEqual(activeSequence(snapshot, "Archived"), {
+      epic: null,
+      ids: [],
+      writable: false,
+    });
+    const olderServer = { sequence: [BACKLOG_PLANNED] };
+    assert.deepEqual(activeSequence(olderServer, ""), {
+      epic: null,
+      ids: [BACKLOG_PLANNED],
+      writable: true,
+    });
+    assert.deepEqual(activeSequence(olderServer, FOUNDATION), {
+      epic: null,
+      ids: [BACKLOG_PLANNED],
+      writable: false,
+    });
+  });
+});
+
 describe("resolveBoardDragEnd", () => {
   it("resolveBoardDragEnd_EachDragAndTarget_RoutesToTheSequenceOrTheStatusColumnsNeverBoth", () => {
     const sequence = [BACKLOG_PLANNED, READ_PLANNED];
@@ -414,7 +513,7 @@ describe("resolveBoardDragEnd", () => {
       },
       {
         name: "ineligible card on the strip does nothing",
-        activeId: card(DOING_NEW),
+        activeId: card(DONE),
         overId: SEQUENCE_STRIP_DROP_ID,
         expected: ignore,
       },
