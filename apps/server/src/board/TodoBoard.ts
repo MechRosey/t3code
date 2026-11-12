@@ -480,19 +480,55 @@ const make = Effect.gen(function* () {
     return issue;
   });
 
+  const readableEpicRootDirs = Effect.fn("TodoBoard.readableEpicRootDirs")(function* (
+    root: string,
+    dirs: ReadonlyArray<IssueDir>,
+  ) {
+    const candidates: Array<{
+      readonly tags: ReadonlyArray<string>;
+      readonly epic: string | null;
+      readonly dir: string;
+    }> = [];
+    for (const dir of dirs) {
+      const markerPath = path.join(root, dir.markerRel);
+      const text = yield* fs.readFileString(markerPath).pipe(Effect.option);
+      if (Option.isNone(text)) continue;
+      const { fm } = parseIssue(text.value, dir.name);
+      candidates.push({
+        tags: fm.tags,
+        epic: fm.epic ?? null,
+        dir: normalizeSlashes(path.dirname(markerPath)),
+      });
+    }
+    return new Map([...epicRootIssues(candidates)].map(([epic, issue]) => [epic, issue.dir]));
+  });
+
   const removeFromSequence = Effect.fn("TodoBoard.removeFromSequence")(function* (
     root: string,
     dirs: ReadonlyArray<IssueDir>,
     target: IssueDir,
   ) {
-    const { issues } = yield* readBoardAt(root);
     const allIds = dirs.map((dir) => dir.name);
-    for (const sequenceDir of [root, ...epicRootDirs(issues).values()]) {
-      const text = yield* readSequenceText(sequenceDir);
-      const pruned = removeSequenceRef(text, allIds, target.name);
-      if (pruned === text) continue;
-      yield* writeSequenceFile(sequenceDir, pruned);
-    }
+    const pruneSequenceDir = Effect.fn("TodoBoard.pruneSequenceDir")(
+      function* (sequenceDir: string) {
+        const text = yield* readSequenceText(sequenceDir);
+        const pruned = removeSequenceRef(text, allIds, target.name);
+        if (pruned === text) return;
+        yield* writeSequenceFile(sequenceDir, pruned);
+      },
+      (effect, sequenceDir) =>
+        effect.pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("Failed to prune the sequence after a status change.", {
+              issueId: target.name,
+              sequenceDir,
+              cause,
+            }),
+          ),
+        ),
+    );
+    const epicDirs = yield* readableEpicRootDirs(root, dirs);
+    yield* Effect.forEach([root, ...epicDirs.values()], pruneSequenceDir, { discard: true });
   });
 
   const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (
@@ -522,14 +558,7 @@ const make = Effect.gen(function* () {
         const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
         yield* writeMarker(root, target, next, stat);
         if (isClosedStatus(next.fm.status)) {
-          yield* removeFromSequence(root, dirs, target).pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("Failed to prune the sequence after a status change.", {
-                issueId: target.name,
-                cause,
-              }),
-            ),
-          );
+          yield* removeFromSequence(root, dirs, target);
         }
         return { issue: yield* rebuildFromDisk(root, parsed.fm.id) };
       }
