@@ -199,6 +199,23 @@ it.layer(NodeServices.layer)("todo MCP tools", (it) => {
     }),
   );
 
+  it.effect("saves a parallel group as one space-joined entry and reads it back", () =>
+    Effect.gen(function* () {
+      const { workspaceRoot } = yield* installProjectBoard;
+
+      const outcome = yield* Effect.gen(function* () {
+        const tools = yield* callTools;
+        const saved = yield* tools.setSequence({ ids: ["55041 6ba55", "762b5"] });
+        const afterSave = yield* tools.read({});
+        return { saved, afterSave };
+      }).pipe(Effect.provide(harness({ workspaceRoot })));
+
+      const group = ["55041-tag-target 6ba55-parser-fidelity", "762b5-comment-target"];
+      expect(outcome.saved).toEqual({ sequence: group });
+      expect(outcome.afterSave).toMatchObject({ sequence: group });
+    }),
+  );
+
   it.effect("refuses a credential without orchestration and a write from a read-only client", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

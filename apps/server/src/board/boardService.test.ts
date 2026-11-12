@@ -247,6 +247,35 @@ describe("TodoBoard service", () => {
       }),
     );
 
+    it.effect("reads a parallel group as one space-joined entry and normalises the rest", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const lines = [
+          "762b5",
+          "55041  6ba55\tzzzzz 762b5",
+          "e0ae5 4b42b",
+          "890fa 890fa",
+          "67e0c",
+          "890fa",
+          "e0ae5 df3cf",
+        ];
+        yield* fs.writeFileString(path.join(boardDir, "SEQUENCE.md"), `${lines.join("\r\n")}\r\n`);
+
+        const snapshot = yield* board.read({ cwd });
+
+        expect(snapshot.sequence).toEqual([
+          "762b5-comment-target",
+          "55041-tag-target 6ba55-parser-fidelity",
+          "4b42b-epic-carrier",
+          "890fa-link-destination",
+          "67e0c-link-target",
+        ]);
+      }),
+    );
+
     it.effect("treats an unreadable SEQUENCE.md as an empty sequence", () =>
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
@@ -765,6 +794,70 @@ describe("TodoBoard service", () => {
         });
         expect(yield* fs.readFileString(sequencePath)).toBe("55041\r\n");
       }),
+    );
+
+    it.effect("writes a parallel group on one line and round-trips it through a read", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+
+        const result = yield* board.setSequence({
+          cwd,
+          ids: ["55041 6ba55", "762b5", "e0ae5 890fa", "55041", "67e0c 67e0c"],
+        });
+
+        expect(result.sequence).toEqual([
+          "55041-tag-target 6ba55-parser-fidelity",
+          "762b5-comment-target",
+          "890fa-link-destination",
+          "67e0c-link-target",
+        ]);
+        expect(yield* fs.readFileString(sequencePath)).toBe("55041 6ba55\n762b5\n890fa\n67e0c\n");
+        expect((yield* board.read({ cwd })).sequence).toEqual(result.sequence);
+        const again = yield* board.setSequence({ cwd, ids: result.sequence });
+        expect(again.sequence).toEqual(result.sequence);
+        expect(yield* fs.readFileString(sequencePath)).toBe("55041 6ba55\n762b5\n890fa\n67e0c\n");
+
+        const unknown = yield* board.setSequence({ cwd, ids: ["762b5 zzzzz"] }).pipe(Effect.flip);
+        expect(unknown.failure).toBe("issue_not_found");
+        expect(yield* fs.readFileString(sequencePath)).toBe("55041 6ba55\n762b5\n890fa\n67e0c\n");
+      }),
+    );
+
+    it.effect(
+      "removes a closed ticket from its group, collapses it, and keeps unresolved lines",
+      () =>
+        Effect.gen(function* () {
+          const { boardDir, cwd } = yield* installBoard("board-before");
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const board = yield* TodoBoard.TodoBoard;
+          const sequencePath = path.join(boardDir, "SEQUENCE.md");
+          const setStatus = (id: string, status: string) =>
+            board.mutate({ action: "status", cwd, id, status });
+          yield* fs.writeFileString(
+            sequencePath,
+            "762b5 55041 6ba55\r\n67e0c 890fa\n<<<<<<< HEAD\n762b5 zzzzz\n55041 4b42b\r\n",
+          );
+
+          yield* setStatus("762b5-comment-target", "done");
+          expect(yield* fs.readFileString(sequencePath)).toBe(
+            "55041 6ba55\r\n67e0c 890fa\n<<<<<<< HEAD\n762b5 zzzzz\n55041 4b42b\r\n",
+          );
+
+          yield* setStatus("55041-tag-target", "cancelled");
+          expect(yield* fs.readFileString(sequencePath)).toBe(
+            "6ba55\r\n67e0c 890fa\n<<<<<<< HEAD\n762b5 zzzzz\n4b42b\r\n",
+          );
+
+          yield* setStatus("890fa-link-destination", "done");
+          expect(yield* fs.readFileString(sequencePath)).toBe(
+            "6ba55\r\n67e0c\n<<<<<<< HEAD\n762b5 zzzzz\n4b42b\r\n",
+          );
+        }),
     );
 
     it.effect("drops an archived id instead of rejecting it", () =>
