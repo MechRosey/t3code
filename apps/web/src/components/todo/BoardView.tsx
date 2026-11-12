@@ -946,8 +946,9 @@ export function BoardView({
       activeId: String(active.id),
       overId: String(over.id),
       sequence: boardSequence.sequence,
-      strip: sequenceStrip,
       issuesById,
+      draggedRect: active.rect.current.translated,
+      overRect: over.rect,
     });
     if (outcome.kind === "ignore") return;
     if (outcome.kind === "sequence") {

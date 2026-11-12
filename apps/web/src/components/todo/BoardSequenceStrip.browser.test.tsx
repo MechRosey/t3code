@@ -22,9 +22,9 @@ describe("BoardSequenceStrip", () => {
   it("BoardSequenceStrip_FilteredStrip_DimsNonMatchingChipsAndHasNoDoingSide", async () => {
     const strip = {
       next: [
-        chip("a0001-doing", "doing", true),
-        chip("c0001-match", "read", true),
-        chip("d0001-faded", "backlog", false),
+        { chips: [chip("a0001-doing", "doing", true)] },
+        { chips: [chip("c0001-match", "read", true)] },
+        { chips: [chip("d0001-faded", "backlog", false)] },
       ],
     };
 

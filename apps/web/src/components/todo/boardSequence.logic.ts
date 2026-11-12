@@ -134,7 +134,10 @@ export function classifyDrop(draggedCentreX: number, target: DropRect): ChipDrop
   return fraction < JOIN_ZONE_END_FRACTION ? "join" : "after";
 }
 
-function chipDropZone(draggedRect: DropRect | null, overRect: DropRect | null): ChipDropZone {
+export function chipDropZone(
+  draggedRect: DropRect | null,
+  overRect: DropRect | null,
+): ChipDropZone {
   if (draggedRect === null || overRect === null) return "before";
   return classifyDrop(draggedRect.left + draggedRect.width / 2, overRect);
 }
