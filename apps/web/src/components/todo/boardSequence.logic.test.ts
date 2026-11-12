@@ -10,6 +10,7 @@ import {
   displayedSequence,
   failPendingWrite,
   pendingWritesFor,
+  pendingWritesForActive,
   placeInSequence,
   reconcilePendingWrites,
   removeFromSequence,
@@ -19,8 +20,6 @@ import {
   settlePendingWrite,
   startPendingWrite,
   withPendingWrites,
-  JOIN_ZONE_END_FRACTION,
-  JOIN_ZONE_START_FRACTION,
   SEQUENCE_STRIP_DROP_ID,
   type BoardDragOutcome,
   type ChipDropZone,
@@ -178,16 +177,6 @@ describe("classifyDrop", () => {
     for (const { centreX, expected } of cases) {
       assert.strictEqual(classifyDrop(centreX, target), expected, `centre ${centreX}`);
     }
-    assert.strictEqual(
-      target.left + target.width * JOIN_ZONE_START_FRACTION,
-      110,
-      "join zone starts a third in",
-    );
-    assert.strictEqual(
-      target.left + target.width * JOIN_ZONE_END_FRACTION,
-      120,
-      "join zone ends two thirds in",
-    );
   });
 });
 
@@ -527,6 +516,7 @@ describe("resolveSequenceDrop", () => {
         activeId,
         overId,
         sequence: from ?? sequence,
+        writable: true,
         issuesById: ISSUES_BY_ID,
         ...dropGeometry(zone),
       });
@@ -709,6 +699,39 @@ describe("pending writes by epic", () => {
   });
 });
 
+describe("pending writes for the active sequence", () => {
+  it("pendingWritesForActive_UnavailableEpicOrOlderServer_NeverShowsOrReconcilesTheNoEpicWrites", () => {
+    const noEpicPending = [BLOCKED_PLANNED, BACKLOG_PLANNED];
+    const epicPending = [BACKLOG_PLANNED, READ_PLANNED];
+    const source = {
+      sequence: [BACKLOG_PLANNED],
+      epicSequences: { Foundation: [READ_PLANNED] },
+    };
+    const byEpic = withPendingWrites(
+      withPendingWrites(
+        {},
+        null,
+        startPendingWrite([], { token: 1, ids: noEpicPending, base: source.sequence }),
+      ),
+      "Foundation",
+      startPendingWrite([], { token: 2, ids: epicPending, base: [READ_PLANNED] }),
+    );
+    const showing = (active: ReturnType<typeof activeSequence>) => {
+      const writes = pendingWritesForActive(byEpic, active);
+      return displayedSequence(active.ids, reconcilePendingWrites(writes, active.ids));
+    };
+
+    assert.deepEqual(showing(activeSequence(source, "")), noEpicPending);
+    assert.deepEqual(showing(activeSequence(source, "Foundation")), epicPending);
+    assert.deepEqual(showing(activeSequence(source, "Archived")), []);
+    assert.deepEqual(showing(activeSequence({ sequence: source.sequence }, "Foundation")), [
+      ...source.sequence,
+    ]);
+    assert.deepEqual(pendingWritesForActive(byEpic, activeSequence(source, "Archived")), []);
+    assert.strictEqual(pendingWritesFor(byEpic, null).length, 1);
+  });
+});
+
 describe("activeSequence", () => {
   const FOUNDATION = "Foundation";
   const snapshot = {
@@ -767,8 +790,37 @@ describe("resolveBoardDragEnd", () => {
       readonly name: string;
       readonly activeId: string;
       readonly overId: string;
+      readonly writable?: boolean;
       readonly expected: BoardDragOutcome;
     }> = [
+      {
+        name: "card on the strip while the sequence is read-only does nothing",
+        activeId: card(READ_UNPLANNED),
+        overId: SEQUENCE_STRIP_DROP_ID,
+        writable: false,
+        expected: ignore,
+      },
+      {
+        name: "card on a chip while the sequence is read-only does nothing",
+        activeId: card(BACKLOG_UNPLANNED),
+        overId: sequenceChipDragId(READ_PLANNED),
+        writable: false,
+        expected: ignore,
+      },
+      {
+        name: "chip on the strip while the sequence is read-only does nothing",
+        activeId: sequenceChipDragId(READ_PLANNED),
+        overId: SEQUENCE_STRIP_DROP_ID,
+        writable: false,
+        expected: ignore,
+      },
+      {
+        name: "card on a column while the sequence is read-only still confirms",
+        activeId: card(READ_UNPLANNED),
+        overId: "column:doing",
+        writable: false,
+        expected: column(READ_UNPLANNED, "doing", "confirm"),
+      },
       {
         name: "card on the strip writes the order and changes no status",
         activeId: card(READ_UNPLANNED),
@@ -828,11 +880,12 @@ describe("resolveBoardDragEnd", () => {
       },
     ];
 
-    for (const { name, activeId, overId, expected } of cases) {
+    for (const { name, activeId, overId, writable, expected } of cases) {
       const outcome = resolveBoardDragEnd({
         activeId,
         overId,
         sequence,
+        writable: writable ?? true,
         issuesById: ISSUES_BY_ID,
         ...dropGeometry(undefined),
       });
