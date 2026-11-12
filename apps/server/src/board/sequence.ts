@@ -5,8 +5,6 @@ export const SEQUENCE_TEMP_FILE = `${SEQUENCE_FILE}.tmp`;
 
 const SHORT_ID_LENGTH = 5;
 const CLOSED_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
-const DOING_STATUS = "doing";
-const BACKLOG_STATUS = "backlog";
 
 export interface SequenceIssue {
   readonly id: string;
@@ -14,9 +12,6 @@ export interface SequenceIssue {
 }
 
 export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
-
-export const leavesSequence = (from: string, to: string): boolean =>
-  isClosedStatus(to) || (from === DOING_STATUS && to === BACKLOG_STATUS);
 
 export const parseSequenceRefs = (text: string): Array<string> =>
   text

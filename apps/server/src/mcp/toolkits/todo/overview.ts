@@ -21,9 +21,13 @@ export const boardOverview = (snapshot: TodoBoardSnapshot) => {
       blockers.set(blocked, [...(blockers.get(blocked) ?? []), issue.id]);
     }
   }
+  const plannedEpics = Object.entries(snapshot.epicSequences ?? {}).filter(
+    ([, ids]) => ids.length > 0,
+  );
   return {
     root: snapshot.root,
     sequence: snapshot.sequence,
+    ...(plannedEpics.length > 0 ? { epicSequences: Object.fromEntries(plannedEpics) } : {}),
     open: open.map((issue) => ticketOf(issue, blockers.get(issue.id) ?? [])),
   };
 };

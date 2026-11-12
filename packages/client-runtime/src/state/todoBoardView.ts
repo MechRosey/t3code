@@ -1,4 +1,5 @@
 import type { TodoArchiveGroup, TodoBoardSnapshot, TodoIssue } from "@t3tools/contracts";
+import { EPIC_MARKER_TAG, epicRootIssues } from "@t3tools/shared/todoEpics";
 
 export const BOARD_STATUS_ORDER = [
   "backlog",
@@ -159,7 +160,6 @@ export function filterIssuesByTag(
   return issues.filter((issue) => issue.tags.includes(tag));
 }
 
-const EPIC_MARKER_TAG = "epic";
 const COMMON_TAG_QUICK_FILTER_CAP = 8;
 const COMMON_TAG_RECENCY_HALF_LIFE_DAYS = 14;
 const BOARD_SHORT_ID_LENGTH = 5;
@@ -238,14 +238,7 @@ export interface BoardEpicQuickFilter {
 export function boardEpicQuickFilters(
   issues: ReadonlyArray<TodoIssue>,
 ): Array<BoardEpicQuickFilter> {
-  const byEpic = new Map<string, BoardEpicQuickFilter>();
-  for (const issue of issues) {
-    if (!issue.tags.some((tag) => tag.toLowerCase() === EPIC_MARKER_TAG)) continue;
-    if (issue.epic === null || issue.epic.length === 0) continue;
-    if (byEpic.has(issue.epic)) continue;
-    byEpic.set(issue.epic, { epic: issue.epic, hue: issue.rootHue });
-  }
-  return [...byEpic.values()];
+  return [...epicRootIssues(issues)].map(([epic, issue]) => ({ epic, hue: issue.rootHue }));
 }
 
 export function boardCommonTagQuickFilters(issues: ReadonlyArray<TodoIssue>): Array<string> {

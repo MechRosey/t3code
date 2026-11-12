@@ -35,11 +35,11 @@ export const layer = McpToolAccess.toLayer(TodoToolkit, {
       return boardOverview(yield* board.read({ cwd }).pipe(Effect.mapError(boardFailure)));
     }),
   ),
-  t3_todo_set_sequence: McpToolAccess.writesEnvironment(({ projectId, ids }) =>
+  t3_todo_set_sequence: McpToolAccess.writesEnvironment(({ projectId, ids, epic }) =>
     Effect.gen(function* () {
       const cwd = yield* boardCwd(projectId);
       const board = yield* TodoBoard.TodoBoard;
-      return yield* board.setSequence({ cwd, ids }).pipe(Effect.mapError(boardFailure));
+      return yield* board.setSequence({ cwd, ids, epic }).pipe(Effect.mapError(boardFailure));
     }),
   ),
 });

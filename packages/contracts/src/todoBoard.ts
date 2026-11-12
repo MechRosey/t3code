@@ -51,6 +51,7 @@ export const TodoBoardSnapshot = Schema.Struct({
   sequence: Schema.Array(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed<ReadonlyArray<string>>([])),
   ),
+  epicSequences: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))),
 });
 export type TodoBoardSnapshot = typeof TodoBoardSnapshot.Type;
 
@@ -133,6 +134,7 @@ export type TodoBoardMutateResult = typeof TodoBoardMutateResult.Type;
 export const TodoBoardSequenceInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   ids: Schema.Array(TrimmedNonEmptyString),
+  epic: Schema.optional(TrimmedNonEmptyString),
 });
 export type TodoBoardSequenceInput = typeof TodoBoardSequenceInput.Type;
 
@@ -184,6 +186,7 @@ export const TodoBoardFailure = Schema.Literals([
   "pointer_dangling",
   "cwd_not_directory",
   "issue_not_found",
+  "epic_not_found",
   "ambiguous_issue_id",
   "invalid_status",
   "invalid_link_type",

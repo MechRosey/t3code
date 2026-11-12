@@ -26,6 +26,7 @@ import {
 } from "@t3tools/contracts";
 import type { TodoArchiveGroup, TodoArchiveReadResult } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { epicRootIssues } from "@t3tools/shared/todoEpics";
 
 import {
   regenerationArtifacts,
@@ -56,7 +57,7 @@ import {
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
 import {
-  leavesSequence,
+  isClosedStatus,
   parseSequenceRefs,
   removeSequenceRef,
   resolveSequence,
@@ -333,8 +334,31 @@ const make = Effect.gen(function* () {
     return yield* fs.readFileString(file).pipe(Effect.mapError(failed));
   });
 
-  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (root: string) {
-    return parseSequenceRefs(yield* readSequenceText(root));
+  const readSequenceRefs = Effect.fn("TodoBoard.readSequenceRefs")(function* (dir: string) {
+    return parseSequenceRefs(yield* readSequenceText(dir));
+  });
+
+  const readResolvedSequence = Effect.fn("TodoBoard.readResolvedSequence")(function* (
+    dir: string,
+    issues: ReadonlyArray<TodoIssue>,
+  ) {
+    const refs = yield* readSequenceRefs(dir).pipe(Effect.orElseSucceed(() => [] as Array<string>));
+    return resolveSequence(refs, issues);
+  });
+
+  const epicRootDirs = (issues: ReadonlyArray<TodoIssue>): ReadonlyMap<string, string> =>
+    new Map(
+      [...epicRootIssues(issues)].map(([epic, issue]) => [epic, path.dirname(issue.markerPath)]),
+    );
+
+  const readEpicSequences = Effect.fn("TodoBoard.readEpicSequences")(function* (
+    issues: ReadonlyArray<TodoIssue>,
+  ) {
+    const sequences: Array<readonly [string, ReadonlyArray<string>]> = [];
+    for (const [epic, dir] of epicRootDirs(issues)) {
+      sequences.push([epic, yield* readResolvedSequence(dir, issues)]);
+    }
+    return Object.fromEntries(sequences);
   });
 
   const readBoardAt = Effect.fn("TodoBoard.readBoardAt")(function* (
@@ -393,13 +417,10 @@ const make = Effect.gen(function* () {
         },
       });
     }
-    const sequence = archived
-      ? []
-      : resolveSequence(
-          yield* readSequenceRefs(root).pipe(Effect.orElseSucceed(() => [] as Array<string>)),
-          issues,
-        );
-    return { root, repoName: repoDisplayName(root), issues, sequence };
+    if (archived) return { root, repoName: repoDisplayName(root), issues, sequence: [] };
+    const sequence = yield* readResolvedSequence(root, issues);
+    const epicSequences = yield* readEpicSequences(issues);
+    return { root, repoName: repoDisplayName(root), issues, sequence, epicSequences };
   });
 
   const readArchiveAt = Effect.fn("TodoBoard.readArchiveAt")(function* (root: string) {
@@ -463,14 +484,14 @@ const make = Effect.gen(function* () {
     dirs: ReadonlyArray<IssueDir>,
     target: IssueDir,
   ) {
-    const text = yield* readSequenceText(root);
-    const pruned = removeSequenceRef(
-      text,
-      dirs.map((dir) => dir.name),
-      target.name,
-    );
-    if (pruned === text) return;
-    yield* writeSequenceFile(root, pruned);
+    const { issues } = yield* readBoardAt(root);
+    const allIds = dirs.map((dir) => dir.name);
+    for (const sequenceDir of [root, ...epicRootDirs(issues).values()]) {
+      const text = yield* readSequenceText(sequenceDir);
+      const pruned = removeSequenceRef(text, allIds, target.name);
+      if (pruned === text) continue;
+      yield* writeSequenceFile(sequenceDir, pruned);
+    }
   });
 
   const mutateAt = Effect.fn("TodoBoard.mutateAt")(function* (
@@ -499,7 +520,7 @@ const make = Effect.gen(function* () {
         const parsed = parseIssue(text, target.name);
         const next = yield* runRule(() => applyStatus(parsed, { status: input.status }, now));
         yield* writeMarker(root, target, next, stat);
-        if (leavesSequence(canonicalStatus(parsed.fm.status), next.fm.status)) {
+        if (isClosedStatus(next.fm.status)) {
           yield* removeFromSequence(root, dirs, target).pipe(
             Effect.catch((cause) =>
               Effect.logWarning("Failed to prune the sequence after a status change.", {
@@ -661,26 +682,40 @@ const make = Effect.gen(function* () {
   });
 
   const writeSequenceFile = Effect.fn("TodoBoard.writeSequenceFile")(function* (
-    root: string,
+    dir: string,
     content: string,
   ) {
-    const file = path.join(root, SEQUENCE_FILE);
-    const temp = path.join(root, SEQUENCE_TEMP_FILE);
+    const file = path.join(dir, SEQUENCE_FILE);
+    const temp = path.join(dir, SEQUENCE_TEMP_FILE);
     const failed = (cause: unknown) =>
       toError("operation_failed", `Failed to write ${file}`, cause);
     yield* fs.writeFileString(temp, content).pipe(Effect.mapError(failed));
     yield* fs.rename(temp, file).pipe(Effect.mapError(failed));
   });
 
+  const sequenceDirFor = (
+    root: string,
+    issues: ReadonlyArray<TodoIssue>,
+    epic: string | undefined,
+  ): Effect.Effect<string, TodoBoardError> => {
+    if (epic === undefined) return Effect.succeed(root);
+    const epicDir = epicRootDirs(issues).get(epic);
+    return epicDir === undefined
+      ? Effect.fail(toError("epic_not_found", `Epic not found: ${epic}`))
+      : Effect.succeed(epicDir);
+  };
+
   const setSequenceAt = Effect.fn("TodoBoard.setSequenceAt")(function* (
     root: string,
     refs: ReadonlyArray<string>,
+    epic: string | undefined,
   ) {
     const { issues } = yield* readBoardAt(root);
+    const sequenceDir = yield* sequenceDirFor(root, issues, epic);
     const ids = issues.map((issue) => issue.id);
     yield* assertSequenceRefsKnown(root, refs, ids);
     const sequence = resolveSequence(refs, issues);
-    yield* writeSequenceFile(root, serializeSequence(sequence, ids));
+    yield* writeSequenceFile(sequenceDir, serializeSequence(sequence, ids));
     return { sequence };
   });
 
@@ -805,7 +840,7 @@ const make = Effect.gen(function* () {
     }),
     setSequence: Effect.fn("TodoBoard.setSequence")(function* (input: TodoBoardSequenceInput) {
       const root = yield* resolveRoot(input.cwd);
-      return yield* withLock(root, setSequenceAt(root, input.ids));
+      return yield* withLock(root, setSequenceAt(root, input.ids, input.epic));
     }),
     regenerate: Effect.fn("TodoBoard.regenerate")(function* (input: {
       readonly cwd: string;

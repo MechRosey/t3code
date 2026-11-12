@@ -542,6 +542,10 @@
     "./speech": {
       "types": "./src/speech.ts",
       "import": "./src/speech.ts"
+    },
+    "./todoEpics": {
+      "types": "./src/todoEpics.ts",
+      "import": "./src/todoEpics.ts"
     }
   },
   "scripts": {
