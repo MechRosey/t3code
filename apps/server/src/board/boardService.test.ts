@@ -205,6 +205,7 @@ describe("TodoBoard service", () => {
         const sequencePath = path.join(boardDir, "SEQUENCE.md");
         const absent = yield* board.read({ cwd });
         expect(absent.sequence).toEqual([]);
+        expect(absent.epicSequences).toEqual({ Foundation: [] });
         expect(yield* fs.exists(sequencePath)).toBe(false);
 
         yield* board.mutate({ action: "status", cwd, id: "e20d1-status-target", status: "doing" });
@@ -233,6 +234,16 @@ describe("TodoBoard service", () => {
         ]);
         expect(snapshot.issues.length).toBe(16);
         expectSameBytes(Buffer.from(yield* fs.readFile(sequencePath)), Buffer.from(raw, "utf8"));
+
+        yield* fs.writeFileString(
+          path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md"),
+          "55041\r\nzzzzz\r\n6ba55\r\n762b5\r\ne0ae5\r\n",
+        );
+        const withEpic = yield* board.read({ cwd });
+        expect(withEpic.epicSequences).toEqual({
+          Foundation: ["55041-tag-target", "6ba55-parser-fidelity", "762b5-comment-target"],
+        });
+        expect(withEpic.sequence).toEqual(snapshot.sequence);
       }),
     );
 
@@ -248,6 +259,10 @@ describe("TodoBoard service", () => {
 
         expect(snapshot.sequence).toEqual([]);
         expect(snapshot.issues.length).toBe(16);
+
+        yield* fs.makeDirectory(path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md"));
+        const epicUnreadable = yield* board.read({ cwd });
+        expect(epicUnreadable.epicSequences).toEqual({ Foundation: [] });
       }),
     );
 
@@ -624,33 +639,89 @@ describe("TodoBoard service", () => {
       }),
     );
 
-    it.effect("prunes on done, cancelled and doing-to-backlog, and keeps on doing-to-read", () =>
+    it.effect("prunes every sequence file on done and cancelled and never on doing", () =>
       Effect.gen(function* () {
         const { boardDir, cwd } = yield* installBoard("board-before");
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const board = yield* TodoBoard.TodoBoard;
         const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const epicSequencePath = path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md");
         const setStatus = (id: string, status: string) =>
           board.mutate({ action: "status", cwd, id, status });
         yield* board.setSequence({
           cwd,
           ids: ["762b5", "e20d1", "55041", "4b42b", "67e0c", "890fa"],
         });
+        yield* board.setSequence({
+          cwd,
+          epic: "Foundation",
+          ids: ["762b5", "55041", "67e0c", "890fa"],
+        });
 
         yield* setStatus("e20d1-status-target", "doing");
         yield* setStatus("e20d1-status-target", "read");
         yield* setStatus("4b42b-epic-carrier", "read");
+        yield* setStatus("67e0c-link-target", "doing");
+        yield* setStatus("67e0c-link-target", "backlog");
         expect(yield* fs.readFileString(sequencePath)).toBe(
           "762b5\ne20d1\n55041\n4b42b\n67e0c\n890fa\n",
         );
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("762b5\n55041\n67e0c\n890fa\n");
 
-        yield* setStatus("67e0c-link-target", "doing");
-        yield* setStatus("67e0c-link-target", "backlog");
         yield* setStatus("762b5-comment-target", "done");
         yield* setStatus("55041-tag-target", "cancelled");
 
-        expect(yield* fs.readFileString(sequencePath)).toBe("e20d1\n4b42b\n890fa\n");
+        expect(yield* fs.readFileString(sequencePath)).toBe("e20d1\n4b42b\n67e0c\n890fa\n");
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("67e0c\n890fa\n");
+      }),
+    );
+
+    it.effect("routes an epic write to the epic root folder and leaves the no-epic file", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+        const sequencePath = path.join(boardDir, "SEQUENCE.md");
+        const epicSequencePath = path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md");
+        yield* fs.writeFileString(sequencePath, "762b5\r\n");
+
+        const result = yield* board.setSequence({
+          cwd,
+          epic: "Foundation",
+          ids: ["55041", "e0ae5", "6ba55", "55041"],
+        });
+
+        expect(result.sequence).toEqual(["55041-tag-target", "6ba55-parser-fidelity"]);
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("55041\n6ba55\n");
+        expect(yield* fs.readFileString(sequencePath)).toBe("762b5\r\n");
+        const snapshot = yield* board.read({ cwd });
+        expect(snapshot.sequence).toEqual(["762b5-comment-target"]);
+        expect(snapshot.epicSequences).toEqual({ Foundation: result.sequence });
+
+        yield* board.setSequence({ cwd, ids: ["890fa"] });
+        expect(yield* fs.readFileString(epicSequencePath)).toBe("55041\n6ba55\n");
+      }),
+    );
+
+    it.effect("fails an epic write with no root ticket and writes nothing", () =>
+      Effect.gen(function* () {
+        const { boardDir, cwd } = yield* installBoard("board-before");
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const board = yield* TodoBoard.TodoBoard;
+
+        const error = yield* board
+          .setSequence({ cwd, epic: "Missing", ids: ["762b5"] })
+          .pipe(Effect.flip);
+
+        expect(error.failure).toBe("epic_not_found");
+        expect(error.message).toContain("Missing");
+        expect(yield* fs.exists(path.join(boardDir, "SEQUENCE.md"))).toBe(false);
+        expect(yield* fs.exists(path.join(boardDir, "4b42b-epic-carrier", "SEQUENCE.md"))).toBe(
+          false,
+        );
       }),
     );
 

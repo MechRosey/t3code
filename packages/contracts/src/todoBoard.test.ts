@@ -195,6 +195,16 @@ describe("TodoBoardSnapshot", () => {
     expect(decodeSnapshot(older).sequence).toEqual([]);
     expect(decodeSnapshot({ ...older, sequence: ["abc12-x"] }).sequence).toEqual(["abc12-x"]);
   });
+
+  it("leaves epicSequences absent for an older server and decodes it from a newer one", () => {
+    const older = { root: "C:/board/.todo", repoName: "board", issues: [] };
+
+    expect(decodeSnapshot(older).epicSequences).toBeUndefined();
+    expect(
+      decodeSnapshot({ ...older, epicSequences: { Foundation: ["abc12-x"], Empty: [] } })
+        .epicSequences,
+    ).toEqual({ Foundation: ["abc12-x"], Empty: [] });
+  });
 });
 
 describe("TodoBoardSequenceInput", () => {
@@ -205,6 +215,12 @@ describe("TodoBoardSequenceInput", () => {
     ]);
     expect(decodeSequence({ cwd: "C:/proj", ids: [] }).ids).toEqual([]);
     expect(() => decodeSequence({ cwd: "C:/proj", ids: [" "] })).toThrow();
+  });
+
+  it("accepts an optional epic name and rejects a blank one", () => {
+    expect(decodeSequence({ cwd: "C:/proj", ids: [] }).epic).toBeUndefined();
+    expect(decodeSequence({ cwd: "C:/proj", ids: [], epic: "Foundation" }).epic).toBe("Foundation");
+    expect(() => decodeSequence({ cwd: "C:/proj", ids: [], epic: " " })).toThrow();
   });
 });
 
