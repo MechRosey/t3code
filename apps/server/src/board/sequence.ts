@@ -1,3 +1,5 @@
+import { joinSequenceEntry, sequenceEntryIds } from "@t3tools/shared/todoSequence";
+
 import { findIssueDirName } from "./issues.ts";
 
 export const SEQUENCE_FILE = "SEQUENCE.md";
@@ -5,8 +7,6 @@ export const SEQUENCE_TEMP_FILE = `${SEQUENCE_FILE}.tmp`;
 
 const SHORT_ID_LENGTH = 5;
 const CLOSED_STATUSES: ReadonlyArray<string> = ["done", "cancelled"];
-const ENTRY_SEPARATOR = " ";
-const WHITESPACE_RUN = /\s+/;
 const LINE_TERMINATOR = /\r?\n$/;
 
 export interface SequenceIssue {
@@ -16,13 +16,10 @@ export interface SequenceIssue {
 
 export const isClosedStatus = (status: string): boolean => CLOSED_STATUSES.includes(status);
 
-export const entryIds = (entry: string): Array<string> =>
-  entry.split(WHITESPACE_RUN).filter((id) => id !== "");
-
 export const parseSequenceRefs = (text: string): Array<string> =>
   text
     .split(/\r?\n/)
-    .map((line) => entryIds(line).join(ENTRY_SEPARATOR))
+    .map((line) => joinSequenceEntry(sequenceEntryIds(line)))
     .filter((entry) => entry !== "");
 
 export const resolveSequence = (
@@ -37,13 +34,13 @@ export const resolveSequence = (
   const entries: Array<string> = [];
   for (const ref of refs) {
     const group: Array<string> = [];
-    for (const token of entryIds(ref)) {
+    for (const token of sequenceEntryIds(ref)) {
       const lookup = findIssueDirName(ids, token);
       if (lookup.tag !== "found" || !openIds.has(lookup.name) || seen.has(lookup.name)) continue;
       seen.add(lookup.name);
       group.push(lookup.name);
     }
-    if (group.length > 0) entries.push(group.join(ENTRY_SEPARATOR));
+    if (group.length > 0) entries.push(joinSequenceEntry(group));
   }
   return entries;
 };
@@ -62,12 +59,12 @@ const resolveAllTokens = (
 };
 
 const pruneLine = (line: string, allIds: ReadonlyArray<string>, targetId: string): string => {
-  const tokens = entryIds(line);
+  const tokens = sequenceEntryIds(line);
   const names = resolveAllTokens(tokens, allIds);
   if (names === null || !names.includes(targetId)) return line;
   const kept = tokens.filter((_, index) => names[index] !== targetId);
   if (kept.length === 0) return "";
-  return `${kept.join(ENTRY_SEPARATOR)}${LINE_TERMINATOR.exec(line)?.[0] ?? ""}`;
+  return `${joinSequenceEntry(kept)}${LINE_TERMINATOR.exec(line)?.[0] ?? ""}`;
 };
 
 export const removeSequenceRef = (
@@ -94,8 +91,6 @@ export const serializeSequence = (
   entries
     .map(
       (entry) =>
-        `${entryIds(entry)
-          .map((id) => toShortId(id, allIds))
-          .join(ENTRY_SEPARATOR)}\n`,
+        `${joinSequenceEntry(sequenceEntryIds(entry).map((id) => toShortId(id, allIds)))}\n`,
     )
     .join("");

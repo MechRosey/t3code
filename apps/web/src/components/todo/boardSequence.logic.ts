@@ -1,5 +1,5 @@
-import { arrayMove } from "@dnd-kit/sortable";
 import type { TodoIssue } from "@t3tools/contracts";
+import { joinSequenceEntry, sequenceEntryIds } from "@t3tools/shared/todoSequence";
 
 import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDropSpeed } from "./boardDrop.logic";
@@ -9,6 +9,8 @@ const SEQUENCE_CHIP_DRAG_PREFIX = "seq:";
 const BOARD_CARD_DRAG_PREFIX = "card:";
 const OUTSIDE_SEQUENCE_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
 const NO_EPIC_KEY = "";
+export const JOIN_ZONE_START_FRACTION = 1 / 3;
+export const JOIN_ZONE_END_FRACTION = 2 / 3;
 
 export interface SequenceChip {
   readonly id: string;
@@ -18,9 +20,24 @@ export interface SequenceChip {
   readonly matches: boolean;
 }
 
-export interface SequenceStrip {
-  readonly next: ReadonlyArray<SequenceChip>;
+export interface SequenceSlot {
+  readonly chips: ReadonlyArray<SequenceChip>;
 }
+
+export interface SequenceStrip {
+  readonly next: ReadonlyArray<SequenceSlot>;
+}
+
+export interface DropRect {
+  readonly left: number;
+  readonly width: number;
+}
+
+export type ChipDropZone = "before" | "join" | "after";
+
+export type SequencePlacement =
+  | { readonly kind: "join"; readonly targetId: string }
+  | { readonly kind: "insert"; readonly index: number };
 
 export interface BoardSequenceSource {
   readonly sequence: ReadonlyArray<string>;
@@ -47,6 +64,7 @@ export type SequenceDropOutcome =
   | { readonly kind: "sequence"; readonly ids: ReadonlyArray<string> | null };
 
 const BOARD_DROP: SequenceDropOutcome = { kind: "board" };
+const NO_SEQUENCE_CHANGE: SequenceDropOutcome = { kind: "sequence", ids: null };
 
 export const sequenceChipDragId = (id: string) => `${SEQUENCE_CHIP_DRAG_PREFIX}${id}`;
 
@@ -78,11 +96,19 @@ export function buildSequenceStrip(
   matches: (issue: TodoIssue) => boolean,
 ): SequenceStrip {
   const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
-  const next = sequence.flatMap((id) => {
-    const issue = issuesById.get(id);
-    return issue !== undefined && isSequenceCandidate(issue) ? [issue] : [];
+  const shown = new Set<string>();
+  const slotChips = (entry: string) =>
+    sequenceEntryIds(entry).flatMap((id) => {
+      const issue = issuesById.get(id);
+      if (issue === undefined || !isSequenceCandidate(issue) || shown.has(id)) return [];
+      shown.add(id);
+      return [toChip(issue, matches)];
+    });
+  const next = sequence.flatMap((entry) => {
+    const chips = slotChips(entry);
+    return chips.length === 0 ? [] : [{ chips }];
   });
-  return { next: next.map((issue) => toChip(issue, matches)) };
+  return { next };
 }
 
 export function activeSequence(source: BoardSequenceSource, epicFilter: string): ActiveSequence {
@@ -102,72 +128,100 @@ const sameOrder = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) =>
 const changedOrNull = (next: ReadonlyArray<string>, current: ReadonlyArray<string>) =>
   sameOrder(next, current) ? null : next;
 
-function sequenceDropBeforeId(overId: string): { readonly beforeId: string | null } | null {
-  if (overId === SEQUENCE_STRIP_DROP_ID) return { beforeId: null };
-  if (isSequenceChipDragId(overId)) {
-    return { beforeId: overId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length) };
-  }
-  return null;
+export function classifyDrop(draggedCentreX: number, target: DropRect): ChipDropZone {
+  const fraction = (draggedCentreX - target.left) / target.width;
+  if (fraction < JOIN_ZONE_START_FRACTION) return "before";
+  return fraction < JOIN_ZONE_END_FRACTION ? "join" : "after";
 }
 
-function placeCardInSequence(
-  sequence: ReadonlyArray<string>,
-  issue: TodoIssue,
-  beforeId: string | null,
-): ReadonlyArray<string> | null {
-  if (!isSequenceCandidate(issue) || issue.id === beforeId) return null;
-  const without = sequence.filter((id) => id !== issue.id);
-  const index = beforeId === null ? -1 : without.indexOf(beforeId);
-  const placed =
-    index < 0
-      ? [...without, issue.id]
-      : [...without.slice(0, index), issue.id, ...without.slice(index)];
-  return changedOrNull(placed, sequence);
+function chipDropZone(draggedRect: DropRect | null, overRect: DropRect | null): ChipDropZone {
+  if (draggedRect === null || overRect === null) return "before";
+  return classifyDrop(draggedRect.left + draggedRect.width / 2, overRect);
 }
 
-function reorderSequenceChip(
+const entryIndexOf = (sequence: ReadonlyArray<string>, id: string) =>
+  sequence.findIndex((entry) => sequenceEntryIds(entry).includes(id));
+
+const isNoopJoin = (sequence: ReadonlyArray<string>, id: string, targetId: string) => {
+  const targetIndex = entryIndexOf(sequence, targetId);
+  return targetIndex < 0 || targetIndex === entryIndexOf(sequence, id);
+};
+
+export function placeInSequence(
   sequence: ReadonlyArray<string>,
-  nextIds: ReadonlyArray<string>,
+  id: string,
+  placement: SequencePlacement,
+): ReadonlyArray<string> {
+  if (placement.kind === "join" && isNoopJoin(sequence, id, placement.targetId)) return sequence;
+  const insertIndex =
+    placement.kind === "insert" ? Math.min(placement.index, sequence.length) : null;
+  const seen = new Set([id]);
+  const claimFirstSighting = (member: string) => {
+    if (seen.has(member)) return false;
+    seen.add(member);
+    return true;
+  };
+  const placed: Array<string> = [];
+  sequence.forEach((entry, index) => {
+    if (index === insertIndex) placed.push(id);
+    const kept = sequenceEntryIds(entry).filter(claimFirstSighting);
+    if (placement.kind === "join" && kept.includes(placement.targetId)) kept.push(id);
+    if (kept.length > 0) placed.push(joinSequenceEntry(kept));
+  });
+  if (insertIndex === sequence.length) placed.push(id);
+  return placed;
+}
+
+function sequencePlacement(
+  sequence: ReadonlyArray<string>,
+  overId: string,
+  zone: ChipDropZone,
+): SequencePlacement | null {
+  if (overId === SEQUENCE_STRIP_DROP_ID) return { kind: "insert", index: sequence.length };
+  if (!isSequenceChipDragId(overId)) return null;
+  const targetId = overId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length);
+  if (zone === "join") return { kind: "join", targetId };
+  const index = entryIndexOf(sequence, targetId);
+  if (index < 0) return null;
+  return { kind: "insert", index: zone === "before" ? index : index + 1 };
+}
+
+interface SequenceDropInput {
+  readonly activeId: string;
+  readonly overId: string;
+  readonly sequence: ReadonlyArray<string>;
+  readonly issuesById: ReadonlyMap<string, TodoIssue>;
+  readonly draggedRect: DropRect | null;
+  readonly overRect: DropRect | null;
+}
+
+function draggedSequenceId(
   activeId: string,
-  overId: string | null,
-): ReadonlyArray<string> | null {
-  const from = nextIds.indexOf(activeId);
-  const to = overId === null ? nextIds.length - 1 : nextIds.indexOf(overId);
-  if (from < 0 || to < 0 || from === to) return null;
-  const reordered = arrayMove([...nextIds], from, to);
-  const nextSlots = new Set(nextIds);
-  let slot = 0;
-  return sequence.map((id) => (nextSlots.has(id) ? (reordered[slot++] ?? id) : id));
+  issuesById: ReadonlyMap<string, TodoIssue>,
+): string | null {
+  if (isSequenceChipDragId(activeId)) return activeId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length);
+  const cardId = boardCardIssueId(activeId);
+  const issue = cardId === null ? undefined : issuesById.get(cardId);
+  return issue !== undefined && isSequenceCandidate(issue) ? issue.id : null;
 }
 
 export function resolveSequenceDrop({
   activeId,
   overId,
   sequence,
-  strip,
   issuesById,
-}: {
-  readonly activeId: string;
-  readonly overId: string;
-  readonly sequence: ReadonlyArray<string>;
-  readonly strip: SequenceStrip;
-  readonly issuesById: ReadonlyMap<string, TodoIssue>;
-}): SequenceDropOutcome {
-  const target = sequenceDropBeforeId(overId);
-  if (isSequenceChipDragId(activeId)) {
-    const chipId = activeId.slice(SEQUENCE_CHIP_DRAG_PREFIX.length);
-    const nextIds = strip.next.map((chip) => chip.id);
-    return {
-      kind: "sequence",
-      ids: target === null ? null : reorderSequenceChip(sequence, nextIds, chipId, target.beforeId),
-    };
+  draggedRect,
+  overRect,
+}: SequenceDropInput): SequenceDropOutcome {
+  if (!isSequenceDropId(overId)) {
+    return isSequenceChipDragId(activeId) ? NO_SEQUENCE_CHANGE : BOARD_DROP;
   }
-  if (target === null) return BOARD_DROP;
-  const cardId = boardCardIssueId(activeId);
-  const issue = cardId === null ? undefined : issuesById.get(cardId);
+  const id = draggedSequenceId(activeId, issuesById);
+  const placement = sequencePlacement(sequence, overId, chipDropZone(draggedRect, overRect));
+  if (id === null || placement === null) return NO_SEQUENCE_CHANGE;
   return {
     kind: "sequence",
-    ids: issue === undefined ? null : placeCardInSequence(sequence, issue, target.beforeId),
+    ids: changedOrNull(placeInSequence(sequence, id, placement), sequence),
   };
 }
 
@@ -190,13 +244,7 @@ const COLUMN_DROP_TARGETS: ReadonlyArray<{
   { prefix: "force:", speed: "force" },
 ];
 
-export function resolveBoardDragEnd(input: {
-  readonly activeId: string;
-  readonly overId: string;
-  readonly sequence: ReadonlyArray<string>;
-  readonly strip: SequenceStrip;
-  readonly issuesById: ReadonlyMap<string, TodoIssue>;
-}): BoardDragOutcome {
+export function resolveBoardDragEnd(input: SequenceDropInput): BoardDragOutcome {
   const sequenceDrop = resolveSequenceDrop(input);
   if (sequenceDrop.kind === "sequence") {
     return sequenceDrop.ids === null
@@ -218,7 +266,10 @@ export function removeFromSequence(
   sequence: ReadonlyArray<string>,
   id: string,
 ): ReadonlyArray<string> {
-  return sequence.filter((entry) => entry !== id);
+  return sequence.flatMap((entry) => {
+    const kept = sequenceEntryIds(entry).filter((member) => member !== id);
+    return kept.length === 0 ? [] : [joinSequenceEntry(kept)];
+  });
 }
 
 export const startPendingWrite = (

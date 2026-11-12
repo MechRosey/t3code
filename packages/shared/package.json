@@ -546,6 +546,10 @@
     "./todoEpics": {
       "types": "./src/todoEpics.ts",
       "import": "./src/todoEpics.ts"
+    },
+    "./todoSequence": {
+      "types": "./src/todoSequence.ts",
+      "import": "./src/todoSequence.ts"
     }
   },
   "scripts": {

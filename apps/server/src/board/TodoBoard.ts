@@ -27,6 +27,7 @@ import {
 import type { TodoArchiveGroup, TodoArchiveReadResult } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { epicRootIssues } from "@t3tools/shared/todoEpics";
+import { sequenceEntryIds } from "@t3tools/shared/todoSequence";
 
 import {
   regenerationArtifacts,
@@ -57,7 +58,6 @@ import {
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
 import {
-  entryIds,
   isClosedStatus,
   parseSequenceRefs,
   removeSequenceRef,
@@ -671,7 +671,7 @@ const make = Effect.gen(function* () {
     ids: ReadonlyArray<string>,
   ) {
     let archivedNames: ReadonlyArray<string> | undefined;
-    for (const ref of refs.flatMap(entryIds)) {
+    for (const ref of refs.flatMap(sequenceEntryIds)) {
       const lookup = findIssueDirName(ids, ref);
       if (lookup.tag === "found") continue;
       if (lookup.tag === "notFound") {
