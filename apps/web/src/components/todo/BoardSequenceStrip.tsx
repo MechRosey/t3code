@@ -48,32 +48,14 @@ function SequenceChipLabel({ chip }: { readonly chip: SequenceChip }) {
   );
 }
 
-const DoingSequenceChip = memo(function DoingSequenceChip({
-  chip,
-  onOpen,
-}: {
-  readonly chip: SequenceChip;
-  readonly onOpen: (issueId: string) => void;
-}) {
-  return (
-    <li className={chipClassName(chip)}>
-      <button
-        type="button"
-        onClick={() => onOpen(chip.id)}
-        className={cn(CHIP_OPEN_CLASS, "cursor-pointer")}
-      >
-        <SequenceChipLabel chip={chip} />
-      </button>
-    </li>
-  );
-});
-
 const NextSequenceChip = memo(function NextSequenceChip({
   chip,
+  readOnly,
   onOpen,
   onRemove,
 }: {
   readonly chip: SequenceChip;
+  readonly readOnly: boolean;
   readonly onOpen: (issueId: string) => void;
   readonly onRemove: (issueId: string) => void;
 }) {
@@ -102,15 +84,17 @@ const NextSequenceChip = memo(function NextSequenceChip({
       >
         <SequenceChipLabel chip={chip} />
       </button>
-      <Button
-        size="icon-tiny"
-        variant="ghost-muted"
-        className="mt-0.5"
-        aria-label={`Remove ${chip.shortId} from the sequence`}
-        onClick={() => onRemove(chip.id)}
-      >
-        <XIcon />
-      </Button>
+      {readOnly ? null : (
+        <Button
+          size="icon-tiny"
+          variant="ghost-muted"
+          className="mt-0.5"
+          aria-label={`Remove ${chip.shortId} from the sequence`}
+          onClick={() => onRemove(chip.id)}
+        >
+          <XIcon />
+        </Button>
+      )}
     </li>
   );
 });
@@ -123,10 +107,12 @@ function useCardOverSequence() {
 
 export const BoardSequenceStrip = memo(function BoardSequenceStrip({
   strip,
+  readOnly,
   onOpen,
   onRemove,
 }: {
   readonly strip: SequenceStrip;
+  readonly readOnly: boolean;
   readonly onOpen: (issueId: string) => void;
   readonly onRemove: (issueId: string) => void;
 }) {
@@ -142,20 +128,20 @@ export const BoardSequenceStrip = memo(function BoardSequenceStrip({
         cardOver && "outline-2 outline-dashed outline-primary -outline-offset-4",
       )}
     >
-      <ul aria-label="Doing" className="flex shrink-0 items-stretch gap-1.5">
-        {strip.doing.map((chip) => (
-          <DoingSequenceChip key={chip.id} chip={chip} onOpen={onOpen} />
-        ))}
-      </ul>
-      <div aria-hidden className="h-6 w-px shrink-0 bg-border" />
       <SortableContext items={nextDragIds} strategy={horizontalListSortingStrategy}>
         <ul aria-label="Next" className="flex shrink-0 items-stretch gap-1.5">
           {strip.next.map((chip) => (
-            <NextSequenceChip key={chip.id} chip={chip} onOpen={onOpen} onRemove={onRemove} />
+            <NextSequenceChip
+              key={chip.id}
+              chip={chip}
+              readOnly={readOnly}
+              onOpen={onOpen}
+              onRemove={onRemove}
+            />
           ))}
         </ul>
       </SortableContext>
-      {strip.next.length === 0 ? (
+      {strip.next.length === 0 && !readOnly ? (
         <p className="shrink-0 text-3xs text-muted-foreground/70">
           Drag a card here to plan what comes next
         </p>

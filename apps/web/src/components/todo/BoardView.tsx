@@ -137,7 +137,12 @@ import {
 } from "./boardUiState";
 import { ArchiveView } from "./ArchiveView";
 import { BoardSequenceStrip } from "./BoardSequenceStrip";
-import { buildSequenceStrip, removeFromSequence, resolveBoardDragEnd } from "./boardSequence.logic";
+import {
+  buildSequenceStrip,
+  removeFromSequence,
+  resolveBoardDragEnd,
+  type BoardSequenceSource,
+} from "./boardSequence.logic";
 import { useBoardSequence } from "./useBoardSequence";
 
 export interface BoardViewProps {
@@ -157,7 +162,7 @@ const BOARD_TAG_ALL = "\u0000all";
 
 const EMPTY_BOARD_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 
-const EMPTY_BOARD_SEQUENCE: ReadonlyArray<string> = [];
+const EMPTY_BOARD_SEQUENCE_SOURCE: BoardSequenceSource = { sequence: [] };
 
 const currentIsoTimestamp = () => new Date().toISOString();
 
@@ -579,7 +584,8 @@ export function BoardView({
   const boardSequence = useBoardSequence(
     environmentId,
     cwd,
-    snapshotQuery.data?.sequence ?? EMPTY_BOARD_SEQUENCE,
+    snapshotQuery.data ?? EMPTY_BOARD_SEQUENCE_SOURCE,
+    uiState.epic,
   );
 
   const model = (() => {
@@ -1247,6 +1253,7 @@ export function BoardView({
               )}
               <BoardSequenceStrip
                 strip={sequenceStrip}
+                readOnly={!boardSequence.writable}
                 onOpen={setSelectedIssueId}
                 onRemove={removeFromBoardSequence}
               />

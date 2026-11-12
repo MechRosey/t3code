@@ -6,34 +6,53 @@ import { todoBoardSequence } from "../../state/todoBoard";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
 import {
+  activeSequence,
   displayedSequence,
   failPendingWrite,
+  pendingWritesFor,
   reconcilePendingWrites,
   settlePendingWrite,
   startPendingWrite,
+  withPendingWrites,
+  type BoardSequenceSource,
   type PendingSequenceWrite,
+  type PendingWritesByEpic,
 } from "./boardSequence.logic";
 
 export function useBoardSequence(
   environmentId: EnvironmentId,
   cwd: string,
-  snapshotSequence: ReadonlyArray<string>,
+  source: BoardSequenceSource,
+  epicFilter: string,
 ) {
   const sendSequence = useAtomCommand(todoBoardSequence, { reportFailure: false });
-  const [writes, setWrites] = useState<ReadonlyArray<PendingSequenceWrite>>([]);
+  const [writesByEpic, setWritesByEpic] = useState<PendingWritesByEpic>({});
   const lastToken = useRef(0);
-  const live = reconcilePendingWrites(writes, snapshotSequence);
-  if (live !== writes) setWrites(live);
+  const active = activeSequence(source, epicFilter);
+  const { epic } = active;
+  const writes = pendingWritesFor(writesByEpic, epic);
+  const live = reconcilePendingWrites(writes, active.ids);
+  if (live !== writes) setWritesByEpic(withPendingWrites(writesByEpic, epic, live));
+  const updateWrites = (
+    update: (current: ReadonlyArray<PendingSequenceWrite>) => ReadonlyArray<PendingSequenceWrite>,
+  ) =>
+    setWritesByEpic((current) =>
+      withPendingWrites(current, epic, update(pendingWritesFor(current, epic))),
+    );
   const writeSequence = async (ids: ReadonlyArray<string>) => {
+    if (!active.writable) return;
     lastToken.current += 1;
     const token = lastToken.current;
-    setWrites((current) => startPendingWrite(current, { token, ids, base: snapshotSequence }));
-    const result = await sendSequence({ environmentId, input: { cwd, ids } });
+    updateWrites((current) => startPendingWrite(current, { token, ids, base: active.ids }));
+    const result = await sendSequence({
+      environmentId,
+      input: { cwd, ids, ...(epic === null ? {} : { epic }) },
+    });
     if (result._tag === "Success") {
-      setWrites((current) => settlePendingWrite(current, token, result.value.sequence));
+      updateWrites((current) => settlePendingWrite(current, token, result.value.sequence));
       return;
     }
-    setWrites((current) => failPendingWrite(current, token));
+    updateWrites((current) => failPendingWrite(current, token));
     const failure = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
@@ -44,5 +63,9 @@ export function useBoardSequence(
           : "The board rejected the new order.",
     });
   };
-  return { sequence: displayedSequence(snapshotSequence, live), writeSequence };
+  return {
+    sequence: displayedSequence(active.ids, live),
+    writable: active.writable,
+    writeSequence,
+  };
 }

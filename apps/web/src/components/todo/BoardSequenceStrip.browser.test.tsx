@@ -19,19 +19,21 @@ const itemContaining = (list: Element, text: string) =>
   [...list.querySelectorAll("li")].find((item) => item.textContent?.includes(text));
 
 describe("BoardSequenceStrip", () => {
-  it("BoardSequenceStrip_FilteredStrip_DimsNonMatchingChipsAndKeepsDoingLeftOfNext", async () => {
+  it("BoardSequenceStrip_FilteredStrip_DimsNonMatchingChipsAndHasNoDoingSide", async () => {
     const strip = {
-      doing: [chip("a0001-doing", "doing", true)],
-      next: [chip("c0001-match", "read", true), chip("d0001-faded", "backlog", false)],
+      next: [
+        chip("a0001-doing", "doing", true),
+        chip("c0001-match", "read", true),
+        chip("d0001-faded", "backlog", false),
+      ],
     };
 
     await using screen = await render(
       <DndContext>
-        <BoardSequenceStrip strip={strip} onOpen={ignore} onRemove={ignore} />
+        <BoardSequenceStrip strip={strip} readOnly={false} onOpen={ignore} onRemove={ignore} />
       </DndContext>,
     );
 
-    const doing = screen.getByRole("list", { name: "Doing" }).element();
     const next = screen.getByRole("list", { name: "Next" }).element();
     const matching = itemContaining(next, "c0001");
     const faded = itemContaining(next, "d0001");
@@ -39,9 +41,7 @@ describe("BoardSequenceStrip", () => {
     expect(faded).toBeDefined();
     expect(getComputedStyle(matching!).opacity).toBe(FULL_OPACITY);
     expect(Number(getComputedStyle(faded!).opacity)).toBeLessThan(Number(FULL_OPACITY));
-    expect(itemContaining(doing, "a0001")).toBeDefined();
-    expect(doing.getBoundingClientRect().right).toBeLessThanOrEqual(
-      next.getBoundingClientRect().left,
-    );
+    expect(itemContaining(next, "a0001")).toBeDefined();
+    expect(screen.container.querySelector('[aria-label="Doing"]')).toBeNull();
   });
 });

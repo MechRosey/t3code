@@ -1,6 +1,5 @@
 import { arrayMove } from "@dnd-kit/sortable";
 import type { TodoIssue } from "@t3tools/contracts";
-import { sortBoardIssues } from "@t3tools/client-runtime/state/todo-board-view";
 
 import { shortBoardId } from "./boardCopy.logic";
 import type { BoardDropSpeed } from "./boardDrop.logic";
@@ -8,8 +7,8 @@ import type { BoardDropSpeed } from "./boardDrop.logic";
 export const SEQUENCE_STRIP_DROP_ID = "sequence:strip";
 const SEQUENCE_CHIP_DRAG_PREFIX = "seq:";
 const BOARD_CARD_DRAG_PREFIX = "card:";
-const DOING_STATUS = "doing";
-const OUTSIDE_SEQUENCE_STATUSES: ReadonlySet<string> = new Set([DOING_STATUS, "done", "cancelled"]);
+const OUTSIDE_SEQUENCE_STATUSES: ReadonlySet<string> = new Set(["done", "cancelled"]);
+const NO_EPIC_KEY = "";
 
 export interface SequenceChip {
   readonly id: string;
@@ -20,9 +19,21 @@ export interface SequenceChip {
 }
 
 export interface SequenceStrip {
-  readonly doing: ReadonlyArray<SequenceChip>;
   readonly next: ReadonlyArray<SequenceChip>;
 }
+
+export interface BoardSequenceSource {
+  readonly sequence: ReadonlyArray<string>;
+  readonly epicSequences?: Readonly<Record<string, ReadonlyArray<string>>>;
+}
+
+export interface ActiveSequence {
+  readonly epic: string | null;
+  readonly ids: ReadonlyArray<string>;
+  readonly writable: boolean;
+}
+
+export type PendingWritesByEpic = Readonly<Record<string, ReadonlyArray<PendingSequenceWrite>>>;
 
 export interface PendingSequenceWrite {
   readonly token: number;
@@ -67,18 +78,22 @@ export function buildSequenceStrip(
   matches: (issue: TodoIssue) => boolean,
 ): SequenceStrip {
   const issuesById = new Map(issues.map((issue) => [issue.id, issue] as const));
-  const doing = sortBoardIssues(
-    issues.filter((issue) => !issue.archived && issue.status === DOING_STATUS),
-    "updated-desc",
-  );
   const next = sequence.flatMap((id) => {
     const issue = issuesById.get(id);
     return issue !== undefined && isSequenceCandidate(issue) ? [issue] : [];
   });
-  return {
-    doing: doing.map((issue) => toChip(issue, matches)),
-    next: next.map((issue) => toChip(issue, matches)),
-  };
+  return { next: next.map((issue) => toChip(issue, matches)) };
+}
+
+export function activeSequence(source: BoardSequenceSource, epicFilter: string): ActiveSequence {
+  if (epicFilter === "") return { epic: null, ids: source.sequence, writable: true };
+  if (source.epicSequences === undefined) {
+    return { epic: null, ids: source.sequence, writable: false };
+  }
+  const needle = epicFilter.toLowerCase();
+  const epic = Object.keys(source.epicSequences).find((name) => name.toLowerCase() === needle);
+  if (epic === undefined) return { epic: null, ids: [], writable: false };
+  return { epic, ids: source.epicSequences[epic] ?? [], writable: true };
 }
 
 const sameOrder = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) =>
@@ -241,6 +256,19 @@ export function reconcilePendingWrites(
   const unchanged = kept.length === writes.length && kept.every((write, i) => write === writes[i]);
   return unchanged ? writes : kept;
 }
+
+const NO_PENDING_WRITES: ReadonlyArray<PendingSequenceWrite> = [];
+
+export const pendingWritesFor = (
+  byEpic: PendingWritesByEpic,
+  epic: string | null,
+): ReadonlyArray<PendingSequenceWrite> => byEpic[epic ?? NO_EPIC_KEY] ?? NO_PENDING_WRITES;
+
+export const withPendingWrites = (
+  byEpic: PendingWritesByEpic,
+  epic: string | null,
+  writes: ReadonlyArray<PendingSequenceWrite>,
+): PendingWritesByEpic => ({ ...byEpic, [epic ?? NO_EPIC_KEY]: writes });
 
 export function displayedSequence(
   snapshotSequence: ReadonlyArray<string>,
