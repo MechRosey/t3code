@@ -57,6 +57,7 @@ import {
 } from "./mutations.ts";
 import { getSectionMap, type IssueSections } from "./sections.ts";
 import {
+  entryIds,
   isClosedStatus,
   parseSequenceRefs,
   removeSequenceRef,
@@ -670,7 +671,7 @@ const make = Effect.gen(function* () {
     ids: ReadonlyArray<string>,
   ) {
     let archivedNames: ReadonlyArray<string> | undefined;
-    for (const ref of refs) {
+    for (const ref of refs.flatMap(entryIds)) {
       const lookup = findIssueDirName(ids, ref);
       if (lookup.tag === "found") continue;
       if (lookup.tag === "notFound") {

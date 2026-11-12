@@ -43,7 +43,7 @@ const TodoBoardOverview = Schema.Struct({
 
 const TodoReadTool = Tool.make("t3_todo_read", {
   description:
-    "Read a project's todo board: the planned `sequence` of ticket ids for work in no epic, `epicSequences` (the planned ticket ids of each epic that has any, keyed by epic name), and each open ticket with status, tags, parent, epic, `blocks` and `blockedBy`.",
+    "Read a project's todo board: the planned `sequence` of ticket ids for work in no epic, `epicSequences` (the planned ticket ids of each epic that has any, keyed by epic name; an entry of several ids separated by spaces is a parallel group worked at the same time), and each open ticket with status, tags, parent, epic, `blocks` and `blockedBy`.",
   parameters: Schema.Struct({ projectId }),
   success: TodoBoardOverview,
   failure: OrchestratorMcpFailure,
@@ -55,7 +55,7 @@ const TodoReadTool = Tool.make("t3_todo_read", {
 
 const TodoSetSequenceTool = Tool.make("t3_todo_set_sequence", {
   description:
-    "Replace one planned ticket order with `ids` (todo ticket ids, short or full): the project's no-epic order, or with `epic` set, that epic's order. The whole order is replaced, so omitted ids leave it. Closed tickets are dropped; unknown ids and an `epic` with no root ticket fail. Returns the saved `sequence`.",
+    "Replace one planned ticket order with `ids` (todo ticket ids, short or full): the project's no-epic order, or with `epic` set, that epic's order. An entry of several ids separated by spaces is a parallel group worked at the same time. The whole order is replaced, so omitted ids leave it. Closed tickets are dropped; unknown ids and an `epic` with no root ticket fail. Returns the saved `sequence`.",
   parameters: Schema.Struct({
     projectId,
     ids: TodoBoardSequenceInput.fields.ids,
